@@ -15,14 +15,18 @@ import (
 
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: veilctl version|capabilities|modelgen|configcheck")
+		return errors.New("usage: veilctl version|capabilities|modelgen|configcheck|prepare|probe")
 	}
 	switch os.Args[1] {
 	case "version":
 		fmt.Println(core.Version)
 		return nil
 	case "capabilities":
-		return json.NewEncoder(os.Stdout).Encode(map[string]any{"platform": runtime.GOOS, "foreground": true, "socks_tcp": true, "socks_udp": true, "tun": false, "service_installation": false, "control_ipc": false})
+		return json.NewEncoder(os.Stdout).Encode(map[string]any{"platform": runtime.GOOS, "foreground": true, "socks_tcp": true, "socks_udp": true, "private_preparation": runtime.GOOS == "linux", "echo_probe": true, "periodic_status": true, "tun": false, "service_installation": false, "control_ipc": false})
+	case "prepare":
+		return prepareCommand(os.Args[2:])
+	case "probe":
+		return probeCommand(os.Args[2:])
 	case "modelgen":
 		fs := flag.NewFlagSet("modelgen", flag.ContinueOnError)
 		lanes := fs.Int("lanes", 4, "model lanes (1-4)")
@@ -51,11 +55,11 @@ func run() error {
 		if e != nil {
 			return e
 		}
-		node, e := compose.New(loaded)
+		_, e = compose.New(loaded)
 		if e != nil {
 			return e
 		}
-		return json.NewEncoder(os.Stdout).Encode(node.Snapshot())
+		return json.NewEncoder(os.Stdout).Encode(loaded.Report())
 	default:
 		return errors.New("unknown command")
 	}

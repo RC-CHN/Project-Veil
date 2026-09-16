@@ -12,7 +12,7 @@ import (
 	"veil.local/core/telemetry"
 )
 
-const Version = "0.5.0-engineering1"
+const Version = "0.5.0-engineering2"
 const Protocol = "streammux-flight-v3"
 
 type MuxLimits struct {

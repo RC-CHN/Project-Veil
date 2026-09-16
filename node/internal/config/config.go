@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"path/filepath"
+	"time"
 	core "veil.local/core"
 	"veil.local/core/identity"
 	"veil.local/core/model"
@@ -34,7 +35,60 @@ type Config struct {
 	DenyCIDRs          []string `json:"deny_cidrs,omitempty"`
 	DNSAddress         string   `json:"dns_address,omitempty"`
 	MaxConnections     int      `json:"max_connections,omitempty"`
+	Limits             Limits   `json:"limits,omitempty"`
 }
+
+// Limits are lifetime byte caps, not queue allocations. Zero preserves the
+// engineering1 defaults. The peers negotiate minima; neither side can enlarge
+// its peer's allowance. Windows and Linux use the same configuration contract.
+type Limits struct {
+	StreamBytes  uint64 `json:"stream_bytes,omitempty"`
+	CarrierBytes uint64 `json:"carrier_bytes,omitempty"`
+}
+
+func (l Limits) Effective() Limits {
+	if l.StreamBytes == 0 {
+		l.StreamBytes = 8 << 20
+	}
+	if l.CarrierBytes == 0 {
+		l.CarrierBytes = 64 << 20
+	}
+	return l
+}
+
+func (l Limits) Validate() error {
+	l = l.Effective()
+	if l.StreamBytes > 1<<40 || l.CarrierBytes < 4096 || l.CarrierBytes > 1<<40 {
+		return errors.New("limits: stream_bytes must be 1..1 TiB and carrier_bytes 4096..1 TiB (zero selects defaults)")
+	}
+	return nil
+}
+
+// Report describes local validation only. Configcheck never dials a peer and
+// cannot establish negotiated limits or end-to-end health.
+type Report struct {
+	Kind              string    `json:"kind"`
+	Version           string    `json:"version"`
+	ConfigVersion     int       `json:"config_version"`
+	Role              string    `json:"role"`
+	Listen            string    `json:"listen"`
+	LocalValidation   string    `json:"local_validation"`
+	EndToEnd          string    `json:"end_to_end"`
+	ModelID           string    `json:"model_id"`
+	ModelSHA256       string    `json:"model_sha256"`
+	CertificateSHA256 string    `json:"certificate_sha256"`
+	CertificateExpiry time.Time `json:"certificate_not_after"`
+	MaxConnections    int       `json:"max_connections"`
+	Limits            Limits    `json:"limits"`
+}
+
+func (l Loaded) Report() Report {
+	return Report{Kind: "config_check", Version: core.Version, ConfigVersion: l.Config.Version,
+		Role: l.Config.Role, Listen: l.Config.Listen, LocalValidation: "passed", EndToEnd: "not_checked",
+		ModelID: l.Model.ID(), ModelSHA256: l.Model.SHA256(), CertificateSHA256: l.Identity.Fingerprint(),
+		CertificateExpiry: l.Identity.NotAfter(), MaxConnections: l.Config.MaxConnections, Limits: l.Config.Limits.Effective()}
+}
+
 type Loaded struct {
 	Config   Config
 	Model    model.Bundle
@@ -66,6 +120,9 @@ func Load(path string, reader FileReader) (Loaded, error) {
 	}
 	if c.MaxConnections < 1 || c.MaxConnections > 32 {
 		return out, errors.New("node connection limit")
+	}
+	if e = c.Limits.Validate(); e != nil {
+		return out, e
 	}
 	resolve := func(p string) string {
 		if filepath.IsAbs(p) {
@@ -116,9 +173,11 @@ func Load(path string, reader FileReader) (Loaded, error) {
 }
 func (l Loaded) Client() (*core.Client, error) {
 	c := l.Config
-	return core.NewClient(core.ClientOptions{ServerURL: c.ServerURL, DialAddress: c.DialAddress, Bucket: c.Bucket, Model: l.Model, Identity: l.Identity, Roots: l.Roots, MaxConnections: c.MaxConnections})
+	limits := c.Limits.Effective()
+	return core.NewClient(core.ClientOptions{ServerURL: c.ServerURL, DialAddress: c.DialAddress, Bucket: c.Bucket, Model: l.Model, Identity: l.Identity, Roots: l.Roots, MaxConnections: c.MaxConnections, MaxBytes: limits.StreamBytes, Mux: core.MuxLimits{ConnectionBytes: limits.CarrierBytes}})
 }
 func (l Loaded) Server() (*core.Server, error) {
 	c := l.Config
-	return core.NewServer(core.ServerOptions{Bucket: c.Bucket, Model: l.Model, Identity: l.Identity, ClientRoots: l.Roots, ClientFingerprints: c.ClientFingerprints, AllowCIDRs: c.AllowCIDRs, DenyCIDRs: c.DenyCIDRs, DNSAddress: c.DNSAddress, MaxConnections: c.MaxConnections})
+	limits := c.Limits.Effective()
+	return core.NewServer(core.ServerOptions{Bucket: c.Bucket, Model: l.Model, Identity: l.Identity, ClientRoots: l.Roots, ClientFingerprints: c.ClientFingerprints, AllowCIDRs: c.AllowCIDRs, DenyCIDRs: c.DenyCIDRs, DNSAddress: c.DNSAddress, MaxConnections: c.MaxConnections, MaxBytes: limits.StreamBytes, Mux: core.MuxLimits{ConnectionBytes: limits.CarrierBytes}})
 }

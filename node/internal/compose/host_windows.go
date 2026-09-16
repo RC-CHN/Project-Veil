@@ -8,9 +8,11 @@ import (
 	"os/signal"
 	"veil.local/node/internal/config"
 	"veil.local/node/internal/platform/windows"
+	"veil.local/node/internal/prepare"
 )
 
 func FileReader() config.FileReader { return windows.Reader{} }
+func BundleWriter() prepare.Writer  { return prepare.UnsupportedWriter{} }
 func SignalContext() (context.Context, context.CancelFunc) {
 	return signal.NotifyContext(context.Background(), os.Interrupt)
 }

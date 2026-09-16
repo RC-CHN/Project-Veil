@@ -28,5 +28,5 @@ func (o *observer) emit(e session.SessionEvent) {
 	}
 }
 func snapshot(s session.Snapshot, state string, o *observer) telemetry.Snapshot {
-	return telemetry.Snapshot{Role: s.Role, State: state, ModelID: s.ModelID, InnerProtocol: s.InnerProtocol, Listen: s.Listen, LocalReady: s.Ready && state == "ready", EndToEnd: "not_checked", ActiveStreams: s.ActiveStreams, ActiveCarriers: s.ActiveSessions, StartedStreams: s.StartedStreams, CompletedStreams: s.CompletedStreams, FailedStreams: s.FailedStreams, CleanupFailures: s.CleanupFailures, EventsDropped: s.EventsDropped + o.dropped.Load(), Updated: time.Now().UTC()}
+	return telemetry.Snapshot{Role: s.Role, State: state, ModelID: s.ModelID, InnerProtocol: s.InnerProtocol, Listen: s.Listen, LocalReady: s.Ready && state == "ready", EndToEnd: "not_checked", ActiveStreams: s.ActiveStreams, ActiveCarriers: s.ActiveSessions, StartedStreams: s.StartedStreams, CompletedStreams: s.CompletedStreams, FailedStreams: s.FailedStreams, CleanupFailures: s.CleanupFailures, EventsDropped: s.EventsDropped + o.dropped.Load(), RejectedStreams: s.RejectedStreams, RejectedConnections: s.RejectedConnections, FailedCarriers: s.Failed, AuthDenied: s.AuthDenied, Updated: time.Now().UTC()}
 }

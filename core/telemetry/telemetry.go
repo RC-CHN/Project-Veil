@@ -19,6 +19,7 @@ type Snapshot struct {
 	LocalReady                                                                                                     bool
 	EndToEnd                                                                                                       string
 	ActiveStreams, ActiveCarriers, StartedStreams, CompletedStreams, FailedStreams, CleanupFailures, EventsDropped int64
+	RejectedStreams, RejectedConnections, FailedCarriers, AuthDenied                                               int64
 	Updated                                                                                                        time.Time
 }
 
