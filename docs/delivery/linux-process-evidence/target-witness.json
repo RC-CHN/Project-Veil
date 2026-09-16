@@ -1,0 +1,50 @@
+{
+  "tcp_connections": 14,
+  "tcp_bytes": 108717,
+  "udp_packets": 266,
+  "udp_bytes": 2210,
+  "dns_questions": [
+    {
+      "name": "echo.test",
+      "type": 28
+    },
+    {
+      "name": "echo.test",
+      "type": 1
+    },
+    {
+      "name": "echo.test",
+      "type": 28
+    },
+    {
+      "name": "echo.test",
+      "type": 1
+    },
+    {
+      "name": "echo.test",
+      "type": 28
+    },
+    {
+      "name": "echo.test",
+      "type": 1
+    }
+  ],
+  "downloads": [
+    {
+      "requested": 9437184,
+      "written": 9437184
+    },
+    {
+      "requested": 9437184,
+      "written": 9437184
+    },
+    {
+      "requested": 12582912,
+      "written": 12582912
+    },
+    {
+      "requested": 2097152,
+      "written": 2097152
+    }
+  ]
+}

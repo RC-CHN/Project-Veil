@@ -1,6 +1,6 @@
 # Project Veil
 
-Veil 是基于 HTTPS 会话行为模型的加密代理传输项目。正式工程已迁到本仓库根目录；当前工程候选为 **0.5.0-engineering1**，线路保持 Config5 / FlightModel4 / streammux-flight-v3。
+Veil 是基于 HTTPS 会话行为模型的加密代理传输项目。正式工程已迁到本仓库根目录；当前工程候选为 **0.5.0-engineering2**，线路保持 Config5 / FlightModel4 / streammux-flight-v3。当前优先完成 Linux 实战链路，首轮面向 amd64/systemd 主机，服务与系统网络适配保留 OpenWrt 扩展边界。
 
 ## 目录
 
@@ -50,14 +50,24 @@ veild version
 veilctl capabilities
 veilctl modelgen --lanes 4
 veilctl configcheck --config /path/to/node.json
-veild --config /path/to/node.json
+veild --config /path/to/node.json --status-interval 5s
 ```
 
 `modelgen` 向标准输出写入包含私有种子的模型。客户端和服务端使用同一个模型文件，存放时设置私有访问权限。配置、模型和私钥由平台文件读取器检查；Linux 私有文件应为 0600。Windows 读取器检查已打开文件的所有者和 ACL，原生验收待完成。
 
 配置格式见 [客户端](examples/client.json) 和 [服务端](examples/server.json)。示例仅含占位地址和路径，需要自己的证书、私钥、模型和客户端证书指纹。节点配置使用独立的 `version: 1`；旧 session18 安装包和部署脚本不能直接用于新命令。
 
-目前 veild 以前台进程运行，启动和退出输出状态 JSON；`end_to_end` 尚未做探测时保持 `not_checked`。SOCKS 入口限定环回地址。系统服务、TUN、控制 IPC、自动证书恢复和全天耐久属于后续模块。
+Linux 上可用 `veilctl prepare` 准备私有双端材料，用 `veilctl probe` 通过已运行的 SOCKS 节点向明确指定的 TCP/UDP 回显服务验证业务。操作步骤、密钥分发和预算配置见 [Linux 成品双端操作](docs/operations/linux-process.zh.md)。
+
+veild 以前台进程运行，启动、可选的周期采样和退出输出带运行实例 ID 的状态 JSON；节点快照中的 `EndToEnd` 保持 `not_checked`，独立 `probe` 只报告它实际验证的目标。SOCKS 入口限定环回地址。系统服务、TUN、控制 IPC、自动证书恢复和全天耐久属于后续模块。
+
+对某次构建执行本机成品验收（仅自有回环 TCP/UDP/DNS，不需 root 或 Docker）：
+
+```sh
+python3 tools/accept_linux.py --build out/builds/本次构建目录
+```
+
+默认保持同一 TCP 连接和 UDP 关联至少 260 秒，结果写入独立的 `out/linux-acceptance/` 目录。`--long-seconds 5` 只作为短时先导；本机进程验收不代表公网 VPS、宿主 TUN 或全天耐久通过。
 
 ## 开发入口
 
@@ -66,6 +76,9 @@ veild --config /path/to/node.json
 - [模块边界与并行开发](docs/architecture/modules.zh.md)
 - [跨平台抽象原语](docs/architecture/cross-platform-primitives.zh.md)
 - [本次迁移范围](docs/migration/phase1.zh.md)
+- [Linux 分批交付顺序](docs/delivery/linux-first.zh.md)
+- [Linux 成品双端操作](docs/operations/linux-process.zh.md)
+- [Linux 成品双端交付报告](docs/delivery/linux-process-report.zh.md)
 - [原始交接](handoff.md)
 
 `references/veil` 和冻结二进制保持原位。新工程能构建及转发流量，不代表完整 Veil 0.5 或抗识别评估已经交付；性能优化继续暂停。许可证见 [LICENSE](LICENSE)。

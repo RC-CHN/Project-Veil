@@ -1,8 +1,47 @@
 # Project Veil 工程化移交记录
 
-> 当前交接更新于 2026-09-16。正式开发入口是根目录 [README.md](README.md)、[core/](core/README.md) 和 [node/](node/README.md)，版本为 `0.5.0-engineering1`。第一阶段源码迁移已完成，完整产品工程化尚未完成。本文先记录当前进度、提交和待办，后半部分保留 2026-09-15 的原型历史快照。
+> 当前交接更新于 2026-09-16。正式开发入口是根目录 [README.md](README.md)、[core/](core/README.md) 和 [node/](node/README.md)，版本为 `0.5.0-engineering2`。当前优先完成 Linux 实战链路；完整产品工程化尚未完成。本文先记录最新进度，再保留 engineering1 和 session18 的历史交接快照。
 
-## 当前工程交接（2026-09-16）
+## 当前工程交接（engineering2，2026-09-16）
+
+### 用户确定的优先级
+
+用户要求先跑通 Linux 实战全栈。机器主要为 x86/systemd，首轮验收目标为 Linux/amd64；将来可能使用 OpenWrt，不能把运行逻辑绑定到 systemd。当前 goal 是第一批：正式成品双端、私有材料准备、TCP/UDP 诊断及预算边界验收。完整五批顺序见 [Linux 交付计划](docs/delivery/linux-first.zh.md)。
+
+后续依次推进：**成品双端 → Linux 安装与服务 → TUN/DNS/路由与防直连 → 证书和更新恢复 → 真实双机与全天验收**。这覆盖下面旧快照中的泛化待办顺序；核心拆包按实际依赖小步推进。性能优化仍暂停。
+
+### 本轮实现
+
+- `veilctl prepare`：Linux 初始双端材料准备。普通模式验证给定服务端证书、私钥、链、名称及有效期余量；生成独立客户端 CA/身份、同一私有模型和配对配置。client/server/admin 分离，私有目录 0700、文件 0600，拒绝覆盖已有输出；`--local-test` 明确限制环回地址并生成私有测试服务端身份。
+- `veilctl configcheck`：输出实际本地字节预算、模型文件摘要、证书指纹/到期等报告；不建立连接，端到端状态仍为未检查。
+- `veilctl probe`：通过正在运行的本地 SOCKS 向明确指定的自有 TCP/UDP 回显目标发随机载荷，验证 TCP 半关闭/完整响应及 UDP 边界；失败返回非零退出。探测不直连目标、不在本地解析目标域名，结果仅代表指定目标。
+- `veild --status-interval`：带运行实例 ID/PID 的启动、周期和退出 JSON 状态，增加拒绝、认证及承载失败计数。stdout 仍须被外部持续消费，尚无完整事件归档；快照的 `EndToEnd` 不会被本地就绪伪装成通过。
+- node 配置增加有界 `limits.stream_bytes` / `limits.carrier_bytes`。缺省保持 8 MiB / 64 MiB，对端取较小值；窗口、队列、并发、累计 OPEN 和确认语义未放宽。较大值必须明确配置，不提供透明跨承载续传。
+- `tools/accept_linux.py`：核对构建来源与二进制后启动正式 veild 双端及自有回环 TCP/UDP/DNS 夹具，覆盖真实文件加载、权限、域名、并发半关闭、错误身份/种子、预算耗尽、服务端被杀后的新连接恢复及持续连接；不依赖 root、Docker 或 systemd，不修改宿主网络。
+
+操作与具体限制见 [Linux 成品双端操作](docs/operations/linux-process.zh.md)。Windows 保持交叉构建，prepare 写入后端暂不支持 Windows；OpenWrt 尚未做原生实现或验收。
+
+### 本轮验证
+
+本轮第一批 goal 已完成。最终成品进程验收 **24/24 通过**：同一 TCP 连接和 UDP 关联持续 260.009 秒，各 258 次操作；12 MiB 下载长度和 SHA-256 一致；默认流预算、对端较小预算及承载预算均被执行；错误身份/种子被拒绝，服务端被杀后客户端不重启即可恢复新业务。13 个节点进程已退出，临时私有材料已删除。
+
+core/node 完整 Linux 竞态检查、验收监督器初始化失败清理测试及 Windows 交叉构建通过。129 个导入源文件和三个冻结二进制保全检查通过。构建、检查、最终进程验收绑定源码摘要 `2fc0afd051fe2f7bdf72edca79575029d8ad1a34aead8aa560d096eaf24d6ca7`。
+
+详细边界、字节预算结果和任务目录见 [本轮交付报告](docs/delivery/linux-process-report.zh.md)；[小型验收证据](docs/delivery/linux-process-evidence/acceptance.json) 随文档提交，原始状态日志和二进制保留在忽略的 out 中。260 秒回环进程验证不代表公网、TUN 或全天耐久通过。
+
+本轮分批本地提交：`eb8f252` 为准备/诊断/状态与预算实现，`6945881` 为成品进程验收及监督清理测试；操作说明、证据和本交接随后以 `docs: record Linux process delivery and next milestones` 独立提交。未推送远端。
+
+### 明确停点与下一批
+
+下一批是 **Linux 安装和服务管理**：运行用户/私有目录、版本化布局、systemd 单元、启动校验、就绪与业务探测、停止/卸载及机器重启验收。veild 继续以前台进程和稳定配置/退出接口运行，systemd 仅是首个服务适配；保留 procd、netifd、firewall4 及 LAN 转发的独立适配边界。
+
+TUN/DNS 桥接尚未接入新 node；公网 IP ACME、普通换证、失效身份退役、升级回退、通用私有持久事务、事件分段归档、全天耐久和当前版本检测评估仍未完成。没有受控 VPS 实际签发和公网双机验收；本轮回环结果不能替代这些证据。
+
+prepare 只创建新材料，不负责在线换证、安装或恢复；生成的客户端身份 30 天有效，需要后续身份轮换。准备过程失败可能留下私有暂存目录；尚未验证宿主断电持久性。预算耗尽会中断受影响流，EOF 不代表文件传输完整，业务需验证长度/摘要。
+
+## 第一阶段工程交接快照（2026-09-16）
+
+以下为 engineering1 迁移完成后的历史记录，源码及四批提交保持可追溯；当前状态与优先级以上面的 engineering2 交接为准。
 
 ### 当前结论与开发约束
 

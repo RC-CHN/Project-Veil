@@ -1,0 +1,1317 @@
+{
+  "schema_version": 1,
+  "scope": "linux_loopback_cli_processes",
+  "passed": true,
+  "long_seconds": 260,
+  "cases": [
+    {
+      "name": "private-pair-preparation",
+      "passed": true,
+      "detail": {
+        "kind": "prepared",
+        "version": "0.5.0-engineering2",
+        "local_test": true,
+        "model_id": "22f9ec6fb93a8c06110d35ab76f92db9712eed66b19cce054e531976204e6bf2",
+        "model_sha256": "2e60626432f6d18335bbbca414181f6a2eb8acf51f54416817ffe69239926d04",
+        "server_fingerprint": "49ca9ec3408d35ef7af55512115521730df3ca43c0e82644532e9be47e216678",
+        "client_fingerprint": "2711fa3dc2b736bad2843fffd1115ea79fa79509553c4b30b904083e3b4ccd1a",
+        "server_not_after": "2026-09-17T01:57:40Z",
+        "client_not_after": "2026-10-16T01:57:40Z",
+        "end_to_end": "not_checked"
+      },
+      "seconds": 0.019
+    },
+    {
+      "name": "existing-pair-refused",
+      "passed": true,
+      "detail": null,
+      "seconds": 0.016
+    },
+    {
+      "name": "client-configcheck",
+      "passed": true,
+      "detail": {
+        "kind": "config_check",
+        "version": "0.5.0-engineering2",
+        "config_version": 1,
+        "role": "client",
+        "listen": "127.0.0.1:0",
+        "local_validation": "passed",
+        "end_to_end": "not_checked",
+        "model_id": "22f9ec6fb93a8c06110d35ab76f92db9712eed66b19cce054e531976204e6bf2",
+        "model_sha256": "2e60626432f6d18335bbbca414181f6a2eb8acf51f54416817ffe69239926d04",
+        "certificate_sha256": "2711fa3dc2b736bad2843fffd1115ea79fa79509553c4b30b904083e3b4ccd1a",
+        "certificate_not_after": "2026-10-16T01:57:40Z",
+        "max_connections": 8,
+        "limits": {
+          "stream_bytes": 8388608,
+          "carrier_bytes": 67108864
+        }
+      },
+      "seconds": 0.006
+    },
+    {
+      "name": "server-configcheck",
+      "passed": true,
+      "detail": {
+        "kind": "config_check",
+        "version": "0.5.0-engineering2",
+        "config_version": 1,
+        "role": "server",
+        "listen": "127.0.0.1:0",
+        "local_validation": "passed",
+        "end_to_end": "not_checked",
+        "model_id": "22f9ec6fb93a8c06110d35ab76f92db9712eed66b19cce054e531976204e6bf2",
+        "model_sha256": "2e60626432f6d18335bbbca414181f6a2eb8acf51f54416817ffe69239926d04",
+        "certificate_sha256": "49ca9ec3408d35ef7af55512115521730df3ca43c0e82644532e9be47e216678",
+        "certificate_not_after": "2026-09-17T01:57:40Z",
+        "max_connections": 8,
+        "limits": {
+          "stream_bytes": 8388608,
+          "carrier_bytes": 67108864
+        }
+      },
+      "seconds": 0.006
+    },
+    {
+      "name": "unsafe-config-permissions-refused",
+      "passed": true,
+      "detail": null,
+      "seconds": 0.003
+    },
+    {
+      "name": "default-pair-start",
+      "passed": true,
+      "detail": {
+        "client_run": "b7a51088418637a23fdc298b4aab93aa",
+        "server_run": "79630a41fda5750b1df6c5b00027b6e3"
+      },
+      "seconds": 0.016
+    },
+    {
+      "name": "numeric-tcp-udp-probe",
+      "passed": true,
+      "detail": {
+        "kind": "probe",
+        "at": "2026-09-16T01:57:40.741952894Z",
+        "end_to_end": "passed",
+        "scope": "requested_echo_targets",
+        "checks": [
+          {
+            "name": "tcp_echo_half_close",
+            "passed": true,
+            "verified_bytes": 32,
+            "milliseconds": 15
+          },
+          {
+            "name": "udp_echo",
+            "passed": true,
+            "verified_bytes": 32,
+            "milliseconds": 6
+          }
+        ]
+      },
+      "seconds": 0.025
+    },
+    {
+      "name": "remote-domain-tcp-udp-probe",
+      "passed": true,
+      "detail": {
+        "kind": "probe",
+        "at": "2026-09-16T01:57:40.767461454Z",
+        "end_to_end": "passed",
+        "scope": "requested_echo_targets",
+        "checks": [
+          {
+            "name": "tcp_echo_half_close",
+            "passed": true,
+            "verified_bytes": 32,
+            "milliseconds": 7
+          },
+          {
+            "name": "udp_echo",
+            "passed": true,
+            "verified_bytes": 32,
+            "milliseconds": 7
+          }
+        ]
+      },
+      "seconds": 0.018
+    },
+    {
+      "name": "policy-denial",
+      "passed": true,
+      "detail": {
+        "kind": "probe",
+        "at": "2026-09-16T01:57:40.786091027Z",
+        "end_to_end": "failed",
+        "scope": "requested_echo_targets",
+        "checks": [
+          {
+            "name": "tcp_echo_half_close",
+            "passed": false,
+            "verified_bytes": 0,
+            "milliseconds": 1,
+            "error": "SOCKS request rejected (reply=1)"
+          }
+        ]
+      },
+      "seconds": 0.005
+    },
+    {
+      "name": "concurrent-half-close",
+      "passed": true,
+      "detail": [
+        {
+          "index": 0,
+          "verified_bytes": 26624
+        },
+        {
+          "index": 1,
+          "verified_bytes": 26624
+        },
+        {
+          "index": 2,
+          "verified_bytes": 26624
+        },
+        {
+          "index": 3,
+          "verified_bytes": 26624
+        }
+      ],
+      "seconds": 0.014
+    },
+    {
+      "name": "default-stream-budget-enforced",
+      "passed": true,
+      "detail": {
+        "requested_bytes": 9437184,
+        "received_bytes": 8341504,
+        "complete": false,
+        "sha256": "90a678eed2d3d6849e3a2d00b6323ea0b2ecc2914b2bda726741a48671401d77",
+        "expected_sha256": "b8b5dabaa3454f7fa46a97c51cec9ccd118ffc0d61df6e46d845ef200a2fd1bb",
+        "socket_error": null
+      },
+      "seconds": 0.469
+    },
+    {
+      "name": "after-budget-new-flows",
+      "passed": true,
+      "detail": {
+        "kind": "probe",
+        "at": "2026-09-16T01:57:41.276096894Z",
+        "end_to_end": "passed",
+        "scope": "requested_echo_targets",
+        "checks": [
+          {
+            "name": "tcp_echo_half_close",
+            "passed": true,
+            "verified_bytes": 32,
+            "milliseconds": 4
+          },
+          {
+            "name": "udp_echo",
+            "passed": true,
+            "verified_bytes": 32,
+            "milliseconds": 6
+          }
+        ]
+      },
+      "seconds": 0.015
+    },
+    {
+      "name": "untrusted-client-identity-refused",
+      "passed": true,
+      "detail": {
+        "rejected_probe": {
+          "kind": "probe",
+          "at": "2026-09-16T01:57:41.328493927Z",
+          "end_to_end": "failed",
+          "scope": "requested_echo_targets",
+          "checks": [
+            {
+              "name": "tcp_echo_half_close",
+              "passed": false,
+              "verified_bytes": 0,
+              "milliseconds": 5,
+              "error": "SOCKS request rejected (reply=1)"
+            },
+            {
+              "name": "udp_echo",
+              "passed": false,
+              "verified_bytes": 0,
+              "milliseconds": 2,
+              "error": "SOCKS request rejected (reply=1)"
+            }
+          ]
+        },
+        "target_witness_unchanged": true,
+        "restored_probe": {
+          "kind": "probe",
+          "at": "2026-09-16T01:57:41.349490707Z",
+          "end_to_end": "passed",
+          "scope": "requested_echo_targets",
+          "checks": [
+            {
+              "name": "tcp_echo_half_close",
+              "passed": true,
+              "verified_bytes": 32,
+              "milliseconds": 16
+            },
+            {
+              "name": "udp_echo",
+              "passed": true,
+              "verified_bytes": 32,
+              "milliseconds": 8
+            }
+          ]
+        }
+      },
+      "seconds": 0.067
+    },
+    {
+      "name": "wrong-model-seed-refused",
+      "passed": true,
+      "detail": {
+        "rejected_probe": {
+          "kind": "probe",
+          "at": "2026-09-16T01:57:41.38912025Z",
+          "end_to_end": "failed",
+          "scope": "requested_echo_targets",
+          "checks": [
+            {
+              "name": "tcp_echo_half_close",
+              "passed": false,
+              "verified_bytes": 0,
+              "milliseconds": 5,
+              "error": "SOCKS request rejected (reply=1)"
+            },
+            {
+              "name": "udp_echo",
+              "passed": false,
+              "verified_bytes": 0,
+              "milliseconds": 2,
+              "error": "SOCKS request rejected (reply=1)"
+            }
+          ]
+        },
+        "target_witness_unchanged": true,
+        "restored_probe": {
+          "kind": "probe",
+          "at": "2026-09-16T01:57:41.411443439Z",
+          "end_to_end": "passed",
+          "scope": "requested_echo_targets",
+          "checks": [
+            {
+              "name": "tcp_echo_half_close",
+              "passed": true,
+              "verified_bytes": 32,
+              "milliseconds": 11
+            },
+            {
+              "name": "udp_echo",
+              "passed": true,
+              "verified_bytes": 32,
+              "milliseconds": 6
+            }
+          ]
+        }
+      },
+      "seconds": 0.054
+    },
+    {
+      "name": "persistent-tcp-and-udp",
+      "passed": true,
+      "detail": {
+        "seconds": 260.009,
+        "tcp_operations": 258,
+        "udp_operations": 258,
+        "same_tcp_connection": true,
+        "same_udp_association": true
+      },
+      "seconds": 260.028
+    },
+    {
+      "name": "server-death-and-new-flow-recovery",
+      "passed": true,
+      "detail": {
+        "client_pid_unchanged": true,
+        "old_stream_terminated": true,
+        "new_flow_probe": {
+          "kind": "probe",
+          "at": "2026-09-16T02:02:01.482982905Z",
+          "end_to_end": "passed",
+          "scope": "requested_echo_targets",
+          "checks": [
+            {
+              "name": "tcp_echo_half_close",
+              "passed": true,
+              "verified_bytes": 32,
+              "milliseconds": 8
+            },
+            {
+              "name": "udp_echo",
+              "passed": true,
+              "verified_bytes": 32,
+              "milliseconds": 6
+            }
+          ]
+        }
+      },
+      "seconds": 0.04
+    },
+    {
+      "name": "asymmetric-pair-start",
+      "passed": true,
+      "detail": {
+        "client_run": "7bdd4705e279fc7cc363a6415c55137f",
+        "server_run": "1d14d3f1eba5e8b5d6fe78fe71633516"
+      },
+      "seconds": 0.016
+    },
+    {
+      "name": "peer-minimum-stream-budget-enforced",
+      "passed": true,
+      "detail": {
+        "requested_bytes": 9437184,
+        "received_bytes": 8366394,
+        "complete": false,
+        "sha256": "59123783245f218fae52d45b4c8e5ad885d5f359ca71754bf0e3df70cb16c308",
+        "expected_sha256": "b8b5dabaa3454f7fa46a97c51cec9ccd118ffc0d61df6e46d845ef200a2fd1bb",
+        "socket_error": null
+      },
+      "seconds": 0.508
+    },
+    {
+      "name": "explicit-larger-budget-start",
+      "passed": true,
+      "detail": {
+        "client_run": "19fd13645ae2a1d122e5826b552c2e49",
+        "server_run": "186facc74f8f9a026eaefa60e16deef2"
+      },
+      "seconds": 0.015
+    },
+    {
+      "name": "twelve-MiB-download-integrity",
+      "passed": true,
+      "detail": {
+        "requested_bytes": 12582912,
+        "received_bytes": 12582912,
+        "complete": true,
+        "sha256": "8b54debaa89f78212f6afb00c7ebb2780f3604c4caa8c97c395576a50d5d6a6a",
+        "expected_sha256": "8b54debaa89f78212f6afb00c7ebb2780f3604c4caa8c97c395576a50d5d6a6a",
+        "socket_error": null
+      },
+      "seconds": 0.712
+    },
+    {
+      "name": "larger-budget-tcp-udp-probe",
+      "passed": true,
+      "detail": {
+        "kind": "probe",
+        "at": "2026-09-16T02:02:02.794287169Z",
+        "end_to_end": "passed",
+        "scope": "requested_echo_targets",
+        "checks": [
+          {
+            "name": "tcp_echo_half_close",
+            "passed": true,
+            "verified_bytes": 32,
+            "milliseconds": 13
+          },
+          {
+            "name": "udp_echo",
+            "passed": true,
+            "verified_bytes": 32,
+            "milliseconds": 6
+          }
+        ]
+      },
+      "seconds": 0.025
+    },
+    {
+      "name": "small-carrier-start",
+      "passed": true,
+      "detail": {
+        "client_run": "0858c9ab8a14d4dc63e4322d53fb3989",
+        "server_run": "f0c292f2cb289eaad12781bd13d0a886"
+      },
+      "seconds": 0.016
+    },
+    {
+      "name": "carrier-budget-enforced",
+      "passed": true,
+      "detail": {
+        "requested_bytes": 2097152,
+        "received_bytes": 1014784,
+        "complete": false,
+        "sha256": "2e755da8275b17ee469dfd20731f9e8a3960026843e7f37b14ed1ee1d4dbf56b",
+        "expected_sha256": "91d3beb88a9b2f778a6c44a1c53b63d3c79931845a9aef84b3fb414610bd1938",
+        "socket_error": null
+      },
+      "seconds": 0.089
+    },
+    {
+      "name": "after-carrier-budget-new-flows",
+      "passed": true,
+      "detail": {
+        "kind": "probe",
+        "at": "2026-09-16T02:02:02.944857321Z",
+        "end_to_end": "passed",
+        "scope": "requested_echo_targets",
+        "checks": [
+          {
+            "name": "tcp_echo_half_close",
+            "passed": true,
+            "verified_bytes": 32,
+            "milliseconds": 17
+          },
+          {
+            "name": "udp_echo",
+            "passed": true,
+            "verified_bytes": 32,
+            "milliseconds": 7
+          }
+        ]
+      },
+      "seconds": 0.03
+    }
+  ],
+  "commands": [
+    {
+      "command": [
+        "veilctl",
+        "prepare",
+        "--out",
+        "/tmp/veil-linux-accept-55mbdk50/pair",
+        "--local-test",
+        "--server-address",
+        "127.0.0.1:24443",
+        "--server-name",
+        "owned.test",
+        "--server-listen",
+        "127.0.0.1:0",
+        "--client-listen",
+        "127.0.0.1:0"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"kind\":\"prepared\",\"version\":\"0.5.0-engineering2\",\"local_test\":true,\"model_id\":\"22f9ec6fb93a8c06110d35ab76f92db9712eed66b19cce054e531976204e6bf2\",\"model_sha256\":\"2e60626432f6d18335bbbca414181f6a2eb8acf51f54416817ffe69239926d04\",\"server_fingerprint\":\"49ca9ec3408d35ef7af55512115521730df3ca43c0e82644532e9be47e216678\",\"client_fingerprint\":\"2711fa3dc2b736bad2843fffd1115ea79fa79509553c4b30b904083e3b4ccd1a\",\"server_not_after\":\"2026-09-17T01:57:40Z\",\"client_not_after\":\"2026-10-16T01:57:40Z\",\"end_to_end\":\"not_checked\"}\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "veilctl",
+        "prepare",
+        "--out",
+        "/tmp/veil-linux-accept-55mbdk50/pair",
+        "--local-test",
+        "--server-address",
+        "127.0.0.1:24443",
+        "--server-name",
+        "owned.test",
+        "--server-listen",
+        "127.0.0.1:0",
+        "--client-listen",
+        "127.0.0.1:0"
+      ],
+      "exit_code": 1,
+      "stdout": "",
+      "stderr": "output already exists\n"
+    },
+    {
+      "command": [
+        "veilctl",
+        "configcheck",
+        "--config",
+        "/tmp/veil-linux-accept-55mbdk50/pair/client/node.json"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"kind\":\"config_check\",\"version\":\"0.5.0-engineering2\",\"config_version\":1,\"role\":\"client\",\"listen\":\"127.0.0.1:0\",\"local_validation\":\"passed\",\"end_to_end\":\"not_checked\",\"model_id\":\"22f9ec6fb93a8c06110d35ab76f92db9712eed66b19cce054e531976204e6bf2\",\"model_sha256\":\"2e60626432f6d18335bbbca414181f6a2eb8acf51f54416817ffe69239926d04\",\"certificate_sha256\":\"2711fa3dc2b736bad2843fffd1115ea79fa79509553c4b30b904083e3b4ccd1a\",\"certificate_not_after\":\"2026-10-16T01:57:40Z\",\"max_connections\":8,\"limits\":{\"stream_bytes\":8388608,\"carrier_bytes\":67108864}}\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "veilctl",
+        "configcheck",
+        "--config",
+        "/tmp/veil-linux-accept-55mbdk50/pair/server/node.json"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"kind\":\"config_check\",\"version\":\"0.5.0-engineering2\",\"config_version\":1,\"role\":\"server\",\"listen\":\"127.0.0.1:0\",\"local_validation\":\"passed\",\"end_to_end\":\"not_checked\",\"model_id\":\"22f9ec6fb93a8c06110d35ab76f92db9712eed66b19cce054e531976204e6bf2\",\"model_sha256\":\"2e60626432f6d18335bbbca414181f6a2eb8acf51f54416817ffe69239926d04\",\"certificate_sha256\":\"49ca9ec3408d35ef7af55512115521730df3ca43c0e82644532e9be47e216678\",\"certificate_not_after\":\"2026-09-17T01:57:40Z\",\"max_connections\":8,\"limits\":{\"stream_bytes\":8388608,\"carrier_bytes\":67108864}}\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "veilctl",
+        "configcheck",
+        "--config",
+        "/tmp/veil-linux-accept-55mbdk50/pair/client/node.json"
+      ],
+      "exit_code": 1,
+      "stdout": "",
+      "stderr": "file access permissions\n"
+    },
+    {
+      "command": [
+        "veilctl",
+        "probe",
+        "--socks",
+        "127.0.0.1:40221",
+        "--tcp-echo",
+        "127.0.0.1:38899",
+        "--udp-echo",
+        "127.0.0.1:36818",
+        "--timeout",
+        "10s"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"kind\":\"probe\",\"at\":\"2026-09-16T01:57:40.741952894Z\",\"end_to_end\":\"passed\",\"scope\":\"requested_echo_targets\",\"checks\":[{\"name\":\"tcp_echo_half_close\",\"passed\":true,\"verified_bytes\":32,\"milliseconds\":15},{\"name\":\"udp_echo\",\"passed\":true,\"verified_bytes\":32,\"milliseconds\":6}]}\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "veilctl",
+        "probe",
+        "--socks",
+        "127.0.0.1:40221",
+        "--tcp-echo",
+        "echo.test:38899",
+        "--udp-echo",
+        "echo.test:36818",
+        "--timeout",
+        "10s"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"kind\":\"probe\",\"at\":\"2026-09-16T01:57:40.767461454Z\",\"end_to_end\":\"passed\",\"scope\":\"requested_echo_targets\",\"checks\":[{\"name\":\"tcp_echo_half_close\",\"passed\":true,\"verified_bytes\":32,\"milliseconds\":7},{\"name\":\"udp_echo\",\"passed\":true,\"verified_bytes\":32,\"milliseconds\":7}]}\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "veilctl",
+        "probe",
+        "--socks",
+        "127.0.0.1:40221",
+        "--tcp-echo",
+        "127.0.0.2:38899"
+      ],
+      "exit_code": 1,
+      "stdout": "{\"kind\":\"probe\",\"at\":\"2026-09-16T01:57:40.786091027Z\",\"end_to_end\":\"failed\",\"scope\":\"requested_echo_targets\",\"checks\":[{\"name\":\"tcp_echo_half_close\",\"passed\":false,\"verified_bytes\":0,\"milliseconds\":1,\"error\":\"SOCKS request rejected (reply=1)\"}]}\n",
+      "stderr": "end-to-end probe failed\n"
+    },
+    {
+      "command": [
+        "veilctl",
+        "probe",
+        "--socks",
+        "127.0.0.1:40221",
+        "--tcp-echo",
+        "127.0.0.1:38899",
+        "--udp-echo",
+        "127.0.0.1:36818",
+        "--timeout",
+        "10s"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"kind\":\"probe\",\"at\":\"2026-09-16T01:57:41.276096894Z\",\"end_to_end\":\"passed\",\"scope\":\"requested_echo_targets\",\"checks\":[{\"name\":\"tcp_echo_half_close\",\"passed\":true,\"verified_bytes\":32,\"milliseconds\":4},{\"name\":\"udp_echo\",\"passed\":true,\"verified_bytes\":32,\"milliseconds\":6}]}\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "veilctl",
+        "prepare",
+        "--out",
+        "/tmp/veil-linux-accept-55mbdk50/unrelated-pair",
+        "--local-test",
+        "--server-address",
+        "127.0.0.1:24443",
+        "--server-name",
+        "owned.test",
+        "--server-listen",
+        "127.0.0.1:0",
+        "--client-listen",
+        "127.0.0.1:0"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"kind\":\"prepared\",\"version\":\"0.5.0-engineering2\",\"local_test\":true,\"model_id\":\"22f9ec6fb93a8c06110d35ab76f92db9712eed66b19cce054e531976204e6bf2\",\"model_sha256\":\"628becf57c01ee1839d9b83a0d7d8a7c764faa08945e0698ff4392c6f7fac44f\",\"server_fingerprint\":\"62d55ee1a11706ad73c1d277c35e8e27418477bd04c478e234e4b237a9cd4059\",\"client_fingerprint\":\"42f1e600861f9717217de8f986d82a4a108843fc9903637dc8a2615ee913d1cc\",\"server_not_after\":\"2026-09-17T01:57:41Z\",\"client_not_after\":\"2026-10-16T01:57:41Z\",\"end_to_end\":\"not_checked\"}\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "veilctl",
+        "probe",
+        "--socks",
+        "127.0.0.1:38461",
+        "--tcp-echo",
+        "127.0.0.1:38899",
+        "--udp-echo",
+        "127.0.0.1:36818",
+        "--timeout",
+        "10s"
+      ],
+      "exit_code": 1,
+      "stdout": "{\"kind\":\"probe\",\"at\":\"2026-09-16T01:57:41.328493927Z\",\"end_to_end\":\"failed\",\"scope\":\"requested_echo_targets\",\"checks\":[{\"name\":\"tcp_echo_half_close\",\"passed\":false,\"verified_bytes\":0,\"milliseconds\":5,\"error\":\"SOCKS request rejected (reply=1)\"},{\"name\":\"udp_echo\",\"passed\":false,\"verified_bytes\":0,\"milliseconds\":2,\"error\":\"SOCKS request rejected (reply=1)\"}]}\n",
+      "stderr": "end-to-end probe failed\n"
+    },
+    {
+      "command": [
+        "veilctl",
+        "probe",
+        "--socks",
+        "127.0.0.1:35995",
+        "--tcp-echo",
+        "127.0.0.1:38899",
+        "--udp-echo",
+        "127.0.0.1:36818",
+        "--timeout",
+        "10s"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"kind\":\"probe\",\"at\":\"2026-09-16T01:57:41.349490707Z\",\"end_to_end\":\"passed\",\"scope\":\"requested_echo_targets\",\"checks\":[{\"name\":\"tcp_echo_half_close\",\"passed\":true,\"verified_bytes\":32,\"milliseconds\":16},{\"name\":\"udp_echo\",\"passed\":true,\"verified_bytes\":32,\"milliseconds\":8}]}\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "veilctl",
+        "probe",
+        "--socks",
+        "127.0.0.1:33713",
+        "--tcp-echo",
+        "127.0.0.1:38899",
+        "--udp-echo",
+        "127.0.0.1:36818",
+        "--timeout",
+        "10s"
+      ],
+      "exit_code": 1,
+      "stdout": "{\"kind\":\"probe\",\"at\":\"2026-09-16T01:57:41.38912025Z\",\"end_to_end\":\"failed\",\"scope\":\"requested_echo_targets\",\"checks\":[{\"name\":\"tcp_echo_half_close\",\"passed\":false,\"verified_bytes\":0,\"milliseconds\":5,\"error\":\"SOCKS request rejected (reply=1)\"},{\"name\":\"udp_echo\",\"passed\":false,\"verified_bytes\":0,\"milliseconds\":2,\"error\":\"SOCKS request rejected (reply=1)\"}]}\n",
+      "stderr": "end-to-end probe failed\n"
+    },
+    {
+      "command": [
+        "veilctl",
+        "probe",
+        "--socks",
+        "127.0.0.1:42327",
+        "--tcp-echo",
+        "127.0.0.1:38899",
+        "--udp-echo",
+        "127.0.0.1:36818",
+        "--timeout",
+        "10s"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"kind\":\"probe\",\"at\":\"2026-09-16T01:57:41.411443439Z\",\"end_to_end\":\"passed\",\"scope\":\"requested_echo_targets\",\"checks\":[{\"name\":\"tcp_echo_half_close\",\"passed\":true,\"verified_bytes\":32,\"milliseconds\":11},{\"name\":\"udp_echo\",\"passed\":true,\"verified_bytes\":32,\"milliseconds\":6}]}\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "veilctl",
+        "probe",
+        "--socks",
+        "127.0.0.1:42327",
+        "--tcp-echo",
+        "127.0.0.1:38899",
+        "--udp-echo",
+        "127.0.0.1:36818",
+        "--timeout",
+        "10s"
+      ],
+      "exit_code": 1,
+      "stdout": "{\"kind\":\"probe\",\"at\":\"2026-09-16T02:02:01.469899306Z\",\"end_to_end\":\"failed\",\"scope\":\"requested_echo_targets\",\"checks\":[{\"name\":\"tcp_echo_half_close\",\"passed\":false,\"verified_bytes\":0,\"milliseconds\":1,\"error\":\"SOCKS request rejected (reply=1)\"},{\"name\":\"udp_echo\",\"passed\":false,\"verified_bytes\":0,\"milliseconds\":0,\"error\":\"SOCKS request rejected (reply=1)\"}]}\n",
+      "stderr": "end-to-end probe failed\n"
+    },
+    {
+      "command": [
+        "veilctl",
+        "probe",
+        "--socks",
+        "127.0.0.1:42327",
+        "--tcp-echo",
+        "127.0.0.1:38899",
+        "--udp-echo",
+        "127.0.0.1:36818",
+        "--timeout",
+        "10s"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"kind\":\"probe\",\"at\":\"2026-09-16T02:02:01.482982905Z\",\"end_to_end\":\"passed\",\"scope\":\"requested_echo_targets\",\"checks\":[{\"name\":\"tcp_echo_half_close\",\"passed\":true,\"verified_bytes\":32,\"milliseconds\":8},{\"name\":\"udp_echo\",\"passed\":true,\"verified_bytes\":32,\"milliseconds\":6}]}\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "veilctl",
+        "configcheck",
+        "--config",
+        "/tmp/veil-linux-accept-55mbdk50/pair/client/node.json"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"kind\":\"config_check\",\"version\":\"0.5.0-engineering2\",\"config_version\":1,\"role\":\"client\",\"listen\":\"127.0.0.1:0\",\"local_validation\":\"passed\",\"end_to_end\":\"not_checked\",\"model_id\":\"22f9ec6fb93a8c06110d35ab76f92db9712eed66b19cce054e531976204e6bf2\",\"model_sha256\":\"2e60626432f6d18335bbbca414181f6a2eb8acf51f54416817ffe69239926d04\",\"certificate_sha256\":\"2711fa3dc2b736bad2843fffd1115ea79fa79509553c4b30b904083e3b4ccd1a\",\"certificate_not_after\":\"2026-10-16T01:57:40Z\",\"max_connections\":8,\"limits\":{\"stream_bytes\":16777216,\"carrier_bytes\":134217728}}\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "veilctl",
+        "configcheck",
+        "--config",
+        "/tmp/veil-linux-accept-55mbdk50/pair/server/node.json"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"kind\":\"config_check\",\"version\":\"0.5.0-engineering2\",\"config_version\":1,\"role\":\"server\",\"listen\":\"127.0.0.1:40577\",\"local_validation\":\"passed\",\"end_to_end\":\"not_checked\",\"model_id\":\"22f9ec6fb93a8c06110d35ab76f92db9712eed66b19cce054e531976204e6bf2\",\"model_sha256\":\"2e60626432f6d18335bbbca414181f6a2eb8acf51f54416817ffe69239926d04\",\"certificate_sha256\":\"49ca9ec3408d35ef7af55512115521730df3ca43c0e82644532e9be47e216678\",\"certificate_not_after\":\"2026-09-17T01:57:40Z\",\"max_connections\":8,\"limits\":{\"stream_bytes\":8388608,\"carrier_bytes\":67108864}}\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "veilctl",
+        "configcheck",
+        "--config",
+        "/tmp/veil-linux-accept-55mbdk50/pair/client/node.json"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"kind\":\"config_check\",\"version\":\"0.5.0-engineering2\",\"config_version\":1,\"role\":\"client\",\"listen\":\"127.0.0.1:0\",\"local_validation\":\"passed\",\"end_to_end\":\"not_checked\",\"model_id\":\"22f9ec6fb93a8c06110d35ab76f92db9712eed66b19cce054e531976204e6bf2\",\"model_sha256\":\"2e60626432f6d18335bbbca414181f6a2eb8acf51f54416817ffe69239926d04\",\"certificate_sha256\":\"2711fa3dc2b736bad2843fffd1115ea79fa79509553c4b30b904083e3b4ccd1a\",\"certificate_not_after\":\"2026-10-16T01:57:40Z\",\"max_connections\":8,\"limits\":{\"stream_bytes\":16777216,\"carrier_bytes\":134217728}}\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "veilctl",
+        "configcheck",
+        "--config",
+        "/tmp/veil-linux-accept-55mbdk50/pair/server/node.json"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"kind\":\"config_check\",\"version\":\"0.5.0-engineering2\",\"config_version\":1,\"role\":\"server\",\"listen\":\"127.0.0.1:40577\",\"local_validation\":\"passed\",\"end_to_end\":\"not_checked\",\"model_id\":\"22f9ec6fb93a8c06110d35ab76f92db9712eed66b19cce054e531976204e6bf2\",\"model_sha256\":\"2e60626432f6d18335bbbca414181f6a2eb8acf51f54416817ffe69239926d04\",\"certificate_sha256\":\"49ca9ec3408d35ef7af55512115521730df3ca43c0e82644532e9be47e216678\",\"certificate_not_after\":\"2026-09-17T01:57:40Z\",\"max_connections\":8,\"limits\":{\"stream_bytes\":16777216,\"carrier_bytes\":134217728}}\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "veilctl",
+        "probe",
+        "--socks",
+        "127.0.0.1:40575",
+        "--tcp-echo",
+        "127.0.0.1:38899",
+        "--udp-echo",
+        "127.0.0.1:36818",
+        "--timeout",
+        "10s"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"kind\":\"probe\",\"at\":\"2026-09-16T02:02:02.794287169Z\",\"end_to_end\":\"passed\",\"scope\":\"requested_echo_targets\",\"checks\":[{\"name\":\"tcp_echo_half_close\",\"passed\":true,\"verified_bytes\":32,\"milliseconds\":13},{\"name\":\"udp_echo\",\"passed\":true,\"verified_bytes\":32,\"milliseconds\":6}]}\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "veilctl",
+        "configcheck",
+        "--config",
+        "/tmp/veil-linux-accept-55mbdk50/pair/client/node.json"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"kind\":\"config_check\",\"version\":\"0.5.0-engineering2\",\"config_version\":1,\"role\":\"client\",\"listen\":\"127.0.0.1:0\",\"local_validation\":\"passed\",\"end_to_end\":\"not_checked\",\"model_id\":\"22f9ec6fb93a8c06110d35ab76f92db9712eed66b19cce054e531976204e6bf2\",\"model_sha256\":\"2e60626432f6d18335bbbca414181f6a2eb8acf51f54416817ffe69239926d04\",\"certificate_sha256\":\"2711fa3dc2b736bad2843fffd1115ea79fa79509553c4b30b904083e3b4ccd1a\",\"certificate_not_after\":\"2026-10-16T01:57:40Z\",\"max_connections\":8,\"limits\":{\"stream_bytes\":16777216,\"carrier_bytes\":1048576}}\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "veilctl",
+        "configcheck",
+        "--config",
+        "/tmp/veil-linux-accept-55mbdk50/pair/server/node.json"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"kind\":\"config_check\",\"version\":\"0.5.0-engineering2\",\"config_version\":1,\"role\":\"server\",\"listen\":\"127.0.0.1:40577\",\"local_validation\":\"passed\",\"end_to_end\":\"not_checked\",\"model_id\":\"22f9ec6fb93a8c06110d35ab76f92db9712eed66b19cce054e531976204e6bf2\",\"model_sha256\":\"2e60626432f6d18335bbbca414181f6a2eb8acf51f54416817ffe69239926d04\",\"certificate_sha256\":\"49ca9ec3408d35ef7af55512115521730df3ca43c0e82644532e9be47e216678\",\"certificate_not_after\":\"2026-09-17T01:57:40Z\",\"max_connections\":8,\"limits\":{\"stream_bytes\":16777216,\"carrier_bytes\":1048576}}\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "veilctl",
+        "probe",
+        "--socks",
+        "127.0.0.1:41861",
+        "--tcp-echo",
+        "127.0.0.1:38899",
+        "--udp-echo",
+        "127.0.0.1:36818",
+        "--timeout",
+        "10s"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"kind\":\"probe\",\"at\":\"2026-09-16T02:02:02.944857321Z\",\"end_to_end\":\"passed\",\"scope\":\"requested_echo_targets\",\"checks\":[{\"name\":\"tcp_echo_half_close\",\"passed\":true,\"verified_bytes\":32,\"milliseconds\":17},{\"name\":\"udp_echo\",\"passed\":true,\"verified_bytes\":32,\"milliseconds\":7}]}\n",
+      "stderr": ""
+    }
+  ],
+  "processes": [
+    {
+      "name": "client-1",
+      "pid": 1037030,
+      "exit_code": 0,
+      "expected_kill": false,
+      "run_id": "b7a51088418637a23fdc298b4aab93aa",
+      "status_records": 4,
+      "final_status": {
+        "schema_version": 1,
+        "kind": "node_status",
+        "version": "0.5.0-engineering2",
+        "run_id": "b7a51088418637a23fdc298b4aab93aa",
+        "pid": 1037030,
+        "phase": "stopped",
+        "Role": "client",
+        "State": "stopped",
+        "ModelID": "22f9ec6fb93a8c06110d35ab76f92db9712eed66b19cce054e531976204e6bf2",
+        "InnerProtocol": "streammux-flight-v3",
+        "Listen": "127.0.0.1:40221",
+        "LocalReady": false,
+        "EndToEnd": "not_checked",
+        "ActiveStreams": 0,
+        "ActiveCarriers": 0,
+        "StartedStreams": 12,
+        "CompletedStreams": 2,
+        "FailedStreams": 10,
+        "CleanupFailures": 0,
+        "EventsDropped": 0,
+        "RejectedStreams": 0,
+        "RejectedConnections": 0,
+        "FailedCarriers": 1,
+        "AuthDenied": 0,
+        "Updated": "2026-09-16T01:57:41.308378921Z"
+      }
+    },
+    {
+      "name": "client-rejected-2",
+      "pid": 1037195,
+      "exit_code": 0,
+      "expected_kill": false,
+      "run_id": "d9d47e069347582c34b2cfe36ca920ec",
+      "status_records": 2,
+      "final_status": {
+        "schema_version": 1,
+        "kind": "node_status",
+        "version": "0.5.0-engineering2",
+        "run_id": "d9d47e069347582c34b2cfe36ca920ec",
+        "pid": 1037195,
+        "phase": "stopped",
+        "Role": "client",
+        "State": "stopped",
+        "ModelID": "22f9ec6fb93a8c06110d35ab76f92db9712eed66b19cce054e531976204e6bf2",
+        "InnerProtocol": "streammux-flight-v3",
+        "Listen": "127.0.0.1:38461",
+        "LocalReady": false,
+        "EndToEnd": "not_checked",
+        "ActiveStreams": 0,
+        "ActiveCarriers": 0,
+        "StartedStreams": 2,
+        "CompletedStreams": 0,
+        "FailedStreams": 2,
+        "CleanupFailures": 0,
+        "EventsDropped": 0,
+        "RejectedStreams": 0,
+        "RejectedConnections": 0,
+        "FailedCarriers": 2,
+        "AuthDenied": 0,
+        "Updated": "2026-09-16T01:57:41.336759562Z"
+      }
+    },
+    {
+      "name": "client-restored-3",
+      "pid": 1037238,
+      "exit_code": 0,
+      "expected_kill": false,
+      "run_id": "47360a1b273e6df57daeac5ad42fd690",
+      "status_records": 2,
+      "final_status": {
+        "schema_version": 1,
+        "kind": "node_status",
+        "version": "0.5.0-engineering2",
+        "run_id": "47360a1b273e6df57daeac5ad42fd690",
+        "pid": 1037238,
+        "phase": "stopped",
+        "Role": "client",
+        "State": "stopped",
+        "ModelID": "22f9ec6fb93a8c06110d35ab76f92db9712eed66b19cce054e531976204e6bf2",
+        "InnerProtocol": "streammux-flight-v3",
+        "Listen": "127.0.0.1:35995",
+        "LocalReady": false,
+        "EndToEnd": "not_checked",
+        "ActiveStreams": 0,
+        "ActiveCarriers": 0,
+        "StartedStreams": 2,
+        "CompletedStreams": 0,
+        "FailedStreams": 2,
+        "CleanupFailures": 0,
+        "EventsDropped": 0,
+        "RejectedStreams": 0,
+        "RejectedConnections": 0,
+        "FailedCarriers": 1,
+        "AuthDenied": 0,
+        "Updated": "2026-09-16T01:57:41.376205817Z"
+      }
+    },
+    {
+      "name": "client-rejected-4",
+      "pid": 1037283,
+      "exit_code": 0,
+      "expected_kill": false,
+      "run_id": "afb8a283642856df1b1a431f8a5c4b77",
+      "status_records": 2,
+      "final_status": {
+        "schema_version": 1,
+        "kind": "node_status",
+        "version": "0.5.0-engineering2",
+        "run_id": "afb8a283642856df1b1a431f8a5c4b77",
+        "pid": 1037283,
+        "phase": "stopped",
+        "Role": "client",
+        "State": "stopped",
+        "ModelID": "22f9ec6fb93a8c06110d35ab76f92db9712eed66b19cce054e531976204e6bf2",
+        "InnerProtocol": "streammux-flight-v3",
+        "Listen": "127.0.0.1:33713",
+        "LocalReady": false,
+        "EndToEnd": "not_checked",
+        "ActiveStreams": 0,
+        "ActiveCarriers": 0,
+        "StartedStreams": 2,
+        "CompletedStreams": 0,
+        "FailedStreams": 2,
+        "CleanupFailures": 0,
+        "EventsDropped": 0,
+        "RejectedStreams": 0,
+        "RejectedConnections": 0,
+        "FailedCarriers": 2,
+        "AuthDenied": 0,
+        "Updated": "2026-09-16T01:57:41.398119299Z"
+      }
+    },
+    {
+      "name": "server-1",
+      "pid": 1037021,
+      "exit_code": -9,
+      "expected_kill": true,
+      "run_id": "79630a41fda5750b1df6c5b00027b6e3",
+      "status_records": 1304,
+      "final_status": {
+        "schema_version": 1,
+        "kind": "node_status",
+        "version": "0.5.0-engineering2",
+        "run_id": "79630a41fda5750b1df6c5b00027b6e3",
+        "pid": 1037021,
+        "phase": "running",
+        "Role": "server",
+        "State": "ready",
+        "ModelID": "22f9ec6fb93a8c06110d35ab76f92db9712eed66b19cce054e531976204e6bf2",
+        "InnerProtocol": "streammux-flight-v3",
+        "Listen": "127.0.0.1:40577",
+        "LocalReady": true,
+        "EndToEnd": "not_checked",
+        "ActiveStreams": 2,
+        "ActiveCarriers": 1,
+        "StartedStreams": 18,
+        "CompletedStreams": 3,
+        "FailedStreams": 12,
+        "CleanupFailures": 0,
+        "EventsDropped": 0,
+        "RejectedStreams": 1,
+        "RejectedConnections": 0,
+        "FailedCarriers": 6,
+        "AuthDenied": 0,
+        "Updated": "2026-09-16T02:02:01.330666061Z"
+      }
+    },
+    {
+      "name": "client-restored-5",
+      "pid": 1037323,
+      "exit_code": 0,
+      "expected_kill": false,
+      "run_id": "17701a154f4fa95d48651021541a3358",
+      "status_records": 1302,
+      "final_status": {
+        "schema_version": 1,
+        "kind": "node_status",
+        "version": "0.5.0-engineering2",
+        "run_id": "17701a154f4fa95d48651021541a3358",
+        "pid": 1037323,
+        "phase": "stopped",
+        "Role": "client",
+        "State": "stopped",
+        "ModelID": "22f9ec6fb93a8c06110d35ab76f92db9712eed66b19cce054e531976204e6bf2",
+        "InnerProtocol": "streammux-flight-v3",
+        "Listen": "127.0.0.1:42327",
+        "LocalReady": false,
+        "EndToEnd": "not_checked",
+        "ActiveStreams": 0,
+        "ActiveCarriers": 0,
+        "StartedStreams": 9,
+        "CompletedStreams": 2,
+        "FailedStreams": 7,
+        "CleanupFailures": 0,
+        "EventsDropped": 0,
+        "RejectedStreams": 0,
+        "RejectedConnections": 0,
+        "FailedCarriers": 4,
+        "AuthDenied": 0,
+        "Updated": "2026-09-16T02:02:01.499466289Z"
+      }
+    },
+    {
+      "name": "server-recovery-6",
+      "pid": 1043359,
+      "exit_code": 0,
+      "expected_kill": false,
+      "run_id": "539d4c54fcbe5a54887f7188c07c5661",
+      "status_records": 2,
+      "final_status": {
+        "schema_version": 1,
+        "kind": "node_status",
+        "version": "0.5.0-engineering2",
+        "run_id": "539d4c54fcbe5a54887f7188c07c5661",
+        "pid": 1043359,
+        "phase": "stopped",
+        "Role": "server",
+        "State": "stopped",
+        "ModelID": "22f9ec6fb93a8c06110d35ab76f92db9712eed66b19cce054e531976204e6bf2",
+        "InnerProtocol": "streammux-flight-v3",
+        "Listen": "127.0.0.1:40577",
+        "LocalReady": false,
+        "EndToEnd": "not_checked",
+        "ActiveStreams": 0,
+        "ActiveCarriers": 0,
+        "StartedStreams": 2,
+        "CompletedStreams": 0,
+        "FailedStreams": 2,
+        "CleanupFailures": 0,
+        "EventsDropped": 0,
+        "RejectedStreams": 0,
+        "RejectedConnections": 0,
+        "FailedCarriers": 1,
+        "AuthDenied": 0,
+        "Updated": "2026-09-16T02:02:01.503138769Z"
+      }
+    },
+    {
+      "name": "client-7",
+      "pid": 1043438,
+      "exit_code": 0,
+      "expected_kill": false,
+      "run_id": "7bdd4705e279fc7cc363a6415c55137f",
+      "status_records": 4,
+      "final_status": {
+        "schema_version": 1,
+        "kind": "node_status",
+        "version": "0.5.0-engineering2",
+        "run_id": "7bdd4705e279fc7cc363a6415c55137f",
+        "pid": 1043438,
+        "phase": "stopped",
+        "Role": "client",
+        "State": "stopped",
+        "ModelID": "22f9ec6fb93a8c06110d35ab76f92db9712eed66b19cce054e531976204e6bf2",
+        "InnerProtocol": "streammux-flight-v3",
+        "Listen": "127.0.0.1:41813",
+        "LocalReady": false,
+        "EndToEnd": "not_checked",
+        "ActiveStreams": 0,
+        "ActiveCarriers": 0,
+        "StartedStreams": 1,
+        "CompletedStreams": 0,
+        "FailedStreams": 1,
+        "CleanupFailures": 0,
+        "EventsDropped": 0,
+        "RejectedStreams": 0,
+        "RejectedConnections": 0,
+        "FailedCarriers": 1,
+        "AuthDenied": 0,
+        "Updated": "2026-09-16T02:02:02.042749368Z"
+      }
+    },
+    {
+      "name": "server-7",
+      "pid": 1043429,
+      "exit_code": 0,
+      "expected_kill": false,
+      "run_id": "1d14d3f1eba5e8b5d6fe78fe71633516",
+      "status_records": 4,
+      "final_status": {
+        "schema_version": 1,
+        "kind": "node_status",
+        "version": "0.5.0-engineering2",
+        "run_id": "1d14d3f1eba5e8b5d6fe78fe71633516",
+        "pid": 1043429,
+        "phase": "stopped",
+        "Role": "server",
+        "State": "stopped",
+        "ModelID": "22f9ec6fb93a8c06110d35ab76f92db9712eed66b19cce054e531976204e6bf2",
+        "InnerProtocol": "streammux-flight-v3",
+        "Listen": "127.0.0.1:40577",
+        "LocalReady": false,
+        "EndToEnd": "not_checked",
+        "ActiveStreams": 0,
+        "ActiveCarriers": 0,
+        "StartedStreams": 1,
+        "CompletedStreams": 0,
+        "FailedStreams": 1,
+        "CleanupFailures": 0,
+        "EventsDropped": 0,
+        "RejectedStreams": 0,
+        "RejectedConnections": 0,
+        "FailedCarriers": 1,
+        "AuthDenied": 0,
+        "Updated": "2026-09-16T02:02:02.045625522Z"
+      }
+    },
+    {
+      "name": "client-8",
+      "pid": 1043534,
+      "exit_code": 0,
+      "expected_kill": false,
+      "run_id": "19fd13645ae2a1d122e5826b552c2e49",
+      "status_records": 5,
+      "final_status": {
+        "schema_version": 1,
+        "kind": "node_status",
+        "version": "0.5.0-engineering2",
+        "run_id": "19fd13645ae2a1d122e5826b552c2e49",
+        "pid": 1043534,
+        "phase": "stopped",
+        "Role": "client",
+        "State": "stopped",
+        "ModelID": "22f9ec6fb93a8c06110d35ab76f92db9712eed66b19cce054e531976204e6bf2",
+        "InnerProtocol": "streammux-flight-v3",
+        "Listen": "127.0.0.1:40575",
+        "LocalReady": false,
+        "EndToEnd": "not_checked",
+        "ActiveStreams": 0,
+        "ActiveCarriers": 0,
+        "StartedStreams": 3,
+        "CompletedStreams": 2,
+        "FailedStreams": 1,
+        "CleanupFailures": 0,
+        "EventsDropped": 0,
+        "RejectedStreams": 0,
+        "RejectedConnections": 0,
+        "FailedCarriers": 1,
+        "AuthDenied": 0,
+        "Updated": "2026-09-16T02:02:02.816185354Z"
+      }
+    },
+    {
+      "name": "server-8",
+      "pid": 1043525,
+      "exit_code": 0,
+      "expected_kill": false,
+      "run_id": "186facc74f8f9a026eaefa60e16deef2",
+      "status_records": 5,
+      "final_status": {
+        "schema_version": 1,
+        "kind": "node_status",
+        "version": "0.5.0-engineering2",
+        "run_id": "186facc74f8f9a026eaefa60e16deef2",
+        "pid": 1043525,
+        "phase": "stopped",
+        "Role": "server",
+        "State": "stopped",
+        "ModelID": "22f9ec6fb93a8c06110d35ab76f92db9712eed66b19cce054e531976204e6bf2",
+        "InnerProtocol": "streammux-flight-v3",
+        "Listen": "127.0.0.1:40577",
+        "LocalReady": false,
+        "EndToEnd": "not_checked",
+        "ActiveStreams": 0,
+        "ActiveCarriers": 0,
+        "StartedStreams": 3,
+        "CompletedStreams": 2,
+        "FailedStreams": 1,
+        "CleanupFailures": 0,
+        "EventsDropped": 0,
+        "RejectedStreams": 0,
+        "RejectedConnections": 0,
+        "FailedCarriers": 1,
+        "AuthDenied": 0,
+        "Updated": "2026-09-16T02:02:02.819141719Z"
+      }
+    },
+    {
+      "name": "client-9",
+      "pid": 1043685,
+      "exit_code": 0,
+      "expected_kill": false,
+      "run_id": "0858c9ab8a14d4dc63e4322d53fb3989",
+      "status_records": 2,
+      "final_status": {
+        "schema_version": 1,
+        "kind": "node_status",
+        "version": "0.5.0-engineering2",
+        "run_id": "0858c9ab8a14d4dc63e4322d53fb3989",
+        "pid": 1043685,
+        "phase": "stopped",
+        "Role": "client",
+        "State": "stopped",
+        "ModelID": "22f9ec6fb93a8c06110d35ab76f92db9712eed66b19cce054e531976204e6bf2",
+        "InnerProtocol": "streammux-flight-v3",
+        "Listen": "127.0.0.1:41861",
+        "LocalReady": false,
+        "EndToEnd": "not_checked",
+        "ActiveStreams": 0,
+        "ActiveCarriers": 0,
+        "StartedStreams": 3,
+        "CompletedStreams": 0,
+        "FailedStreams": 3,
+        "CleanupFailures": 0,
+        "EventsDropped": 0,
+        "RejectedStreams": 0,
+        "RejectedConnections": 0,
+        "FailedCarriers": 2,
+        "AuthDenied": 0,
+        "Updated": "2026-09-16T02:02:02.972591522Z"
+      }
+    },
+    {
+      "name": "server-9",
+      "pid": 1043676,
+      "exit_code": 0,
+      "expected_kill": false,
+      "run_id": "f0c292f2cb289eaad12781bd13d0a886",
+      "status_records": 2,
+      "final_status": {
+        "schema_version": 1,
+        "kind": "node_status",
+        "version": "0.5.0-engineering2",
+        "run_id": "f0c292f2cb289eaad12781bd13d0a886",
+        "pid": 1043676,
+        "phase": "stopped",
+        "Role": "server",
+        "State": "stopped",
+        "ModelID": "22f9ec6fb93a8c06110d35ab76f92db9712eed66b19cce054e531976204e6bf2",
+        "InnerProtocol": "streammux-flight-v3",
+        "Listen": "127.0.0.1:40577",
+        "LocalReady": false,
+        "EndToEnd": "not_checked",
+        "ActiveStreams": 0,
+        "ActiveCarriers": 0,
+        "StartedStreams": 3,
+        "CompletedStreams": 1,
+        "FailedStreams": 2,
+        "CleanupFailures": 0,
+        "EventsDropped": 0,
+        "RejectedStreams": 0,
+        "RejectedConnections": 0,
+        "FailedCarriers": 2,
+        "AuthDenied": 0,
+        "Updated": "2026-09-16T02:02:02.975531638Z"
+      }
+    }
+  ],
+  "public_vps": "not_tested",
+  "tun": "not_tested",
+  "system_service": "not_tested",
+  "pilot": false,
+  "version": "0.5.0-engineering2",
+  "source_sha256": "2fc0afd051fe2f7bdf72edca79575029d8ad1a34aead8aa560d096eaf24d6ca7",
+  "artifacts": [
+    {
+      "path": "linux-amd64/veild",
+      "sha256": "0107f264b5c140ecf27af96f5cb008c7967829c240ab363cc9fb80564849dcd9",
+      "bytes": 12013314
+    },
+    {
+      "path": "linux-amd64/veilctl",
+      "sha256": "c41df09de6a1cf819bbbe905dd2ccd5f52852c10208b531b60eecae85cb2f318",
+      "bytes": 9115186
+    }
+  ],
+  "private_material_removed": true
+}

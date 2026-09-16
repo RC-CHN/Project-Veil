@@ -1,0 +1,90 @@
+{
+  "version": "0.5.0-engineering2",
+  "source_sha256": "2fc0afd051fe2f7bdf72edca79575029d8ad1a34aead8aa560d096eaf24d6ca7",
+  "go": "go version go1.26.7 linux/amd64",
+  "commands": [
+    {
+      "command": [
+        "/tmp/veil-modcache/golang.org/toolchain@v0.0.1-go1.26.7.linux-amd64/bin/go",
+        "build",
+        "-trimpath",
+        "-buildvcs=false",
+        "-o",
+        "/workspace/projects/Project-Veil/out/builds/20260916T015645Z-d692302f/linux-amd64/veild",
+        "./cmd/veild"
+      ],
+      "cwd": "node",
+      "exit_code": 0,
+      "seconds": 0.374,
+      "log": "linux-amd64-veild.log"
+    },
+    {
+      "command": [
+        "/tmp/veil-modcache/golang.org/toolchain@v0.0.1-go1.26.7.linux-amd64/bin/go",
+        "build",
+        "-trimpath",
+        "-buildvcs=false",
+        "-o",
+        "/workspace/projects/Project-Veil/out/builds/20260916T015645Z-d692302f/linux-amd64/veilctl",
+        "./cmd/veilctl"
+      ],
+      "cwd": "node",
+      "exit_code": 0,
+      "seconds": 0.331,
+      "log": "linux-amd64-veilctl.log"
+    },
+    {
+      "command": [
+        "/tmp/veil-modcache/golang.org/toolchain@v0.0.1-go1.26.7.linux-amd64/bin/go",
+        "build",
+        "-trimpath",
+        "-buildvcs=false",
+        "-o",
+        "/workspace/projects/Project-Veil/out/builds/20260916T015645Z-d692302f/windows-amd64/veild.exe",
+        "./cmd/veild"
+      ],
+      "cwd": "node",
+      "exit_code": 0,
+      "seconds": 0.387,
+      "log": "windows-amd64-veild.log"
+    },
+    {
+      "command": [
+        "/tmp/veil-modcache/golang.org/toolchain@v0.0.1-go1.26.7.linux-amd64/bin/go",
+        "build",
+        "-trimpath",
+        "-buildvcs=false",
+        "-o",
+        "/workspace/projects/Project-Veil/out/builds/20260916T015645Z-d692302f/windows-amd64/veilctl.exe",
+        "./cmd/veilctl"
+      ],
+      "cwd": "node",
+      "exit_code": 0,
+      "seconds": 0.334,
+      "log": "windows-amd64-veilctl.log"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "linux-amd64/veild",
+      "sha256": "0107f264b5c140ecf27af96f5cb008c7967829c240ab363cc9fb80564849dcd9",
+      "bytes": 12013314
+    },
+    {
+      "path": "linux-amd64/veilctl",
+      "sha256": "c41df09de6a1cf819bbbe905dd2ccd5f52852c10208b531b60eecae85cb2f318",
+      "bytes": 9115186
+    },
+    {
+      "path": "windows-amd64/veild.exe",
+      "sha256": "d50711a3fc18149acf8db384f1d9fcb404fa370f61d2634cb79c3749faba6487",
+      "bytes": 12310528
+    },
+    {
+      "path": "windows-amd64/veilctl.exe",
+      "sha256": "d1d599fc5ec8d78034880e6ab18fff9b0f83f5d09bba96d8959575308b839c9d",
+      "bytes": 9198080
+    }
+  ],
+  "passed": true
+}

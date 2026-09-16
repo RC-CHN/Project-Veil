@@ -1,0 +1,150 @@
+{
+  "run": "out/linux-acceptance/20260916T015740Z-1d066fb6",
+  "files": [
+    {
+      "path": "acceptance.json",
+      "bytes": 45399,
+      "sha256": "73cce0463cb383175a0aeab5c1aa8cc7ecc3c9c75675248914ab209c86e076d4"
+    },
+    {
+      "path": "client-1-status.jsonl",
+      "bytes": 2485,
+      "sha256": "ae0d72fc139cd8a59580df119c6e4ea6c0ab8e4c1a4955351a5e0ea8ff2c9de7"
+    },
+    {
+      "path": "client-1-stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "client-7-status.jsonl",
+      "bytes": 2478,
+      "sha256": "5ca0b04b70e31425582c764ee9c70a8d15c8762980d4f4d1e66261cf8e8a3f81"
+    },
+    {
+      "path": "client-7-stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "client-8-status.jsonl",
+      "bytes": 3100,
+      "sha256": "30de02b0877758fb2cf6ded860a4842f7acdd72ab13cf2b792590e2732f60b32"
+    },
+    {
+      "path": "client-8-stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "client-9-status.jsonl",
+      "bytes": 1241,
+      "sha256": "19b9547c8b5d4a1c8df83a893e6bf5e17c92d70ed9c4a6d7f99b948b16805703"
+    },
+    {
+      "path": "client-9-stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "client-rejected-2-status.jsonl",
+      "bytes": 1241,
+      "sha256": "9bec609f839e3d2873921b7429c215467398d36fdf8e591a546b297eea516a1a"
+    },
+    {
+      "path": "client-rejected-2-stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "client-rejected-4-status.jsonl",
+      "bytes": 1241,
+      "sha256": "cb5fb8ab2e01fec34311a245bbf4677188cfb7ec454bcca3321b3eed01b440c5"
+    },
+    {
+      "path": "client-rejected-4-stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "client-restored-3-status.jsonl",
+      "bytes": 1241,
+      "sha256": "505d092d1b23a3a899fb085bc2cb3b6d9d97b6ffdbe52fd1517667fba35918d0"
+    },
+    {
+      "path": "client-restored-3-stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "client-restored-5-status.jsonl",
+      "bytes": 807107,
+      "sha256": "a6355f8e5ebcc0774f8e0a2c0f03a414a9edc46f92965174ffc7903af40f289d"
+    },
+    {
+      "path": "client-restored-5-stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "server-1-status.jsonl",
+      "bytes": 810934,
+      "sha256": "4c106e13e608c78016d2c0e80de1f322df311d226c2d5ba923bb852effa0014c"
+    },
+    {
+      "path": "server-1-stderr.log",
+      "bytes": 556,
+      "sha256": "406922dffaeebc2bd194b4239b284841113474960cbbdf8c7a520ee3d2744647"
+    },
+    {
+      "path": "server-7-status.jsonl",
+      "bytes": 2481,
+      "sha256": "ebdc9c5cbe5a2d44cea064c518a7ab61cbd6b6f9d60b1f0076b3ecdd75a1e2ed"
+    },
+    {
+      "path": "server-7-stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "server-8-status.jsonl",
+      "bytes": 3101,
+      "sha256": "7431d1fce5bb85f824f568df2f7c245ccc16769e62c6b59cc9d5c0d7a5c85904"
+    },
+    {
+      "path": "server-8-stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "server-9-status.jsonl",
+      "bytes": 1241,
+      "sha256": "7562b552b945a7542b78f4ab666d20b3925ab61cf09f3c63a76ddbb445167097"
+    },
+    {
+      "path": "server-9-stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "server-recovery-6-status.jsonl",
+      "bytes": 1241,
+      "sha256": "c213bb207de59e2ba41742d87516262ab61798bb854c7da3789f54b5e20ba703"
+    },
+    {
+      "path": "server-recovery-6-stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 26573,
+      "sha256": "92d0ca743d7fbddf38ba76746bac13304298e668d4ce7fd6c5f0e3ee4c0d508f"
+    },
+    {
+      "path": "target-witness.json",
+      "bytes": 745,
+      "sha256": "57d3608ddb703604daa483d1f32f3cbdcb15af0cb055871cef13bbc79c590bd6"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+ok  	veil.local/core	1.421s
+?   	veil.local/core/contracttest	[no test files]
+?   	veil.local/core/endpoint	[no test files]
+?   	veil.local/core/identity	[no test files]
+ok  	veil.local/core/internal/behavior	1.258s
+ok  	veil.local/core/internal/datagram	1.044s
+ok  	veil.local/core/internal/destination	1.028s
+ok  	veil.local/core/internal/flightwindow	1.025s
+ok  	veil.local/core/internal/objectstore	1.023s
+?   	veil.local/core/internal/runstate	[no test files]
+ok  	veil.local/core/internal/session	8.447s
+ok  	veil.local/core/internal/streamlink	1.146s
+ok  	veil.local/core/internal/streammux	1.192s
+ok  	veil.local/core/internal/streamopen	1.018s
+?   	veil.local/core/model	[no test files]
+ok  	veil.local/core/policy	1.015s
+?   	veil.local/core/telemetry	[no test files]
+?   	veil.local/core/transport	[no test files]

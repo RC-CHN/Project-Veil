@@ -1,0 +1,9 @@
+?   	veil.local/node/cmd/veilctl	[no test files]
+?   	veil.local/node/cmd/veild	[no test files]
+ok  	veil.local/node/internal/compose	1.147s
+ok  	veil.local/node/internal/config	1.018s
+ok  	veil.local/node/internal/ingress/socks5	1.016s
+ok  	veil.local/node/internal/lifecycle	1.015s
+ok  	veil.local/node/internal/platform/linux	1.021s
+ok  	veil.local/node/internal/prepare	1.294s
+ok  	veil.local/node/internal/probe	1.037s
