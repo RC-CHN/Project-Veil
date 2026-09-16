@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "role": "server",
+  "listen": "0.0.0.0:443",
+  "bucket": "veil-node",
+  "model_file": "model.json",
+  "certificate": "server.pem",
+  "private_key": "server-key.pem",
+  "ca": "client-ca.pem",
+  "client_fingerprints": ["REPLACE_WITH_CLIENT_CERTIFICATE_SHA256"],
+  "max_connections": 8
+}

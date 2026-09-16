@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "role": "client",
+  "listen": "127.0.0.1:1080",
+  "server_url": "https://192.0.2.1",
+  "dial_address": "192.0.2.1:443",
+  "bucket": "veil-node",
+  "model_file": "model.json",
+  "certificate": "client.pem",
+  "private_key": "client-key.pem",
+  "max_connections": 8
+}
