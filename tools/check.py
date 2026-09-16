@@ -2,6 +2,7 @@
 """Test the new modules; Windows mode only cross-builds, never claims execution."""
 import argparse
 import json
+import sys
 from common import ROOT, go_binary, environment, source_manifest, new_run, command
 
 
@@ -27,6 +28,9 @@ def main():
             if args.race:
                 env["CGO_ENABLED"] = "1"
             report["commands"].append(command(argv, ROOT/module, env, run/f"{module}-tests.log"))
+        if sys.platform == "linux":
+            report["commands"].append(command([sys.executable, "-B", str(ROOT/"tools/test_accept_linux.py")], ROOT,
+                environment(), run/"acceptance-supervisor-tests.log"))
     if args.windows or args.windows_only:
         for module in ("core", "node"):
             report["commands"].append(command([go, "build", "./..."], ROOT/module,
