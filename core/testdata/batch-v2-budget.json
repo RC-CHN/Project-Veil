@@ -1,0 +1,274 @@
+{
+  "model": {
+    "version": 2,
+    "states": 2,
+    "max_batches": 4,
+    "lifetime_ms": 30000,
+    "registers": [
+      {
+        "name": "count",
+        "kind": "u64",
+        "initial": {}
+      },
+      {
+        "name": "hash",
+        "kind": "digest",
+        "initial": {
+          "bytes": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+        }
+      }
+    ],
+    "stages": [
+      {
+        "name": "loop",
+        "from": 0,
+        "to": 0,
+        "weight": 1,
+        "actions": [
+          {
+            "name": "publish",
+            "request": [
+              {
+                "name": "mode",
+                "kind": "u64"
+              },
+              {
+                "name": "data",
+                "kind": "bytes",
+                "min": 20,
+                "max": 32
+              }
+            ],
+            "checks": [],
+            "replies": [
+              {
+                "code": 200,
+                "fields": [
+                  {
+                    "name": "hash",
+                    "kind": "digest"
+                  }
+                ],
+                "checks": [
+                  {
+                    "left": {
+                      "scope": "request",
+                      "index": 1,
+                      "op": "sha256"
+                    },
+                    "right": {
+                      "scope": "response"
+                    }
+                  }
+                ],
+                "assign": [
+                  {
+                    "register": 0,
+                    "value": {
+                      "scope": "register",
+                      "op": "inc"
+                    }
+                  }
+                ]
+              }
+            ],
+            "response_after": [],
+            "request_minimums": [
+              {
+                "field": 1,
+                "min": 0
+              }
+            ]
+          },
+          {
+            "name": "observe",
+            "request": [
+              {
+                "name": "old_counter",
+                "kind": "u64"
+              }
+            ],
+            "checks": [
+              {
+                "left": {
+                  "scope": "request"
+                },
+                "right": {
+                  "scope": "register"
+                }
+              }
+            ],
+            "replies": [
+              {
+                "code": 200,
+                "fields": [
+                  {
+                    "name": "data",
+                    "kind": "bytes",
+                    "min": 8,
+                    "max": 16
+                  }
+                ],
+                "checks": [],
+                "assign": [
+                  {
+                    "register": 1,
+                    "value": {
+                      "scope": "response",
+                      "op": "sha256"
+                    }
+                  }
+                ],
+                "minimums": [
+                  {
+                    "field": 0,
+                    "min": 0
+                  }
+                ]
+              }
+            ],
+            "response_after": [
+              0
+            ]
+          }
+        ],
+        "branch": {
+          "action": 0,
+          "field": 0,
+          "cases": [
+            {
+              "code": 0,
+              "to": 0,
+              "checks": []
+            },
+            {
+              "code": 1,
+              "to": 1,
+              "checks": [
+                {
+                  "left": {
+                    "scope": "register"
+                  },
+                  "right": {
+                    "scope": "constant",
+                    "number": 2
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "model_id": "06b5ec33d053f39c2c5bf11eff633d05c61063f9de9d67932386f2ee0a216f1c",
+  "seed_hex": "0100000000000000000000000000000000000000000000000000000000000000",
+  "material_hex": "0200000000000000000000000000000000000000000000000000000000000000",
+  "offers": [
+    {
+      "Sequence": 0,
+      "Stage": "loop",
+      "Members": [
+        {
+          "Name": "publish",
+          "RequestSizes": [
+            8,
+            22
+          ],
+          "Replies": [
+            {
+              "Code": 200,
+              "Sizes": [
+                32
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "observe",
+          "RequestSizes": [
+            8
+          ],
+          "Replies": [
+            {
+              "Code": 200,
+              "Sizes": [
+                13
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Sequence": 1,
+      "Stage": "loop",
+      "Members": [
+        {
+          "Name": "publish",
+          "RequestSizes": [
+            8,
+            25
+          ],
+          "Replies": [
+            {
+              "Code": 200,
+              "Sizes": [
+                32
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "observe",
+          "RequestSizes": [
+            8
+          ],
+          "Replies": [
+            {
+              "Code": 200,
+              "Sizes": [
+                15
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Sequence": 2,
+      "Stage": "loop",
+      "Members": [
+        {
+          "Name": "publish",
+          "RequestSizes": [
+            8,
+            32
+          ],
+          "Replies": [
+            {
+              "Code": 200,
+              "Sizes": [
+                32
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "observe",
+          "RequestSizes": [
+            8
+          ],
+          "Replies": [
+            {
+              "Code": 200,
+              "Sizes": [
+                15
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

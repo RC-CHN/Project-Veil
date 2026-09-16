@@ -1,0 +1,272 @@
+{
+  "notice": "Public bounded conditional-reference fixture; not a normal HTTPS wire model",
+  "model": {
+    "version": 2,
+    "states": 3,
+    "max_transactions": 8,
+    "lifetime_ms": 30000,
+    "registers": [
+      {
+        "name": "known_head",
+        "kind": "digest",
+        "initial": {
+          "bytes": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+        }
+      }
+    ],
+    "actions": [
+      {
+        "name": "discover",
+        "from": 0,
+        "to": 1,
+        "weight": 1,
+        "request": null,
+        "response": [
+          {
+            "name": "current",
+            "kind": "digest"
+          }
+        ],
+        "checks": null,
+        "assign": [
+          {
+            "register": 0,
+            "value": {
+              "scope": "response"
+            }
+          }
+        ]
+      },
+      {
+        "name": "update_again",
+        "from": 1,
+        "to": 0,
+        "weight": 1,
+        "request": [
+          {
+            "name": "expected",
+            "kind": "digest"
+          },
+          {
+            "name": "next",
+            "kind": "digest"
+          }
+        ],
+        "response": [
+          {
+            "name": "result",
+            "kind": "u64"
+          },
+          {
+            "name": "observed",
+            "kind": "digest"
+          }
+        ],
+        "checks": [
+          {
+            "left": {
+              "scope": "request"
+            },
+            "right": {
+              "scope": "register"
+            }
+          }
+        ],
+        "assign": null,
+        "results": {
+          "field": 0,
+          "cases": [
+            {
+              "name": "updated",
+              "code": 0,
+              "to": 1,
+              "checks": [
+                {
+                  "left": {
+                    "scope": "response",
+                    "index": 1
+                  },
+                  "right": {
+                    "scope": "request",
+                    "index": 1
+                  }
+                }
+              ],
+              "assign": [
+                {
+                  "register": 0,
+                  "value": {
+                    "scope": "response",
+                    "index": 1
+                  }
+                }
+              ]
+            },
+            {
+              "name": "conflict",
+              "code": 1,
+              "to": 2,
+              "checks": [
+                {
+                  "left": {
+                    "scope": "response",
+                    "index": 1
+                  },
+                  "right": {
+                    "scope": "request"
+                  },
+                  "not": true
+                }
+              ],
+              "assign": [
+                {
+                  "register": 0,
+                  "value": {
+                    "scope": "response",
+                    "index": 1
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "refresh",
+        "from": 2,
+        "to": 1,
+        "weight": 1,
+        "request": [
+          {
+            "name": "known",
+            "kind": "digest"
+          }
+        ],
+        "response": [
+          {
+            "name": "current",
+            "kind": "digest"
+          }
+        ],
+        "checks": [
+          {
+            "left": {
+              "scope": "request"
+            },
+            "right": {
+              "scope": "register"
+            }
+          }
+        ],
+        "assign": [
+          {
+            "register": 0,
+            "value": {
+              "scope": "response"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "model_id": "4dc3ce5c867daa2a01523de8203883968d4e10f8c18ef71edc8cb0963ad2cd45",
+  "seed_hex": "0100000000000000000000000000000000000000000000000000000000000000",
+  "material_hex": "0200000000000000000000000000000000000000000000000000000000000000",
+  "steps": [
+    {
+      "sequence": 0,
+      "action": "discover",
+      "request": [],
+      "response": [
+        {
+          "bytes": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
+        }
+      ],
+      "state": 1,
+      "head_hex": "0101010101010101010101010101010101010101010101010101010101010101",
+      "sample_1000": 756
+    },
+    {
+      "sequence": 1,
+      "action": "update_again",
+      "request": [
+        {
+          "bytes": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
+        },
+        {
+          "bytes": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI="
+        }
+      ],
+      "response": [
+        {},
+        {
+          "bytes": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI="
+        }
+      ],
+      "state": 1,
+      "head_hex": "0202020202020202020202020202020202020202020202020202020202020202",
+      "sample_1000": 535
+    },
+    {
+      "sequence": 2,
+      "action": "update_again",
+      "request": [
+        {
+          "bytes": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI="
+        },
+        {
+          "bytes": "BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ="
+        }
+      ],
+      "response": [
+        {
+          "number": 1
+        },
+        {
+          "bytes": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM="
+        }
+      ],
+      "state": 2,
+      "head_hex": "0303030303030303030303030303030303030303030303030303030303030303",
+      "sample_1000": 925
+    },
+    {
+      "sequence": 3,
+      "action": "refresh",
+      "request": [
+        {
+          "bytes": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM="
+        }
+      ],
+      "response": [
+        {
+          "bytes": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM="
+        }
+      ],
+      "state": 1,
+      "head_hex": "0303030303030303030303030303030303030303030303030303030303030303",
+      "sample_1000": 831
+    },
+    {
+      "sequence": 4,
+      "action": "update_again",
+      "request": [
+        {
+          "bytes": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM="
+        },
+        {
+          "bytes": "BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ="
+        }
+      ],
+      "response": [
+        {},
+        {
+          "bytes": "BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ="
+        }
+      ],
+      "state": 1,
+      "head_hex": "0404040404040404040404040404040404040404040404040404040404040404",
+      "sample_1000": 840
+    }
+  ]
+}

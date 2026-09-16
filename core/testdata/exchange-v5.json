@@ -1,0 +1,100 @@
+{
+  "note": "Public test seed, never deploy this model. Codec vectors include all tags; not a valid session transcript.",
+  "model": {
+    "version": 5,
+    "generator": 1,
+    "seed": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+    "path": "/api/sync",
+    "lanes": 4,
+    "padding_percent": 25,
+    "states": [
+      {
+        "name": "start",
+        "up_bytes": 196608,
+        "down_bytes": 196608,
+        "wait_ms": 2,
+        "quiet": 1,
+        "busy": 2,
+        "threshold": 32768
+      },
+      {
+        "name": "quiet",
+        "up_bytes": 131072,
+        "down_bytes": 196608,
+        "wait_ms": 20,
+        "quiet": 1,
+        "busy": 2,
+        "threshold": 16384
+      },
+      {
+        "name": "busy",
+        "up_bytes": 327680,
+        "down_bytes": 327680,
+        "wait_ms": 2,
+        "quiet": 1,
+        "busy": 2,
+        "threshold": 32768
+      }
+    ]
+  },
+  "model_id": "eb3dc1a787e954cb63da69fe5d611b72d03266e9c7cbb9bd43afbac904540a55",
+  "records": [
+    {
+      "kind": 1,
+      "stream": 1,
+      "offset": 0,
+      "data": "AQF/AAABAbs="
+    },
+    {
+      "kind": 2,
+      "stream": 1,
+      "offset": 0,
+      "data": ""
+    },
+    {
+      "kind": 3,
+      "stream": 1,
+      "offset": 0,
+      "data": "AGhlbGxv/w=="
+    },
+    {
+      "kind": 4,
+      "stream": 5,
+      "offset": 19,
+      "data": "AX8AAAEANWRucw=="
+    },
+    {
+      "kind": 5,
+      "stream": 1,
+      "offset": 7,
+      "data": ""
+    },
+    {
+      "kind": 6,
+      "stream": 9,
+      "offset": 0,
+      "data": ""
+    },
+    {
+      "kind": 7,
+      "stream": 5,
+      "offset": 29,
+      "data": ""
+    }
+  ],
+  "vectors": [
+    {
+      "down": false,
+      "hex": "000002000000000000002000000700000000001900000000db0000000000000000000000080000000101017f00000101bbb60000000000000000000000000000000109000000000000000000000007000000010068656c6c6fffa100000000000000130000000a00000005017f0000010035646e733400000000000000070000000000000001f200000000000000000000000000000009c7000000000000001d0000000000000005"
+    },
+    {
+      "down": true,
+      "hex": "00000200000000000000200000070000000000190000000001017f00000101bb0068656c6c6fff017f0000010035646e730000000800000000000000070000000a00000000000000000000000000000001000000010000000100000005000000010000000900000005c0fc15379252cb000000000000000000000000000000000000000000000000000000000000001300000000000000070000000000000000000000000000001d"
+    }
+  ],
+  "samples": {
+    "execution": 1217,
+    "capacity/up": 23821,
+    "capacity/down": 16239
+  }
+}

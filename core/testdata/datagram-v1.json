@@ -1,0 +1,84 @@
+{
+  "AssociationHex": "010100000000001002000000000100000000000000800000",
+  "Cases": [
+    {
+      "Host": "127.0.0.2",
+      "Port": 53,
+      "PayloadBytes": 0,
+      "RecordBytes": 16,
+      "RecordSHA256": "ab4361a6552617135d52a8d66596ed88fa4a0563553ca72f7b84841324b87fc8",
+      "SOCKSAllowed": true,
+      "RecordHex": "0101000000000008010400357f000002",
+      "SOCKSBytes": 10,
+      "SOCKSSHA256": "97590073285ad3f785beb9908f3cc14c59f9f56a2f683b282de04772f04fe06e"
+    },
+    {
+      "Host": "127.0.0.2",
+      "Port": 53,
+      "PayloadBytes": 1200,
+      "RecordBytes": 1216,
+      "RecordSHA256": "abe6729fc484fd0ba60acf9e8a2881d82229f4b9cb13dfeae6079651a358c41c",
+      "SOCKSAllowed": true,
+      "SOCKSBytes": 1210,
+      "SOCKSSHA256": "c8043c2d58f52503bb40d5f8fe137c9edaf6f83bbc77f001a94b82421a285117"
+    },
+    {
+      "Host": "2001:db8::1",
+      "Port": 5353,
+      "PayloadBytes": 1,
+      "RecordBytes": 29,
+      "RecordSHA256": "2889feaa5a049fa0bfe245c0dbdd72e003de35d343f6cc9bca9aaa300ac4ca06",
+      "SOCKSAllowed": true,
+      "RecordHex": "0101000000000015021014e920010db800000000000000000000000111",
+      "SOCKSBytes": 23,
+      "SOCKSSHA256": "5b39a415469f6b49fb994c575fa5bb9a6560f53ddfef47059910e005d0f5e58b"
+    },
+    {
+      "Host": "owned.test",
+      "Port": 443,
+      "PayloadBytes": 3,
+      "RecordBytes": 25,
+      "RecordSHA256": "018fbbac4d98e4a3901df5cbf6d5f5f829a88417ec949bf61c354a98360249e8",
+      "SOCKSAllowed": true,
+      "RecordHex": "0101000000000011030a01bb6f776e65642e74657374119417",
+      "SOCKSBytes": 20,
+      "SOCKSSHA256": "2d087a57c0ae2df07ff2f4cdc15587762cd21f686b80cad9d2939b3e01cc0858"
+    },
+    {
+      "Host": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "Port": 443,
+      "PayloadBytes": 1,
+      "RecordBytes": 266,
+      "RecordSHA256": "6eec73ee8ff48b34268a90e9c74b5a7f023132aa47bc1d4ba2d8f4c8eb475678",
+      "SOCKSAllowed": true,
+      "SOCKSBytes": 261,
+      "SOCKSSHA256": "9e16353592b3069e0d552b90ecdfa3cea83def5f8830b6fa96653ef2b1e33017"
+    },
+    {
+      "Host": "127.0.0.2",
+      "Port": 443,
+      "PayloadBytes": 65497,
+      "RecordBytes": 65513,
+      "RecordSHA256": "1f8f8f4689dacf9d6270f01c54ef29b5bf30c4de61e8c5dcaabecd7433e8e597",
+      "SOCKSAllowed": true,
+      "SOCKSBytes": 65507,
+      "SOCKSSHA256": "8e4ff56b4c96173690c648ea7c1db449b9a306810d58fa60474d32f607e4d24d"
+    },
+    {
+      "Host": "127.0.0.2",
+      "Port": 443,
+      "PayloadBytes": 65507,
+      "RecordBytes": 65523,
+      "RecordSHA256": "4498918c9ed3b498346871695c3188bdd9fd53c196de1e33f415b7ca58e3d63d",
+      "SOCKSAllowed": false
+    },
+    {
+      "Host": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "Port": 443,
+      "PayloadBytes": 65507,
+      "RecordBytes": 65772,
+      "RecordSHA256": "2d31faa1387ad93fca98f56a4391950c9584a87251150d8f3f26bf945c5c5d11",
+      "SOCKSAllowed": false
+    }
+  ]
+}

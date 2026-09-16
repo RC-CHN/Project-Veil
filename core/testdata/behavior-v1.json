@@ -1,0 +1,493 @@
+{
+  "notice": "Public deterministic test inputs; not a normal business model or deployment configuration",
+  "model": {
+    "version": 1,
+    "states": 2,
+    "max_transactions": 6,
+    "lifetime_ms": 10000,
+    "registers": [
+      {
+        "name": "head",
+        "kind": "digest",
+        "initial": {
+          "bytes": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+        }
+      },
+      {
+        "name": "revision",
+        "kind": "u64",
+        "initial": {}
+      },
+      {
+        "name": "remote_head",
+        "kind": "digest",
+        "initial": {
+          "bytes": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+        }
+      }
+    ],
+    "actions": [
+      {
+        "name": "create",
+        "from": 0,
+        "to": 1,
+        "weight": 1,
+        "request": [
+          {
+            "name": "expected",
+            "kind": "digest"
+          },
+          {
+            "name": "revision",
+            "kind": "u64"
+          },
+          {
+            "name": "object",
+            "kind": "bytes",
+            "min": 31,
+            "max": 89
+          }
+        ],
+        "response": [
+          {
+            "name": "stored",
+            "kind": "digest"
+          },
+          {
+            "name": "revision",
+            "kind": "u64"
+          },
+          {
+            "name": "independent_object",
+            "kind": "bytes",
+            "min": 17,
+            "max": 53
+          },
+          {
+            "name": "independent_digest",
+            "kind": "digest"
+          }
+        ],
+        "checks": [
+          {
+            "left": {
+              "scope": "request"
+            },
+            "right": {
+              "scope": "register"
+            }
+          },
+          {
+            "left": {
+              "scope": "request",
+              "index": 1
+            },
+            "right": {
+              "scope": "register",
+              "index": 1
+            }
+          },
+          {
+            "left": {
+              "scope": "response"
+            },
+            "right": {
+              "scope": "request",
+              "index": 2,
+              "op": "sha256"
+            }
+          },
+          {
+            "left": {
+              "scope": "response",
+              "index": 1
+            },
+            "right": {
+              "scope": "request",
+              "index": 1,
+              "op": "inc"
+            }
+          },
+          {
+            "left": {
+              "scope": "response",
+              "index": 3
+            },
+            "right": {
+              "scope": "response",
+              "index": 2,
+              "op": "sha256"
+            }
+          }
+        ],
+        "assign": [
+          {
+            "register": 0,
+            "value": {
+              "scope": "response"
+            }
+          },
+          {
+            "register": 1,
+            "value": {
+              "scope": "response",
+              "index": 1
+            }
+          },
+          {
+            "register": 2,
+            "value": {
+              "scope": "response",
+              "index": 3
+            }
+          }
+        ]
+      },
+      {
+        "name": "replace",
+        "from": 1,
+        "to": 1,
+        "weight": 1,
+        "request": [
+          {
+            "name": "expected",
+            "kind": "digest"
+          },
+          {
+            "name": "revision",
+            "kind": "u64"
+          },
+          {
+            "name": "object",
+            "kind": "bytes",
+            "min": 31,
+            "max": 89
+          }
+        ],
+        "response": [
+          {
+            "name": "stored",
+            "kind": "digest"
+          },
+          {
+            "name": "revision",
+            "kind": "u64"
+          },
+          {
+            "name": "independent_object",
+            "kind": "bytes",
+            "min": 17,
+            "max": 53
+          },
+          {
+            "name": "independent_digest",
+            "kind": "digest"
+          }
+        ],
+        "checks": [
+          {
+            "left": {
+              "scope": "request"
+            },
+            "right": {
+              "scope": "register"
+            }
+          },
+          {
+            "left": {
+              "scope": "request",
+              "index": 1
+            },
+            "right": {
+              "scope": "register",
+              "index": 1
+            }
+          },
+          {
+            "left": {
+              "scope": "response"
+            },
+            "right": {
+              "scope": "request",
+              "index": 2,
+              "op": "sha256"
+            }
+          },
+          {
+            "left": {
+              "scope": "response",
+              "index": 1
+            },
+            "right": {
+              "scope": "request",
+              "index": 1,
+              "op": "inc"
+            }
+          },
+          {
+            "left": {
+              "scope": "response",
+              "index": 3
+            },
+            "right": {
+              "scope": "response",
+              "index": 2,
+              "op": "sha256"
+            }
+          }
+        ],
+        "assign": [
+          {
+            "register": 0,
+            "value": {
+              "scope": "response"
+            }
+          },
+          {
+            "register": 1,
+            "value": {
+              "scope": "response",
+              "index": 1
+            }
+          },
+          {
+            "register": 2,
+            "value": {
+              "scope": "response",
+              "index": 3
+            }
+          }
+        ]
+      },
+      {
+        "name": "alternate",
+        "from": 1,
+        "to": 1,
+        "weight": 2,
+        "request": [
+          {
+            "name": "expected",
+            "kind": "digest"
+          },
+          {
+            "name": "revision",
+            "kind": "u64"
+          },
+          {
+            "name": "object",
+            "kind": "bytes",
+            "min": 90,
+            "max": 128
+          }
+        ],
+        "response": [
+          {
+            "name": "stored",
+            "kind": "digest"
+          },
+          {
+            "name": "revision",
+            "kind": "u64"
+          },
+          {
+            "name": "independent_object",
+            "kind": "bytes",
+            "min": 17,
+            "max": 53
+          },
+          {
+            "name": "independent_digest",
+            "kind": "digest"
+          }
+        ],
+        "checks": [
+          {
+            "left": {
+              "scope": "request"
+            },
+            "right": {
+              "scope": "register"
+            }
+          },
+          {
+            "left": {
+              "scope": "request",
+              "index": 1
+            },
+            "right": {
+              "scope": "register",
+              "index": 1
+            }
+          },
+          {
+            "left": {
+              "scope": "response"
+            },
+            "right": {
+              "scope": "request",
+              "index": 2,
+              "op": "sha256"
+            }
+          },
+          {
+            "left": {
+              "scope": "response",
+              "index": 1
+            },
+            "right": {
+              "scope": "request",
+              "index": 1,
+              "op": "inc"
+            }
+          },
+          {
+            "left": {
+              "scope": "response",
+              "index": 3
+            },
+            "right": {
+              "scope": "response",
+              "index": 2,
+              "op": "sha256"
+            }
+          }
+        ],
+        "assign": [
+          {
+            "register": 0,
+            "value": {
+              "scope": "response"
+            }
+          },
+          {
+            "register": 1,
+            "value": {
+              "scope": "response",
+              "index": 1
+            }
+          },
+          {
+            "register": 2,
+            "value": {
+              "scope": "response",
+              "index": 3
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "canonical_model_sha256": "047bad21bb42bb5454acd99f79afa249bcfde28ab4712ecd2ab56d41102daa73",
+  "seed_hex": "0100000000000000000000000000000000000000000000000000000000000000",
+  "material_hex": "0200000000000000000000000000000000000000000000000000000000000000",
+  "steps": [
+    {
+      "sequence": 0,
+      "action": "create",
+      "request_sizes": [
+        32,
+        8,
+        80
+      ],
+      "response_sizes": [
+        32,
+        8,
+        20,
+        32
+      ],
+      "head": "04c62c1cca6b82d75a01ad6847fd7aa725b9333ce85656c319e236de34842307",
+      "remote_head": "82210f81e8c002a51d092dadf44f1844b3a3eb475e786940c6bdcaada12a86a9",
+      "revision": 1
+    },
+    {
+      "sequence": 1,
+      "action": "alternate",
+      "request_sizes": [
+        32,
+        8,
+        105
+      ],
+      "response_sizes": [
+        32,
+        8,
+        33,
+        32
+      ],
+      "head": "b736d660d4934a1a99778cb0f5979c237be69a37ed60d3877046696d29673bd2",
+      "remote_head": "0d13dc2f0b48f93e61cbadd72080449546fdfddc049b75c60a7e93477d3ac964",
+      "revision": 2
+    },
+    {
+      "sequence": 2,
+      "action": "alternate",
+      "request_sizes": [
+        32,
+        8,
+        102
+      ],
+      "response_sizes": [
+        32,
+        8,
+        35,
+        32
+      ],
+      "head": "cd981488b23ea8507437a4f83c84b5a0eef8bd6033d84cc82aae8c661b0726c2",
+      "remote_head": "5ee11b2b74ef3c4c9d011c8a5dd6b4e069f8267d89b54af8b047bb827addb586",
+      "revision": 3
+    },
+    {
+      "sequence": 3,
+      "action": "alternate",
+      "request_sizes": [
+        32,
+        8,
+        114
+      ],
+      "response_sizes": [
+        32,
+        8,
+        49,
+        32
+      ],
+      "head": "6658a53ac730fe4ccfd21316d5b2369d77ef913247bb049755914a5fe3b0828e",
+      "remote_head": "53d444bcd10da3f6b74d8d124569bc7e8268bd053841ba1c102d10ced59693b2",
+      "revision": 4
+    },
+    {
+      "sequence": 4,
+      "action": "alternate",
+      "request_sizes": [
+        32,
+        8,
+        101
+      ],
+      "response_sizes": [
+        32,
+        8,
+        25,
+        32
+      ],
+      "head": "7ede3f07345a0a2996350c8de9af4bddb4f450f94a6e2a4878773697fabbbabd",
+      "remote_head": "6140d9779d2452507335dcac6f6761b796dca92ed7f83c3e88574275ee092b06",
+      "revision": 5
+    },
+    {
+      "sequence": 5,
+      "action": "alternate",
+      "request_sizes": [
+        32,
+        8,
+        94
+      ],
+      "response_sizes": [
+        32,
+        8,
+        20,
+        32
+      ],
+      "head": "7a8e2ff7f7c15b309edf181a53c8fdaca4b3990117280ecd28c199473de1ca8e",
+      "remote_head": "82210f81e8c002a51d092dadf44f1844b3a3eb475e786940c6bdcaada12a86a9",
+      "revision": 6
+    }
+  ]
+}

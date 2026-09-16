@@ -1,0 +1,179 @@
+{
+  "ModelID": "b4619ff0d7b0c1e89009ecdb67bfd1475418c090f6364293823eedb7e7ddc6f2",
+  "SeedHex": "0100000000000000000000000000000000000000000000000000000000000000",
+  "MaterialHex": "0200000000000000000000000000000000000000000000000000000000000000",
+  "Prefix": "owned/e36c6525100ffe425db80faf16e77436",
+  "Offers": [
+    {
+      "Sequence": 0,
+      "Stage": "discover",
+      "Members": [
+        {
+          "Name": "discover_upload",
+          "RequestSizes": null,
+          "Replies": [
+            {
+              "Code": 200,
+              "Sizes": [
+                32
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "discover_download",
+          "RequestSizes": null,
+          "Replies": [
+            {
+              "Code": 200,
+              "Sizes": [
+                32,
+                16,
+                8,
+                8
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Sequence": 1,
+      "Stage": "transfer",
+      "Members": [
+        {
+          "Name": "upload",
+          "RequestSizes": [
+            32,
+            32,
+            8,
+            48268,
+            8,
+            8
+          ],
+          "Replies": [
+            {
+              "Code": 200,
+              "Sizes": [
+                32
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "download",
+          "RequestSizes": [
+            32
+          ],
+          "Replies": [
+            {
+              "Code": 200,
+              "Sizes": [
+                32,
+                45025,
+                8,
+                8
+              ]
+            },
+            {
+              "Code": 304,
+              "Sizes": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Sequence": 2,
+      "Stage": "transfer",
+      "Members": [
+        {
+          "Name": "upload",
+          "RequestSizes": [
+            32,
+            32,
+            8,
+            54784,
+            8,
+            8
+          ],
+          "Replies": [
+            {
+              "Code": 200,
+              "Sizes": [
+                32
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "download",
+          "RequestSizes": [
+            32
+          ],
+          "Replies": [
+            {
+              "Code": 200,
+              "Sizes": [
+                32,
+                43969,
+                8,
+                8
+              ]
+            },
+            {
+              "Code": 304,
+              "Sizes": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Sequence": 3,
+      "Stage": "transfer",
+      "Members": [
+        {
+          "Name": "upload",
+          "RequestSizes": [
+            32,
+            32,
+            8,
+            49249,
+            8,
+            8
+          ],
+          "Replies": [
+            {
+              "Code": 200,
+              "Sizes": [
+                32
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "download",
+          "RequestSizes": [
+            32
+          ],
+          "Replies": [
+            {
+              "Code": 200,
+              "Sizes": [
+                32,
+                47870,
+                8,
+                8
+              ]
+            },
+            {
+              "Code": 304,
+              "Sizes": null
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
