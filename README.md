@@ -79,6 +79,7 @@ python3 tools/accept_linux.py --build out/builds/本次构建目录
 - [Linux 分批交付顺序](docs/delivery/linux-first.zh.md)
 - [Linux 成品双端操作](docs/operations/linux-process.zh.md)
 - [Linux 成品双端交付报告](docs/delivery/linux-process-report.zh.md)
+- [性能、稳定性与抗识别推进计划](docs/delivery/quality-plan.zh.md)
 - [原始交接](handoff.md)
 
-`references/veil` 和冻结二进制保持原位。新工程能构建及转发流量，不代表完整 Veil 0.5 或抗识别评估已经交付；性能优化继续暂停。许可证见 [LICENSE](LICENSE)。
+`references/veil` 和冻结二进制保持原位。新工程能构建及转发流量，不代表完整 Veil 0.5 或抗识别评估已经交付。最新安排已重新开放性能工作，建议先建立当前版本的性能、稳定性和抗识别基线，具体见上述推进计划。许可证见 [LICENSE](LICENSE)。
