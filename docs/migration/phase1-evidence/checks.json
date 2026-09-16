@@ -1,0 +1,56 @@
+{
+  "source_sha256": "7af8659db826c74bebcfd9f6e5fd924a8d046482e4fcd081305b473e71112e3b",
+  "commands": [
+    {
+      "command": [
+        "/tmp/veil-modcache/golang.org/toolchain@v0.0.1-go1.26.7.linux-amd64/bin/go",
+        "test",
+        "-count=1",
+        "-timeout=120s",
+        "-race",
+        "./..."
+      ],
+      "cwd": "core",
+      "exit_code": 0,
+      "seconds": 23.935,
+      "log": "core-tests.log"
+    },
+    {
+      "command": [
+        "/tmp/veil-modcache/golang.org/toolchain@v0.0.1-go1.26.7.linux-amd64/bin/go",
+        "test",
+        "-count=1",
+        "-timeout=120s",
+        "-race",
+        "./..."
+      ],
+      "cwd": "node",
+      "exit_code": 0,
+      "seconds": 1.924,
+      "log": "node-tests.log"
+    },
+    {
+      "command": [
+        "/tmp/veil-modcache/golang.org/toolchain@v0.0.1-go1.26.7.linux-amd64/bin/go",
+        "build",
+        "./..."
+      ],
+      "cwd": "core",
+      "exit_code": 0,
+      "seconds": 0.727,
+      "log": "core-windows-build.log"
+    },
+    {
+      "command": [
+        "/tmp/veil-modcache/golang.org/toolchain@v0.0.1-go1.26.7.linux-amd64/bin/go",
+        "build",
+        "./..."
+      ],
+      "cwd": "node",
+      "exit_code": 0,
+      "seconds": 0.573,
+      "log": "node-windows-build.log"
+    }
+  ],
+  "passed": true
+}

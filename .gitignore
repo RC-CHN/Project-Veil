@@ -1,0 +1,6 @@
+references/
+
+# Generated artifacts and private local material
+/out/
+/local/
+__pycache__/

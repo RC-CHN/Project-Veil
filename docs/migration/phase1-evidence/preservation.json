@@ -1,0 +1,6 @@
+{
+  "source_files": 129,
+  "frozen_binaries": 3,
+  "passed": true,
+  "scope": "tools/verify_migration.py; source hashes and handoff binary hashes"
+}

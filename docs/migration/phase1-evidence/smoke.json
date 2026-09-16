@@ -1,0 +1,13 @@
+{
+  "veild_version": "0.5.0-engineering1",
+  "platform": "linux",
+  "capabilities": {
+    "foreground": true,
+    "socks_tcp": true,
+    "socks_udp": true,
+    "tun": false,
+    "service_installation": false,
+    "control_ipc": false
+  },
+  "windows_native_execution": "not_performed"
+}
