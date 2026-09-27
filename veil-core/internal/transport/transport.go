@@ -156,7 +156,7 @@ func ReleaseBuffers(c net.Conn) {
 	}
 }
 
-// RecordPadding resets only the local sender's budget at a stream boundary.
+// RecordPadding starts a bounded, variable local budget at a stream boundary.
 // TLS 1.3 peers already strip these zero bytes, so no wire negotiation is needed.
 func RecordPadding(c net.Conn, enabled bool) error {
 	if x, ok := c.(interface{ VeilSetPadding(bool) }); ok {

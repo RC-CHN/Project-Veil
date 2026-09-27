@@ -2,7 +2,7 @@
 
 Go TCP 代理，提供可嵌入的核心、SOCKS5 CONNECT 与固定目标转发入口、TLS 1.3/REALITY 服务端、业务鉴权、连接复用与双向半关闭。支持有界连接池、背压、取消和超时。当前为实验原型，不提供 TUN、UDP 或移动端 UI；流量特征与回落行为尚未通过抗识别验收。
 
-v0.1 将首次 AUTH 与 OPEN 同批发送，目标连接成功后返回 OPEN_OK；满 DATA 帧连同帧头为 128 KiB。从 v0 升至 v0.1 时两端需同时升级，v0 鉴权会被拒绝；本轮核心抽取保持 v0.1 线协议，可与抽取前的 v0.1 两端互通。
+v0.1 将首次 AUTH 与 OPEN 同批发送，目标连接成功后返回 OPEN_OK；满 DATA 帧连同帧头为 128 KiB。从 v0 升至 v0.1 时两端需同时升级，v0 鉴权会被拒绝；当前仍兼容已有 v0.1 两端。OPEN_ERROR 沿用单字节载荷，细分普通失败、DNS 失败、拒绝连接与超时；旧对端仍会拒绝失败的 OPEN。没有新增握手往返。
 
 REALITY 客户端在生成密钥前确定模板与扩展，并复用 TLS 库已解析的证书执行认证。服务端收到对端 FIN 后，若本地传输也结束，可在两个转发任务退出后将 FIN 与 DONE 同批写入；本地先结束时仍立即发送 FIN。帧格式不变，兼容已有 v0.1 对端。这些改动不代表已经消除流量指纹。
 
@@ -27,7 +27,7 @@ REALITY 客户端可用 `tls.fingerprint` 指定 `chrome120`、`chrome131`、`ch
 
 120/131/133 对应固定 uTLS 版本中的模板；131/133 保留其 X25519MLKEM768 密钥份额，不再为减少冷连接开销而删除它。149 基于 Linux Chrome for Testing 149.0.7827.55 的新建连接抓包，在 133 基础上加入空 `trust_anchors` 向量并重新打乱扩展顺序；这里只匹配 ClientHello，不实现浏览器的信任锚重试、DNS 策略或 HTTP 行为。所有模板在本地禁用 TLS 重新协商，这不改变该扩展的线上字节。每条连接独立生成密钥、随机数、GREASE 与扩展顺序。
 
-两端可分别设置 `tls.record_padding: true`，对每条业务流每个方向的最初 4 条应用记录添加 TLS 1.3 标准零填充；长度各自均匀随机取 1～256 字节，空间不足时缩小范围，记录已满时不填充。双向合计上限 2 KiB，复用连接开始新流时重新计数，预算用完恢复原有数据路径；没有填充消息、等待定时器或固定上下行比例。该选项省略时关闭，REALITY 示例显式开启。填充不作用于 TLS 握手、普通网站回落或告警，不改变业务帧格式，旧 v0.1 对端也能解码。
+两端可分别设置 `tls.record_padding: true`。每个物理连接的发送方向独立选择单记录填充上限（128～256 字节）和窗口上限（4～8 条记录）；这些参数保持到连接结束。每条业务流在该范围内另选 2～窗口上限条应用记录，以及 512～1024 字节总预算，记录填充长度从 1～剩余上限随机选择，记录已满时不填充但消耗窗口名额。双向每流合计最多 2 KiB，窗口或预算耗尽即恢复批处理；没有填充消息、等待定时器或固定上下行比例。该选项省略时关闭，REALITY 示例显式开启。填充不作用于 TLS 握手、普通网站回落或告警，旧 v0.1 对端也能解码。
 
 这层填充削弱精确记录长度特征，不能消除突发总量、方向、时序或嵌套 TLS 握手的往返依赖；短流的相对流量开销可能较大。多模板与填充均不等于通过抗识别验收。
 
@@ -39,7 +39,9 @@ SOCKS5 入口仅支持无认证 CONNECT，默认监听回环地址。按需修�
 
 `core` 负责握手、鉴权、流生命周期和连接池；`inbound` 负责 SOCKS5、固定目标转发与有界监听循环；`service` 将现有 CLI JSON 配置组合成这些组件，并提供 `Parse`、`Validate`、`Runtime.Start/Stop/Restart/Close` 和状态快照。数据仍沿用原转发循环，一方向一个写入者，无额外数据队列或进程间转发。
 
-发送方向的 128 KiB 工作缓冲通过 `sync.Pool` 复用，写入任务退出后才归还；不改变读取大小、DATA 帧或 TLS 写入方式。这样减少短流的分配与 GC，闲置缓存由 GC 回收，不挂在每条空闲 TLS 会话上。
+两个转发任务各自通过 `sync.Pool` 复用 128 KiB 工作缓冲，退出后归还。接收端验证帧头后逐段转发已通过 TLS 认证的 DATA，无需等整帧到齐；读操作严格受剩余帧长限制，不越过 FIN/DONE。所有后端共用 TLS 批读逻辑，覆盖 `Conn.Read` 和浏览器客户端的 `UConn.Read`，只读取已经缓冲的完整记录，不等未来数据。TLS 缓冲计入记录开销，最多缓存 16 个约 130 KiB 的空批缓冲；只在没有待处理输入时回收，闲置连接不持有该缓冲。native 保持原生记录写入，batch/OpenSSL 另启用批量写入。
+
+空闲计时使用单调时钟，双向读取返回的部分帧及写入返回的实际字节都计为进展；缓慢但持续传输不会因为整帧尚未收齐而被误判为空闲。真正双向无进展时仍按配置结束，不实施最低下载速率策略。底层单次 I/O 尚未返回时，核心无法观察内核里的字节进展。
 
 以下片段使用 `"veil/core"` 导入路径（包名为 `core`）：
 
@@ -62,6 +64,10 @@ return stream.Relay(localConn)
 
 `Open` 的 context 覆盖整条流，不能在 Open 返回后立即取消。`Stream.Relay` 接管并关闭本地连接，该连接须实现 `CloseWrite`；每条 Stream 只能 Relay 一次。只有双向 FIN 和 DONE 都完成才回池；提前 Close、取消、目标失败或协议错误丢弃连接。旧 Stream 在连接复用后再次 Close 是安全的。`Client.Close` 中止拨号和流并停止池维护；调用方负责等待自己的处理任务退出。`PoolStats` 提供连接总数（含拨号预留）与空闲数，`Stats` 提供原有计数。
 
+复用空闲超过 1 秒的连接前，以 2 ms I/O 截止时间检查待接收的 TLS 关闭、错误或非法应用字节；失效连接在发送 OPEN 前淘汰。热复用不增加检查开销，关闭连接不占用池锁。该检查不发送心跳，不能证明黑洞链路可用，也不重放已经发送的 OPEN 或业务字节。
+
+`core.OpError` 支持 `errors.As`/`errors.Is`，包含本地/隧道的读写操作；`core.ErrIdleTimeout` 的错误还报告两个转发任务的等待位置。`core.TargetError` 表示远端拨号原因。CLI 输出这些操作错误，`service.Runtime.Snapshot` 的 `last_connection_error` 保留本次运行最近一条操作错误，重启实例后清空。正常 EOF 通过 FIN 半关闭；RST/截断使整条隧道失效，本地错误不保证与原始 TCP RST 报文完全相同。
+
 `ClientConfig.DialContext` 可接平台的 socket 保护/绑定逻辑，`ServerConfig.DialContext` 可接目标访问策略；两者须遵守 context。没有实现这些钩子时，保持普通 TCP 拨号。配置在构造时复制，变更通过创建新实例生效。核心不修改系统路由、DNS、防火墙或服务状态。
 
 平台分工如下，公共控制服务与启动模板见 [veil-service](../veil-service/README.md)：
@@ -76,7 +82,7 @@ return stream.Relay(localConn)
 
 界面只走控制通道，数据直接走核心；保存配置和应用配置应为不同操作。Android 的 TUN 数据不是 `net.Conn`，本轮 TCP 接口不能直接宣称已有完整 VPN 支持。桌面 Tauri、LuCI、OPNsense 插件和 Android 绑定均为后续工作。
 
-当前公开包可通过仓库内的 Go module 引用复用，仍需构建器生成的补丁 uTLS 模块；仓库尚未发布可直接 `go get` 的独立 SDK。移动端绑定也须沿用此构建链。无 cgo 原生后端用于跨平台基线，批量记录后端和 Linux OpenSSL 后端保持原实现。编译检查：
+当前公开包可通过仓库内的 Go module 引用复用，仍需构建器生成的补丁 uTLS 模块；仓库尚未发布可直接 `go get` 的独立 SDK。移动端绑定也须沿用此构建链。native 与 batch 均无 cgo；OpenSSL 后端用于 Linux 服务端。编译检查：
 
 ```sh
 python3 scripts/cross_check.py
@@ -114,6 +120,8 @@ python3 scripts/demo.py
 
 构建器校验固定 Go/uTLS 源码摘要，通过 build overlay 和本地模块副本应用补丁，不修改系统工具链或下载缓存。版本不匹配时先审查补丁并执行回归。演示使用自有 HTTPS 端点验证完整 SOCKS5/REALITY 路径。
 
+`patches/*.go.in` 是受版本控制的 Go 源码模板：部分是追加到 TLS 源文件的声明片段，部分复制为独立的 Go 文件。它们由 `scripts/build.py` 读取，不是实验中间文件；生成后的可编译源码在 `.build/`。保留模板可以集中审查改动，避免将整个上游 TLS 库复制进仓库。
+
 生成代码、依赖、临时凭据、日志和二进制集中在 `.build/`，由 `make clean` 删除。
 
 不要把运行中的服务部署在构建清理目录内；对正在使用的版本做改动时，应在独立工作树构建和验证，部署另行切换。
@@ -142,6 +150,10 @@ sudo unshare -n -- sh -c 'ip link set lo up && exec runuser -u USER -- env VEIL_
 测试强制私有网络命名空间，进程退出即清理测试监听；证书、配置、原始结果和二进制摘要保存在输出目录，未经授权不操作任何已部署服务。`summary.json` 保留逐配对差值及其中位数，不能只凭单次成绩宣称无回退。
 
 `benchmark.py --modes E --rounds 10000` 测热连接延迟；`--modes C --connections 1 --rounds 1` 测冷连接。输出目录不可覆盖已有原始结果；测量数据不纳入版本控制。
+
+`traffic_shapes.py --before .build/previous --after .build --out .build/shapes --samples 12` 必须在私有网络命名空间运行。两组 Veil 使用同一 Chrome 149 模板并开启填充，与受控 Python/OpenSSL HTTPS 比较新连接和连续六条业务流：记录 TLS 长度、方向、转发突发和时间，不保存原始流量。参考 HTTPS 在一条 TLS 连接上复用 HTTP，Veil 在一条外层连接中承载六次内层 TLS 握手；这项差异有意保留以展示嵌套握手特征。20 ms 夹具间隔、用户态转发时间均不代表真实 TCP 包时序，工具不提供抗审查分类结论。
+
+REALITY 回落回归以同一受控 HTTPS 网站为对照，覆盖 TLS 1.2/1.3、ALPN、分片 ClientHello、普通网站会话票据恢复、畸形握手和明文 HTTP；另测半关闭、长 HTTP 传输、静默目标与取消。普通网站回落的票据恢复不等于 Veil 启用了认证会话恢复或 0-RTT。
 
 `benchpeer -mode S` 测反复建立 SOCKS 流、64 字节双向回显与半关闭，底层 TLS 会话可复用。`handshakebench` 则每次重新建立 REALITY/TLS 会话，并完成 AUTH、OPEN、回显与 FIN/DONE；其延迟统计截止 OPEN_OK，CPU 计数覆盖整个事务。构建时使用与被测客户端相同的后端：
 

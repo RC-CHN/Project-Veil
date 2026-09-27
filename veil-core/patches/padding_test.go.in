@@ -37,40 +37,52 @@ func TestVeilPaddingBudgetAndIntegrity(t *testing.T) {
 		t.Fatal("empty write emitted a record", n, err)
 	}
 	var plain []byte
-	added := 0
-	for i, size := range []int{64, 128, 513, maxPlaintext, 7, 4096, 32, 16} {
-		if i == 6 {
-			w.VeilSetPadding(true) // next business stream gets its own budget
+	limit, window := w.out.veilPadLimit, w.out.veilPadWindow
+	counts := make(map[uint8]bool)
+	for stream := 0; stream < 64; stream++ {
+		w.VeilSetPadding(true)
+		budget, count := int(w.out.veilPadBytes), w.out.veilPadRecords
+		counts[count] = true
+		if budget < 512 || budget > 1024 || count < 2 || count > window || window > 8 || window < 4 || limit < 128 || limit > 256 {
+			t.Fatal("invalid connection/stream budget", budget, count, window, limit)
 		}
-		if i == 7 {
-			w.VeilSetPadding(false)
+		if w.out.veilPadLimit != limit || w.out.veilPadWindow != window {
+			t.Fatal("connection range changed")
 		}
-		p := bytes.Repeat([]byte{byte(i + 1)}, size)
-		p[len(p)-1], p[len(p)-2] = 0, 0 // content zeros must not be stripped
-		plain = append(plain, p...)
-		start := raw.Len()
-		if n, err := w.Write(p); err != nil || n != len(p) {
-			t.Fatal("write", n, err)
-		}
-		record := raw.Bytes()[start:]
-		length := int(binary.BigEndian.Uint16(record[3:5]))
-		if length+5 != len(record) || length > maxPlaintext+17 {
-			t.Fatal("TLS record overflow or unexpected split", length)
-		}
-		extra := length - size - 17
-		if i < 3 || i == 6 {
-			if extra < 1 || extra > 256 {
-				t.Fatal("padding outside budget", extra)
+		added := 0
+		for i, size := range []int{64, 128, 513, maxPlaintext, 7, 4096, 32, 16, 100, 100} {
+			p := bytes.Repeat([]byte{byte(i + 1)}, size)
+			p[len(p)-1], p[len(p)-2] = 0, 0 // content zeros must not be stripped
+			plain = append(plain, p...)
+			start := raw.Len()
+			if n, err := w.Write(p); err != nil || n != len(p) {
+				t.Fatal("write", n, err)
 			}
-		} else if extra != 0 {
-			t.Fatal("padding after budget or at record limit", extra)
-		}
-		if i < 6 {
+			record := raw.Bytes()[start:]
+			length := int(binary.BigEndian.Uint16(record[3:5]))
+			if length+5 != len(record) || length > maxPlaintext+17 {
+				t.Fatal("TLS record overflow or unexpected split", length)
+			}
+			extra := length - size - 17
+			if i < int(count) && size < maxPlaintext && added < budget {
+				if extra < 1 || extra > int(limit) {
+					t.Fatal("padding outside budget", extra)
+				}
+			} else if extra != 0 {
+				t.Fatal("padding after budget or at record limit", extra)
+			}
 			added += extra
 		}
+		if added > budget || w.out.veilPadRecords != 0 {
+			t.Fatal("per-stream padding budget exceeded", added)
+		}
 	}
-	if added > 1024 {
-		t.Fatal("per-stream padding budget exceeded", added)
+	if len(counts) < 2 {
+		t.Fatal("fixed stream padding window")
+	}
+	w.VeilSetPadding(false)
+	if w.out.veilPadRecords != 0 || w.out.veilPadBytes != 0 {
+		t.Fatal("padding not disabled")
 	}
 	wire := append([]byte(nil), raw.Bytes()...)
 	rr := &veilPaddingMemory{}
@@ -89,5 +101,41 @@ func TestVeilPaddingBudgetAndIntegrity(t *testing.T) {
 	defer b.Close()
 	if _, err := b.Read(make([]byte, 64)); err == nil {
 		t.Fatal("corrupted padded record accepted")
+	}
+}
+
+func TestVeilPaddingSkipsAlerts(t *testing.T) {
+	raw := new(veilPaddingMemory)
+	c := veilPaddingConn(raw)
+	defer c.Close()
+	c.VeilSetPadding(true)
+	count, budget := c.out.veilPadRecords, c.out.veilPadBytes
+	if _, err := c.writeRecordLocked(recordTypeAlert, []byte{alertLevelWarning, byte(alertCloseNotify)}); err != nil {
+		t.Fatal(err)
+	}
+	if raw.Len() != 5+2+17 || c.out.veilPadRecords != count || c.out.veilPadBytes != budget {
+		t.Fatal("alert was padded")
+	}
+}
+
+// The portable backend must drain the same complete records as batch/OpenSSL.
+func TestVeilPaddingReaderDrain(t *testing.T) {
+	raw := new(veilPaddingMemory)
+	w := veilPaddingConn(raw)
+	defer w.Close()
+	plain := bytes.Repeat([]byte{23}, 8*maxPlaintext)
+	if _, err := w.Write(plain); err != nil {
+		t.Fatal(err)
+	}
+	r := veilPaddingConn(raw)
+	defer r.Close()
+	u := &UConn{Conn: r}
+	b := make([]byte, len(plain))
+	if n, err := u.Read(b); err != nil || n != len(b) || !bytes.Equal(b, plain) {
+		t.Fatal("incomplete UConn batch", n, err)
+	}
+	r.VeilReleaseBuffers()
+	if r.rawInput.Cap() != 0 {
+		t.Fatal("idle buffer retained")
 	}
 }

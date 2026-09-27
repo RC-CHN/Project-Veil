@@ -15,7 +15,9 @@ func veilTakeBuffer() []byte {
 }
 
 func veilPutBuffer(b []byte) {
-	if cap(b) != veilBatchBytes { return }
+	if cap(b) != veilBatchBytes {
+		return
+	}
 	select {
 	case veilBatchPool <- b[:0]:
 	default:

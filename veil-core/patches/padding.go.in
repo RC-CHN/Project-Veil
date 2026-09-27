@@ -9,8 +9,16 @@ func (c *Conn) VeilSetPadding(enabled bool) {
 	c.out.Lock()
 	defer c.out.Unlock()
 	c.out.veilPadRecords = 0
+	c.out.veilPadBytes = 0
 	if enabled && c.vers == VersionTLS13 && c.isHandshakeComplete.Load() {
-		c.out.veilPadRecords = 4
+		// Keep one connection's range stable, but vary each stream's extent.
+		// These are bounded length perturbations, not a browser traffic model.
+		if c.out.veilPadLimit == 0 {
+			c.out.veilPadLimit = uint16(128 + rand.IntN(129))
+			c.out.veilPadWindow = uint8(4 + rand.IntN(5))
+		}
+		c.out.veilPadRecords = uint8(2 + rand.IntN(int(c.out.veilPadWindow)-1))
+		c.out.veilPadBytes = uint16(512 + rand.IntN(513))
 	}
 }
 
@@ -20,12 +28,20 @@ func (hc *halfConn) veilRecordPadding(n int) int {
 	}
 	hc.veilPadRecords--
 	limit := maxPlaintext - n
-	if limit > 256 {
-		limit = 256
+	if limit > int(hc.veilPadLimit) {
+		limit = int(hc.veilPadLimit)
+	}
+	if limit > int(hc.veilPadBytes) {
+		limit = int(hc.veilPadBytes)
 	}
 	if limit <= 0 {
 		return 0
 	}
 	// Size selection is not cryptographic. TLS keys and nonces are unchanged.
-	return 1 + rand.IntN(limit)
+	extra := 1 + rand.IntN(limit)
+	hc.veilPadBytes -= uint16(extra)
+	if hc.veilPadBytes == 0 {
+		hc.veilPadRecords = 0
+	}
+	return extra
 }

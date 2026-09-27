@@ -33,16 +33,20 @@ func fallbackKeys(t *testing.T, cover string) (transport.Settings, transport.Set
 }
 
 func fallbackCover(t *testing.T, handler http.HandlerFunc) (string, *tls.Config) {
+	return fallbackCoverConfig(t, handler, &tls.Config{
+		MinVersion: tls.VersionTLS13, MaxVersion: tls.VersionTLS13,
+		CurvePreferences: []tls.CurveID{tls.X25519}, NextProtos: []string{"http/1.1"},
+	})
+}
+
+func fallbackCoverConfig(t *testing.T, handler http.HandlerFunc, config *tls.Config) (string, *tls.Config) {
 	t.Helper()
 	cp, kp := certs(t)
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := &http.Server{ReadHeaderTimeout: 6 * time.Second, Handler: handler, TLSConfig: &tls.Config{
-		MinVersion: tls.VersionTLS13, MaxVersion: tls.VersionTLS13,
-		CurvePreferences: []tls.CurveID{tls.X25519}, NextProtos: []string{"http/1.1"},
-	}}
+	s := &http.Server{ReadHeaderTimeout: 6 * time.Second, Handler: handler, TLSConfig: config}
 	done := make(chan error, 1)
 	go func() { done <- s.ServeTLS(ln, cp, kp) }()
 	t.Cleanup(func() {
