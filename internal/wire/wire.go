@@ -94,6 +94,20 @@ func Write(w io.Writer, t byte, p []byte) error {
 	return WriteBuffer(w, t, b, len(p))
 }
 
+// WriteDone preserves the two frame types while sharing one TLS record when
+// FIN can be deferred until the stream's completion barrier. No timer or queue.
+func WriteDone(w io.Writer, finPending bool) error {
+	if !finPending {
+		return Write(w, Done, nil)
+	}
+	b := [2 * HeaderSize]byte{Fin, 0, 0, 0, Done, 0, 0, 0}
+	n, err := w.Write(b[:])
+	if err == nil && n != len(b) {
+		err = io.ErrShortWrite
+	}
+	return err
+}
+
 // WriteOpen sends the first AUTH and OPEN in one TLS Write, with no AUTH_OK
 // round trip. Reused connections pass nil for auth and send only OPEN.
 func WriteOpen(w io.Writer, auth, address []byte) error {

@@ -33,9 +33,11 @@ func closeWrite(c net.Conn) error {
 
 // relay has one writer per direction and no payload queue. On error it closes
 // both connections, then joins both workers before returning. A successful
-// relay leaves the TLS connection at the FIN/DONE reuse barrier.
-func relay(ctx context.Context, local, remote net.Conn, r *wire.Reader, idle time.Duration) error {
+// relay leaves the TLS connection at the FIN/DONE reuse barrier. The server may
+// defer its FIN if the peer's FIN has arrived, then send FIN+DONE after the join.
+func relay(ctx context.Context, local, remote net.Conn, r *wire.Reader, idle time.Duration, coalesceFIN bool) (finPending bool, err error) {
 	var touched atomic.Int64
+	var receivedFIN atomic.Bool
 	touched.Store(time.Now().UnixNano())
 	touch := func() { touched.Store(time.Now().UnixNano()) }
 	results := make(chan error, 2)
@@ -56,7 +58,11 @@ func relay(ctx context.Context, local, remote net.Conn, r *wire.Reader, idle tim
 			}
 			if err != nil {
 				if errors.Is(err, io.EOF) {
-					err = wire.Write(remote, wire.Fin, nil)
+					if coalesceFIN && receivedFIN.Load() {
+						finPending, err = true, nil
+					} else {
+						err = wire.Write(remote, wire.Fin, nil)
+					}
 				}
 				results <- err
 				return
@@ -80,6 +86,7 @@ func relay(ctx context.Context, local, remote net.Conn, r *wire.Reader, idle tim
 				}
 				touch()
 			case wire.Fin:
+				receivedFIN.Store(true)
 				results <- closeWrite(local)
 				return
 			default:
@@ -122,5 +129,5 @@ func relay(ctx context.Context, local, remote net.Conn, r *wire.Reader, idle tim
 	}
 	workers.Wait()
 	r.Release()
-	return first
+	return finPending, first
 }

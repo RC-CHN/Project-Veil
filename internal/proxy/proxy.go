@@ -162,13 +162,13 @@ func (s *Service) server(ctx context.Context, raw net.Conn) error {
 			return err
 		}
 		c.SetWriteDeadline(time.Time{})
-		err = relay(ctx, target, c, &r, sec(s.cfg.IdleSeconds))
+		finPending, err := relay(ctx, target, c, &r, sec(s.cfg.IdleSeconds), true)
 		target.Close()
 		if err != nil {
 			return err
 		}
 		c.SetWriteDeadline(time.Now().Add(sec(s.cfg.HandshakeSeconds)))
-		if err = wire.Write(c, wire.Done, nil); err != nil {
+		if err = wire.WriteDone(c, finPending); err != nil {
 			return err
 		}
 		c.SetWriteDeadline(time.Time{})
@@ -213,7 +213,7 @@ func (s *Service) client(ctx context.Context, local net.Conn) error {
 	}
 	local.SetDeadline(time.Time{})
 	channel.SetDeadline(time.Time{})
-	if err = relay(ctx, local, channel, &channel.r, sec(s.cfg.IdleSeconds)); err != nil {
+	if _, err = relay(ctx, local, channel, &channel.r, sec(s.cfg.IdleSeconds), false); err != nil {
 		return err
 	}
 	channel.SetReadDeadline(time.Now().Add(sec(s.cfg.HandshakeSeconds)))
