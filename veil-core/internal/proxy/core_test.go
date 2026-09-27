@@ -9,10 +9,10 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"veil/core"
 	"veil/inbound"
 	"veil/internal/transport"
 	"veil/internal/wire"
-	"veil/core"
 )
 
 func startHandler(t *testing.T, handler inbound.Handler) (string, func()) {

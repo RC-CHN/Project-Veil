@@ -4,8 +4,8 @@ package proxy
 import (
 	"context"
 	"net"
-	"veil/inbound"
 	"veil/core"
+	"veil/inbound"
 )
 
 type Stats = core.Stats
