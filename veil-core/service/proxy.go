@@ -1,5 +1,5 @@
-// Package proxy assembles the legacy CLI configuration into reusable components.
-package proxy
+// Package service assembles Veil configuration and owns one application instance.
+package service
 
 import (
 	"context"

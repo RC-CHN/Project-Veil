@@ -9,13 +9,12 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"os"
 	"os/signal"
 	"syscall"
-	"veil/internal/proxy"
+	"veil/service"
 )
 
 func main() {
@@ -47,20 +46,11 @@ func run() error {
 		return err
 	}
 	defer f.Close()
-	dec := json.NewDecoder(io.LimitReader(f, 1<<20))
-	dec.DisallowUnknownFields()
-	var cfg proxy.Config
-	if err = dec.Decode(&cfg); err != nil {
+	cfg, err := service.Parse(f)
+	if err != nil {
 		return err
 	}
-	var extra any
-	if err = dec.Decode(&extra); err != io.EOF {
-		return fmt.Errorf("configuration must contain one JSON object")
-	}
-	if err = cfg.Defaults(); err != nil {
-		return err
-	}
-	svc, err := proxy.New(cfg)
+	svc, err := service.New(cfg)
 	if err != nil {
 		return err
 	}
