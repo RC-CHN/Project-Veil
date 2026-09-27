@@ -43,9 +43,9 @@ func relay(ctx context.Context, local, remote net.Conn, r *wire.Reader, idle tim
 	workers.Add(2)
 	go func() {
 		defer workers.Done()
-		b := make([]byte, wire.MaxData+4)
+		b := make([]byte, wire.MaxData+wire.HeaderSize)
 		for {
-			n, err := local.Read(b[4:])
+			n, err := local.Read(b[wire.HeaderSize:])
 			if n > 0 {
 				touch()
 				if e := wire.WriteBuffer(remote, wire.Data, b, n); e != nil {

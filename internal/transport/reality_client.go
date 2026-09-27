@@ -35,7 +35,7 @@ func realityClient(s Settings) (Handshake, error) {
 		return nil, err
 	}
 	if s.Fingerprint != "" && s.Fingerprint != "chrome" {
-		return nil, errors.New("v0 supports the pinned chrome REALITY fingerprint")
+		return nil, errors.New("only the pinned chrome REALITY fingerprint is supported")
 	}
 	publicKey, err := ecdh.X25519().NewPublicKey(public)
 	if err != nil {

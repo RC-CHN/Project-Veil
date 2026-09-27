@@ -130,9 +130,6 @@ func (s *Service) server(ctx context.Context, raw net.Conn) error {
 	if typ != wire.Auth || !wire.VerifyAuth(s.key, exporter, p) {
 		return errors.New("veil: authentication failed")
 	}
-	if err = wire.Write(c, wire.AuthOK, nil); err != nil {
-		return err
-	}
 	s.Stats.Authenticated.Add(1)
 	cancel()
 	c.SetDeadline(time.Time{})
@@ -201,7 +198,7 @@ func (s *Service) client(ctx context.Context, local net.Conn) error {
 	channel.SetDeadline(time.Now().Add(sec(s.cfg.DialSeconds + s.cfg.HandshakeSeconds)))
 	p, err := wire.EncodeAddress(address)
 	if err == nil {
-		err = wire.Write(channel, wire.Open, p)
+		err = wire.WriteOpen(channel, channel.auth, p)
 	}
 	if err == nil {
 		err = wire.Expect(&channel.r, wire.OpenOK)
@@ -210,6 +207,7 @@ func (s *Service) client(ctx context.Context, local net.Conn) error {
 		socks.Reply(local, 1)
 		return err
 	}
+	channel.auth = nil
 	if err = socks.Reply(local, 0); err != nil {
 		return err
 	}

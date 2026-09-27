@@ -12,8 +12,9 @@ import (
 
 type session struct {
 	net.Conn
-	r  wire.Reader
-	at time.Time
+	r    wire.Reader
+	at   time.Time
+	auth []byte // pending first-OPEN proof; never retained by an idle session
 }
 type pool struct {
 	mu        sync.Mutex
@@ -99,13 +100,7 @@ func (p *pool) dial(ctx context.Context) (*session, error) {
 		c.Close()
 		return nil, err
 	}
-	payload, err := wire.AuthPayload(p.key, exporter)
-	if err == nil {
-		err = wire.Write(c, wire.Auth, payload)
-	}
-	if err == nil {
-		err = wire.Expect(&s.r, wire.AuthOK)
-	}
+	s.auth, err = wire.AuthPayload(p.key, exporter)
 	if err != nil {
 		raw.Close()
 		c.Close()

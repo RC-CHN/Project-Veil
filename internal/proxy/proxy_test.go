@@ -20,6 +20,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 	"veil/internal/transport"
@@ -328,16 +329,21 @@ func TestReplayAndStateRejection(t *testing.T) {
 	}
 	key, _ := transport.DecodeKey(testKey)
 	proof, _ := wire.AuthPayload(key, exporter)
-	wire.Write(c, wire.Auth, proof)
+	var accepted atomic.Int32
+	dst := target(t, func(c net.Conn) { accepted.Add(1); io.Copy(io.Discard, c) })
+	address, _ := wire.EncodeAddress(dst)
+	if e = wire.WriteOpen(c, proof, address); e != nil {
+		t.Fatal(e)
+	}
 	r := wire.Reader{R: c}
-	if e = wire.Expect(&r, wire.AuthOK); e != nil {
+	if e = wire.Expect(&r, wire.OpenOK); e != nil {
 		t.Fatal(e)
 	}
 	c.Close()
 	c2 := directTLS(t, ct, addr)
-	wire.Write(c2, wire.Auth, proof)
+	wire.WriteOpen(c2, proof, address)
 	r = wire.Reader{R: c2}
-	if e = wire.Expect(&r, wire.AuthOK); e == nil {
+	if e = wire.Expect(&r, wire.OpenOK); e == nil {
 		t.Fatal("cross-connection proof replay accepted")
 	}
 	c2.Close()
@@ -349,9 +355,6 @@ func TestReplayAndStateRejection(t *testing.T) {
 	p, _ := wire.AuthPayload(key, ekm)
 	wire.Write(c3, wire.Auth, p)
 	r = wire.Reader{R: c3}
-	if e = wire.Expect(&r, wire.AuthOK); e != nil {
-		t.Fatal(e)
-	}
 	wire.Write(c3, wire.Data, []byte{1})
 	c3.SetReadDeadline(time.Now().Add(time.Second))
 	if _, _, e = r.Read(); e == nil {
@@ -359,6 +362,31 @@ func TestReplayAndStateRejection(t *testing.T) {
 	}
 	if server.Stats.Authenticated.Load() != 2 {
 		t.Fatal("authentication accounting")
+	}
+	if accepted.Load() != 1 {
+		t.Fatalf("replayed or invalid request reached target: %d", accepted.Load())
+	}
+}
+
+func TestOpenFailureDoesNotReportSOCKSSuccess(t *testing.T) {
+	st, ct := settings(t, "tls")
+	_, addr := start(t, Config{Role: "server", Secret: testKey, TLS: st})
+	client, entry := start(t, Config{Role: "client", Secret: testKey, TLS: ct, Server: addr})
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst := ln.Addr().String()
+	ln.Close()
+	if c, err := socksDial(entry, dst); err == nil {
+		c.Close()
+		t.Fatal("SOCKS success before target connected")
+	}
+	client.pool.mu.Lock()
+	idle := len(client.pool.idle)
+	client.pool.mu.Unlock()
+	if idle != 0 {
+		t.Fatal("failed OPEN returned to idle pool")
 	}
 }
 func TestActiveIdleTimeout(t *testing.T) {

@@ -1,7 +1,8 @@
-// Package wire implements the bounded, sequential Veil v0 framing layer.
+// Package wire implements the bounded, sequential Veil framing layer.
 package wire
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -12,11 +13,14 @@ import (
 	"strconv"
 )
 
-const MaxData = 128 * 1024
 const HeaderSize = 4
+
+// Include the frame header in the eight-record TLS plaintext budget.
+const MaxData = 128*1024 - HeaderSize
+const authVersion = 1
 const (
 	Auth byte = iota + 1
-	AuthOK
+	_         // v0 AUTH_OK is no longer accepted.
 	Open
 	OpenOK
 	OpenError
@@ -32,7 +36,7 @@ func valid(t byte, n int) bool {
 	switch t {
 	case Auth:
 		return n == 49
-	case AuthOK, OpenOK, Fin, Done, Cancel:
+	case OpenOK, Fin, Done, Cancel:
 		return n == 0
 	case Open:
 		return n >= 4 && n <= 259
@@ -89,6 +93,29 @@ func Write(w io.Writer, t byte, p []byte) error {
 	copy(b[4:], p)
 	return WriteBuffer(w, t, b, len(p))
 }
+
+// WriteOpen sends the first AUTH and OPEN in one TLS Write, with no AUTH_OK
+// round trip. Reused connections pass nil for auth and send only OPEN.
+func WriteOpen(w io.Writer, auth, address []byte) error {
+	if !valid(Open, len(address)) || (auth != nil && !valid(Auth, len(auth))) {
+		return ErrProtocol
+	}
+	if auth == nil {
+		return Write(w, Open, address)
+	}
+	var b bytes.Buffer
+	if err := Write(&b, Auth, auth); err != nil {
+		return err
+	}
+	if err := Write(&b, Open, address); err != nil {
+		return err
+	}
+	n, err := w.Write(b.Bytes())
+	if err == nil && n != b.Len() {
+		return io.ErrShortWrite
+	}
+	return err
+}
 func Expect(r *Reader, t byte) error {
 	got, _, err := r.Read()
 	if err != nil {
@@ -104,7 +131,7 @@ func Expect(r *Reader, t byte) error {
 // on another connection fails, including across TLS session resumption.
 func proof(key, exporter, body []byte) []byte {
 	m := hmac.New(sha256.New, key)
-	m.Write([]byte("Veil-v0 client authentication\x00"))
+	m.Write([]byte("Veil-v0.1 client authentication\x00"))
 	m.Write(exporter)
 	m.Write(body)
 	return m.Sum(nil)
@@ -114,6 +141,7 @@ func AuthPayload(key, exporter []byte) ([]byte, error) {
 		return nil, ErrProtocol
 	}
 	b := make([]byte, 49)
+	b[0] = authVersion
 	if _, err := rand.Read(b[1:17]); err != nil {
 		return nil, err
 	}
@@ -121,7 +149,7 @@ func AuthPayload(key, exporter []byte) ([]byte, error) {
 	return b, nil
 }
 func VerifyAuth(key, exporter, p []byte) bool {
-	return len(key) == 32 && len(exporter) == 32 && len(p) == 49 && p[0] == 0 && hmac.Equal(p[17:], proof(key, exporter, p[:17]))
+	return len(key) == 32 && len(exporter) == 32 && len(p) == 49 && p[0] == authVersion && hmac.Equal(p[17:], proof(key, exporter, p[:17]))
 }
 
 func EncodeAddress(address string) ([]byte, error) {
