@@ -1,0 +1,31 @@
+package tls
+
+import "math/rand/v2"
+
+// VeilSetPadding starts a bounded send budget at a business-stream boundary.
+// It affects application records only; handshake and fallback bytes are intact.
+// Call before writing OPEN/OPEN_OK, with no application writes in flight.
+func (c *Conn) VeilSetPadding(enabled bool) {
+	c.out.Lock()
+	defer c.out.Unlock()
+	c.out.veilPadRecords = 0
+	if enabled && c.vers == VersionTLS13 && c.isHandshakeComplete.Load() {
+		c.out.veilPadRecords = 4
+	}
+}
+
+func (hc *halfConn) veilRecordPadding(n int) int {
+	if hc.veilPadRecords == 0 {
+		return 0
+	}
+	hc.veilPadRecords--
+	limit := maxPlaintext - n
+	if limit > 256 {
+		limit = 256
+	}
+	if limit <= 0 {
+		return 0
+	}
+	// Size selection is not cryptographic. TLS keys and nonces are unchanged.
+	return 1 + rand.IntN(limit)
+}

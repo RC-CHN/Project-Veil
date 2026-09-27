@@ -8,7 +8,8 @@
     "server_name": "cover.example",
     "reality_public_key": "REPLACE_WITH_KEYGEN_PUBLIC_KEY",
     "short_id": "REPLACE_WITH_16_HEX_CHARACTERS",
-    "fingerprint": "chrome149"
+    "fingerprint": "chrome149",
+    "record_padding": true
   },
   "max_connections": 64,
   "max_idle": 8

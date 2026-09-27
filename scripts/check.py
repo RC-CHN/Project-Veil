@@ -25,7 +25,21 @@ commands = [
         "./internal/...",
     ]
 ]
-if a.mode != "native":
+if a.mode == "native":
+    commands.append(
+        [
+            "go",
+            "test",
+            *flags,
+            *(["-race"] if a.race else []),
+            "-count=1",
+            "-timeout=120s",
+            "github.com/metacubex/utls",
+            "-run",
+            "TestVeilPadding",
+        ]
+    )
+else:
     commands.append(
         [
             "go",

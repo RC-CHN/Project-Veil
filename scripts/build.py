@@ -29,13 +29,14 @@ def replace(s, a, b):
 
 
 def conn_patch(s):
+    padding_guard = " && c.out.veilPadRecords == 0" if "veilPadRecords" in s else ""
     s = replace(
         s,
         "\toutBufPtr := outBufPool.Get().(*[]byte)",
-        """\tif typ == recordTypeApplicationData && c.vers == VersionTLS13 && !c.buffering && c.bytesSent >= recordSizeBoostThreshold && len(data)>maxPlaintext {
+        """\tif typ == recordTypeApplicationData && c.vers == VersionTLS13 && !c.buffering && c.bytesSent >= recordSizeBoostThreshold && len(data)>maxPlaintextPADDING_GUARD {
         return c.veilWriteApplicationBatchLocked(data)
     }
-\toutBufPtr := outBufPool.Get().(*[]byte)""",
+\toutBufPtr := outBufPool.Get().(*[]byte)""".replace("PADDING_GUARD", padding_guard),
     )
     s = replace(
         s,
@@ -90,6 +91,24 @@ def conn_patch(s):
         "\tdefer c.veilReleaseCrypto()\n\tif x != 0 {\n\t\t// io.Writer and io.Closer",
     )
     return s + (ROOT / "patches/batch.go.in").read_text()
+
+
+def padding_patch(s):
+    s = replace(
+        s,
+        "type halfConn struct {",
+        "type halfConn struct {\n\tveilPadRecords uint8 // protected by Conn.out mutex",
+    )
+    return replace(
+        s,
+        "\t\t\trecord[0] = byte(recordTypeApplicationData)",
+        """\t\t\tif recordType(record[0]) == recordTypeApplicationData {
+                extra := hc.veilRecordPadding(len(payload))
+                record = append(record, make([]byte, extra)...)
+                padding += extra
+            }
+\t\t\trecord[0] = byte(recordTypeApplicationData)""",
+    )
 
 
 def reality_patch(s):
@@ -158,6 +177,27 @@ def generate(mode):
         if not path.is_symlink():
             path.chmod(path.stat().st_mode | 0o200)
     shutil.copyfile(patched_reality, fork / "reality.go")
+    conn = module / "conn.go"
+    if (
+        hashlib.sha256(conn.read_bytes()).hexdigest()
+        != "e8027769d42706f263ef78d76ebd6e8a592299407a1f86b88b9ba5217bfe7dba"
+    ):
+        raise RuntimeError("unsupported source version: " + str(conn))
+    patched_conn = padding_patch(conn.read_text())
+    if mode != "native":
+        patched_conn = conn_patch(patched_conn)
+    (fork / "conn.go").write_text(patched_conn)
+    shutil.copyfile(ROOT / "patches/padding.go.in", fork / "veil_padding.go")
+    shutil.copyfile(ROOT / "patches/padding_test.go.in", fork / "veil_padding_test.go")
+    run(
+        [
+            "gofmt",
+            "-w",
+            str(fork / "conn.go"),
+            str(fork / "veil_padding.go"),
+            str(fork / "veil_padding_test.go"),
+        ]
+    )
     mod = (ROOT / "go.mod").read_text()
     mod += f"\nreplace github.com/metacubex/utls => {fork}\n"
     (out / "build.mod").write_text(mod)
@@ -180,7 +220,6 @@ def generate(mode):
     for path, digest in checks.items():
         if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
             raise RuntimeError("unsupported source version: " + str(path))
-    (fork / "conn.go").write_text(conn_patch((module / "conn.go").read_text()))
     std = out / "std-conn.go"
     std.write_text(conn_patch((goroot / "src/crypto/tls/conn.go").read_text()))
     suites = (module / "cipher_suites.go").read_text()

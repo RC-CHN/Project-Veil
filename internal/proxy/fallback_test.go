@@ -328,3 +328,33 @@ func rejectWebsite(t *testing.T, settings transport.Settings, cover string) {
 		t.Fatal("normal website certificate accepted as REALITY authentication")
 	}
 }
+
+func TestRecordPaddingWithStandardTLS(t *testing.T) {
+	st, ct := settings(t, "tls")
+	cert, err := tls.LoadX509KeyPair(st.Certificate, st.PrivateKeyFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst := target(t, func(raw net.Conn) {
+		c := tls.Server(raw, &tls.Config{MinVersion: tls.VersionTLS13, MaxVersion: tls.VersionTLS13, Certificates: []tls.Certificate{cert}})
+		defer c.Close()
+		io.Copy(c, c)
+	})
+	c := directTLS(t, ct, dst)
+	for range 2 {
+		if err := transport.RecordPadding(c, true); err != nil {
+			t.Fatal(err)
+		}
+		for _, size := range []int{4, 257, 1024, 16384, 17} {
+			p := bytes.Repeat([]byte{9}, size)
+			p[len(p)-1] = 0
+			if err := writeAll(c, p); err != nil {
+				t.Fatal(err)
+			}
+			got := make([]byte, len(p))
+			if _, err := io.ReadFull(c, got); err != nil || !bytes.Equal(got, p) {
+				t.Fatal("standard TLS padding interoperability", err)
+			}
+		}
+	}
+}

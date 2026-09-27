@@ -27,6 +27,7 @@ type Settings struct {
 	CoverAddress      string   `json:"cover_address"`
 	Fingerprint       string   `json:"fingerprint"`
 	Fingerprints      []string `json:"fingerprints"`
+	RecordPadding     bool     `json:"record_padding"`
 }
 
 type Handshake func(context.Context, net.Conn) (net.Conn, error)
@@ -153,4 +154,17 @@ func ReleaseBuffers(c net.Conn) {
 	if x, ok := c.(interface{ VeilReleaseBuffers() }); ok {
 		x.VeilReleaseBuffers()
 	}
+}
+
+// RecordPadding resets only the local sender's budget at a stream boundary.
+// TLS 1.3 peers already strip these zero bytes, so no wire negotiation is needed.
+func RecordPadding(c net.Conn, enabled bool) error {
+	if x, ok := c.(interface{ VeilSetPadding(bool) }); ok {
+		x.VeilSetPadding(enabled)
+		return nil
+	}
+	if enabled {
+		return errors.New("transport: record padding requires the patched TLS library")
+	}
+	return nil
 }

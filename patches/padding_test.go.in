@@ -1,0 +1,93 @@
+package tls
+
+import (
+	"bytes"
+	"encoding/binary"
+	"io"
+	"net"
+	"testing"
+	"time"
+)
+
+type veilPaddingMemory struct{ bytes.Buffer }
+
+func (*veilPaddingMemory) Close() error                     { return nil }
+func (*veilPaddingMemory) LocalAddr() net.Addr              { return &net.TCPAddr{} }
+func (*veilPaddingMemory) RemoteAddr() net.Addr             { return &net.TCPAddr{} }
+func (*veilPaddingMemory) SetDeadline(time.Time) error      { return nil }
+func (*veilPaddingMemory) SetReadDeadline(time.Time) error  { return nil }
+func (*veilPaddingMemory) SetWriteDeadline(time.Time) error { return nil }
+
+func veilPaddingConn(raw *veilPaddingMemory) *Conn {
+	c := &Conn{conn: raw, config: &Config{}, vers: VersionTLS13, haveVers: true,
+		cipherSuite: TLS_AES_128_GCM_SHA256, bytesSent: recordSizeBoostThreshold}
+	c.isHandshakeComplete.Store(true)
+	c.in.version, c.out.version = VersionTLS13, VersionTLS13
+	c.in.cipher = aeadAESGCMTLS13(make([]byte, 16), make([]byte, 12))
+	c.out.cipher = aeadAESGCMTLS13(make([]byte, 16), make([]byte, 12))
+	return c
+}
+
+func TestVeilPaddingBudgetAndIntegrity(t *testing.T) {
+	raw := new(veilPaddingMemory)
+	w := veilPaddingConn(raw)
+	defer w.Close()
+	w.VeilSetPadding(true)
+	if n, err := w.Write(nil); n != 0 || err != nil || raw.Len() != 0 {
+		t.Fatal("empty write emitted a record", n, err)
+	}
+	var plain []byte
+	added := 0
+	for i, size := range []int{64, 128, 513, maxPlaintext, 7, 4096, 32, 16} {
+		if i == 6 {
+			w.VeilSetPadding(true) // next business stream gets its own budget
+		}
+		if i == 7 {
+			w.VeilSetPadding(false)
+		}
+		p := bytes.Repeat([]byte{byte(i + 1)}, size)
+		p[len(p)-1], p[len(p)-2] = 0, 0 // content zeros must not be stripped
+		plain = append(plain, p...)
+		start := raw.Len()
+		if n, err := w.Write(p); err != nil || n != len(p) {
+			t.Fatal("write", n, err)
+		}
+		record := raw.Bytes()[start:]
+		length := int(binary.BigEndian.Uint16(record[3:5]))
+		if length+5 != len(record) || length > maxPlaintext+17 {
+			t.Fatal("TLS record overflow or unexpected split", length)
+		}
+		extra := length - size - 17
+		if i < 3 || i == 6 {
+			if extra < 1 || extra > 256 {
+				t.Fatal("padding outside budget", extra)
+			}
+		} else if extra != 0 {
+			t.Fatal("padding after budget or at record limit", extra)
+		}
+		if i < 6 {
+			added += extra
+		}
+	}
+	if added > 1024 {
+		t.Fatal("per-stream padding budget exceeded", added)
+	}
+	wire := append([]byte(nil), raw.Bytes()...)
+	rr := &veilPaddingMemory{}
+	rr.Write(wire)
+	r := veilPaddingConn(rr)
+	defer r.Close()
+	got := make([]byte, len(plain))
+	if _, err := io.ReadFull(r, got); err != nil || !bytes.Equal(got, plain) {
+		t.Fatal("padding changed application bytes", err)
+	}
+	// Padding is authenticated along with the content.
+	wire[6] ^= 1
+	bad := &veilPaddingMemory{}
+	bad.Write(wire)
+	b := veilPaddingConn(bad)
+	defer b.Close()
+	if _, err := b.Read(make([]byte, 64)); err == nil {
+		t.Fatal("corrupted padded record accepted")
+	}
+}

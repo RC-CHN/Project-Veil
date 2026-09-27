@@ -149,6 +149,9 @@ func (s *Service) server(ctx context.Context, raw net.Conn) error {
 		if err != nil {
 			return err
 		}
+		if err := transport.RecordPadding(c, s.cfg.TLS.RecordPadding); err != nil {
+			return err
+		}
 		c.SetReadDeadline(time.Time{})
 		target, err := (&net.Dialer{Timeout: sec(s.cfg.DialSeconds)}).DialContext(ctx, "tcp", address)
 		if err != nil {
@@ -196,6 +199,10 @@ func (s *Service) client(ctx context.Context, local net.Conn) error {
 		}
 	}()
 	channel.SetDeadline(time.Now().Add(sec(s.cfg.DialSeconds + s.cfg.HandshakeSeconds)))
+	if err := transport.RecordPadding(channel.Conn, s.cfg.TLS.RecordPadding); err != nil {
+		socks.Reply(local, 1)
+		return err
+	}
 	p, err := wire.EncodeAddress(address)
 	if err == nil {
 		err = wire.WriteOpen(channel, channel.auth, p)

@@ -19,7 +19,7 @@ import (
 	"veil/internal/wire"
 )
 
-func sample(server string, target, key []byte, handshake transport.Handshake) (time.Duration, error) {
+func sample(server string, target, key []byte, handshake transport.Handshake, padding bool) (time.Duration, error) {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -34,6 +34,9 @@ func sample(server string, target, key []byte, handshake transport.Handshake) (t
 		return 0, err
 	}
 	defer c.Close()
+	if err := transport.RecordPadding(c, padding); err != nil {
+		return 0, err
+	}
 	exporter, err := transport.Export(c)
 	if err != nil {
 		return 0, err
@@ -122,7 +125,7 @@ func main() {
 		panic(err)
 	}
 	for range *warmup {
-		if _, err := sample(cfg.Server, address, key, handshake); err != nil {
+		if _, err := sample(cfg.Server, address, key, handshake, cfg.TLS.RecordPadding); err != nil {
 			panic(err)
 		}
 	}
@@ -133,7 +136,7 @@ func main() {
 	start := time.Now()
 	latencies := make([]int64, *rounds)
 	for i := range latencies {
-		ready, err := sample(cfg.Server, address, key, handshake)
+		ready, err := sample(cfg.Server, address, key, handshake, cfg.TLS.RecordPadding)
 		if err != nil {
 			panic(err)
 		}

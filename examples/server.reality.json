@@ -7,7 +7,8 @@
     "server_name": "cover.example",
     "cover_address": "cover.example:443",
     "reality_private_key": "REPLACE_WITH_KEYGEN_PRIVATE_KEY",
-    "short_id": "REPLACE_WITH_16_HEX_CHARACTERS"
+    "short_id": "REPLACE_WITH_16_HEX_CHARACTERS",
+    "record_padding": true
   },
   "max_connections": 64,
   "max_idle": 8

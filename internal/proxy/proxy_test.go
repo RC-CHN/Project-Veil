@@ -188,7 +188,7 @@ func target(t *testing.T, fn func(net.Conn)) string {
 var testKey = base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{73}, 32))
 
 func TestEndToEndHalfCloseReuse(t *testing.T) {
-	for _, name := range []string{"tls", "reality", "chrome120", "chrome131", "chrome133", "chrome149", "pool"} {
+	for _, name := range []string{"tls", "reality", "chrome120", "chrome131", "chrome133", "chrome149", "pool", "padding"} {
 		t.Run(name, func(t *testing.T) {
 			mode := "reality"
 			if name == "tls" {
@@ -200,6 +200,9 @@ func TestEndToEndHalfCloseReuse(t *testing.T) {
 				ct.Fingerprint = name
 			case "pool":
 				ct.Fingerprints = []string{"chrome120", "chrome131", "chrome133", "chrome149"}
+			case "padding":
+				ct.Fingerprint = "chrome149"
+				ct.RecordPadding, st.RecordPadding = true, true
 			}
 			server, addr := start(t, Config{Role: "server", Secret: testKey, TLS: st, HandshakeSeconds: 3, IdleSeconds: 3})
 			client, entry := start(t, Config{Role: "client", Secret: testKey, TLS: ct, Server: addr, HandshakeSeconds: 3, IdleSeconds: 3})
