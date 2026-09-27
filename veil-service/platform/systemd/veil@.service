@@ -1,0 +1,29 @@
+[Unit]
+Description=Veil instance %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+ExecStart=/usr/local/bin/veild -state-dir /var/lib/veil-%i -socket /run/veil-%i/control.sock -autostart
+Restart=on-failure
+RestartSec=3s
+TimeoutStopSec=20s
+User=veil
+Group=veil
+StateDirectory=veil-%i
+StateDirectoryMode=0700
+RuntimeDirectory=veil-%i
+RuntimeDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,28 @@
+#!/bin/sh
+# PROVIDE: veil
+# REQUIRE: NETWORKING
+# KEYWORD: shutdown
+# Base rc.d integration only; OPNsense GUI/config.xml integration is separate.
+
+. /etc/rc.subr
+
+name="veil"
+rcvar="veil_enable"
+load_rc_config "$name"
+: "${veil_enable:=NO}"
+: "${veil_state_dir:=/var/db/veil}"
+: "${veil_run_dir:=/var/run/veil}"
+
+pidfile="${veil_run_dir}/daemon.pid"
+procname="/usr/local/bin/veild"
+command="/usr/sbin/daemon"
+command_args="-f -S -T veil -p ${pidfile} ${procname} -state-dir ${veil_state_dir} -socket ${veil_run_dir}/control.sock -autostart"
+start_precmd="veil_prepare"
+
+veil_prepare()
+{
+    # Fixed administrative paths; do not put spaces in rc.conf directory values.
+    install -d -m 0700 "${veil_state_dir}" "${veil_run_dir}"
+}
+
+run_rc_command "$1"
