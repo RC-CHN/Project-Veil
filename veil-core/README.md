@@ -37,7 +37,7 @@ SOCKS5 入口仅支持无认证 CONNECT，默认监听回环地址。按需修�
 
 ## 复用核心
 
-`core` 负责握手、鉴权、流生命周期和连接池；`inbound` 负责 SOCKS5、固定目标转发与有界监听循环；`internal/proxy` 将现有 CLI JSON 配置组合成这些组件。数据仍沿用原转发循环，一方向一个写入者，无额外数据队列或进程间转发。
+`core` 负责握手、鉴权、流生命周期和连接池；`inbound` 负责 SOCKS5、固定目标转发与有界监听循环；`service` 将现有 CLI JSON 配置组合成这些组件，并提供 `Parse`、`Validate`、`Runtime.Start/Stop/Restart/Close` 和状态快照。数据仍沿用原转发循环，一方向一个写入者，无额外数据队列或进程间转发。
 
 发送方向的 128 KiB 工作缓冲通过 `sync.Pool` 复用，写入任务退出后才归还；不改变读取大小、DATA 帧或 TLS 写入方式。这样减少短流的分配与 GC，闲置缓存由 GC 回收，不挂在每条空闲 TLS 会话上。
 
@@ -64,7 +64,7 @@ return stream.Relay(localConn)
 
 `ClientConfig.DialContext` 可接平台的 socket 保护/绑定逻辑，`ServerConfig.DialContext` 可接目标访问策略；两者须遵守 context。没有实现这些钩子时，保持普通 TCP 拨号。配置在构造时复制，变更通过创建新实例生效。核心不修改系统路由、DNS、防火墙或服务状态。
 
-预期平台分工如下，平台组件本轮尚未实现：
+平台分工如下，公共控制服务与启动模板见 [veil-service](../veil-service/README.md)：
 
 | 平台 | 平台层负责的工作 | 复用方式 |
 | --- | --- | --- |
@@ -76,7 +76,7 @@ return stream.Relay(localConn)
 
 界面只走控制通道，数据直接走核心；保存配置和应用配置应为不同操作。Android 的 TUN 数据不是 `net.Conn`，本轮 TCP 接口不能直接宣称已有完整 VPN 支持。桌面 Tauri、LuCI、OPNsense 插件和 Android 绑定均为后续工作。
 
-当前公开包用于同模块复用，仍需构建器生成的补丁 uTLS 模块；仓库尚未发布可直接 `go get` 的独立 SDK。移动端绑定也须沿用此构建链。无 cgo 原生后端用于跨平台基线，批量记录后端和 Linux OpenSSL 后端保持原实现。编译检查：
+当前公开包可通过仓库内的 Go module 引用复用，仍需构建器生成的补丁 uTLS 模块；仓库尚未发布可直接 `go get` 的独立 SDK。移动端绑定也须沿用此构建链。无 cgo 原生后端用于跨平台基线，批量记录后端和 Linux OpenSSL 后端保持原实现。编译检查：
 
 ```sh
 python3 scripts/cross_check.py
@@ -93,6 +93,10 @@ make vet
 ```
 
 TLS/REALITY 集成测试使用本机 `openssl s_server`，只连接自有回环端点。
+
+下载回归还使用真实 curl 检查上游提前 EOF/RST、单向下载的空闲计时，以及下载被背压阻塞时上传仍能推进。可在隔离网络中设置 `VEIL_LONG_DOWNLOAD_TEST=1`，通过相同构建 flags 单独执行 `go test ./service -run TestLongHTTPSDownloadPause -v`：它模拟 HTTPS 302 后的 104 MiB 下载，中途保持连接静默 30 秒，再续传并校验哈希。测试不连接 HF 或现有部署。
+
+`idle_seconds` 按两个方向合计的活动计时，默认 120 秒；它不是最低下载速度检查。收到 EOF/RST 与链路黑洞不同：没有关闭报文的丢包可能要等 TCP 重传或应用空闲超时。30 秒停顿测试通过不能排除特定运营商、CDN 或部署版本下的长连接问题，也不能替代现场日志。
 
 ## 优化构建
 
