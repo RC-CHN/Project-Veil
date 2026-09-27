@@ -1,21 +1,25 @@
 // Bounded TLS read batches include record overhead, not just plaintext bytes.
 const veilBatchBytes = 8 * (maxPlaintext + recordHeaderLen + 256)
 
+// Two batches amortize socket reads without waiting to fill the buffer. The
+// writer still flushes at veilBatchBytes; the shared cache stays about 2 MiB.
+const veilBufferBytes = 2 * veilBatchBytes
+
 // Read and write batches share one bounded cache. Buffers are returned only
 // after all views are empty; an idle connection owns none of these batches.
-var veilBatchPool = make(chan []byte, 16)
+var veilBatchPool = make(chan []byte, 8)
 
 func veilTakeBuffer() []byte {
 	select {
 	case b := <-veilBatchPool:
 		return b[:0]
 	default:
-		return make([]byte, 0, veilBatchBytes)
+		return make([]byte, 0, veilBufferBytes)
 	}
 }
 
 func veilPutBuffer(b []byte) {
-	if cap(b) != veilBatchBytes {
+	if cap(b) != veilBufferBytes {
 		return
 	}
 	select {

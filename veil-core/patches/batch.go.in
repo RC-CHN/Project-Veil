@@ -26,7 +26,7 @@ func (c *Conn) veilWriteApplicationBatchLocked(data []byte) (int, error) {
 		if m > maxPlaintext {
 			m = maxPlaintext
 		}
-		if len(b)+m+recordHeaderLen+256 > cap(b) {
+		if len(b)+m+recordHeaderLen+256 > veilBatchBytes {
 			if err := flush(); err != nil {
 				return n, err
 			}
