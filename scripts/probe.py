@@ -173,7 +173,7 @@ def histogram(data):
     }
 
 
-def run_profile(folder, profile, repeats):
+def run_profile(folder, profile, repeats, fingerprint=None, record_padding=False):
     f = fixture(folder, rsa=profile == "openssl-rsa")
     procs = []
     logs = []
@@ -225,6 +225,14 @@ def run_profile(folder, profile, repeats):
         cover = launch(cover_command)
         wait_port(coverp, cover)
         sc, cc = configurations(f, "veil-opt-reality", sp, cp, coverp)
+        for name in ("client", "server"):
+            path = folder / (name + ".json")
+            cfg = json.loads(path.read_text())
+            if fingerprint and name == "client":
+                cfg["tls"]["fingerprint"] = fingerprint
+            if record_padding:
+                cfg["tls"]["record_padding"] = True
+            path.write_text(json.dumps(cfg))
         # Bound invalid-handshake tests to one second at the Veil edge.
         cfg = json.loads((folder / "server.json").read_text())
         cfg["handshake_seconds"] = 1
@@ -383,6 +391,8 @@ if __name__ == "__main__":
     p.add_argument("--out", default=".build/probes")
     p.add_argument("--profiles", default="openssl-ecdsa,openssl-rsa,go-tls")
     p.add_argument("--reps", type=int, default=2)
+    p.add_argument("--fingerprint")
+    p.add_argument("--record-padding", action="store_true")
     a = p.parse_args()
     folder = ROOT / a.out
     if folder.exists():
@@ -391,7 +401,9 @@ if __name__ == "__main__":
     for profile in a.profiles.split(","):
         if profile not in ("openssl-ecdsa", "openssl-rsa", "go-tls"):
             p.error("unknown reference profile")
-        result = run_profile(folder / profile, profile, a.reps)
+        result = run_profile(
+            folder / profile, profile, a.reps, a.fingerprint, a.record_padding
+        )
         results[profile] = result
         print(
             json.dumps(

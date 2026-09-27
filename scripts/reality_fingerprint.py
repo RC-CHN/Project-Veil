@@ -99,7 +99,7 @@ def hello(data):
             "session_id_length": sid_len,
             "compression": compression,
             "extension_ids": sorted(order),
-            "extensions": extensions,
+            "extensions": {str(k): v for k, v in extensions.items()},
         },
         "extension_order": order,
         "extension_lengths": lengths,
@@ -116,7 +116,21 @@ if __name__ == "__main__":
     p.add_argument("--after", default=".build")
     p.add_argument("--out", required=True)
     p.add_argument("--samples", type=int, default=12)
+    p.add_argument(
+        "--fingerprint", help="candidate client template; baseline unchanged"
+    )
+    p.add_argument(
+        "--record-padding", action="store_true", help="pad candidate peers only"
+    )
+    p.add_argument(
+        "--browser-result", help="browser_hello.py result.json for comparison"
+    )
     a = p.parse_args()
+    client_tls, server_tls = {}, {}
+    if a.fingerprint:
+        client_tls["fingerprint"] = a.fingerprint
+    if a.record_padding:
+        client_tls["record_padding"] = server_tls["record_padding"] = True
     if a.samples < 2:
         p.error("at least two samples required")
     folder = ROOT / a.out
@@ -134,6 +148,8 @@ if __name__ == "__main__":
                 1,
                 folder / f"{repeat:03d}-{version}",
                 capture=Capture,
+                client_tls=client_tls if version == "after" else None,
+                server_tls=server_tls if version == "after" else None,
             )
             raw = {d: bytes.fromhex(b) for d, b in row.pop("capture").items()}
             parsed = {d: records(b) for d, b in raw.items()}
@@ -159,6 +175,14 @@ if __name__ == "__main__":
         "normalized_clienthello_equal": len(profiles) == 1,
         "scope": "owned loopback; record lengths exclude five-byte TLS headers; no censorship classification test",
     }
+    if a.browser_result:
+        browser = json.loads((ROOT / a.browser_result).read_text())
+        known = {json.dumps(r["profile"], sort_keys=True) for r in browser["samples"]}
+        summary["browser_version"] = browser["browser_version"]
+        summary["candidate_matches_browser_normalized_hello"] = all(
+            json.dumps(r["hello"]["profile"], sort_keys=True) in known
+            for r in results["after"]
+        )
     for version, rows in results.items():
         summary[version] = {
             "samples": len(rows),

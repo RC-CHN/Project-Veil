@@ -16,7 +16,17 @@ from build import ROOT
 from fixtures import configurations, fixture, port, spawn, stop, wait_port
 
 
-def trial(f, binaries, mode, rounds, folder, optimized=True, capture=None):
+def trial(
+    f,
+    binaries,
+    mode,
+    rounds,
+    folder,
+    optimized=True,
+    capture=None,
+    client_tls=None,
+    server_tls=None,
+):
     folder.mkdir(parents=True)
     procs, logs, counters = [], [], []
 
@@ -64,6 +74,12 @@ def trial(f, binaries, mode, rounds, folder, optimized=True, capture=None):
         wait_port(bp, backend)
         variant = "veil-opt-reality" if optimized else "veil-native-reality"
         sc, cc = configurations(f, variant, sp, cp, coverp)
+        for name, overrides in (("client", client_tls), ("server", server_tls)):
+            if overrides:
+                path = f["folder"] / (name + ".json")
+                cfg = json.loads(path.read_text())
+                cfg["tls"].update(overrides)
+                path.write_text(json.dumps(cfg))
         sc[0], cc[0] = binaries / sc[0].name, binaries / cc[0].name
         server = launch(sc, "14")
         wait_port(sp, server)
@@ -195,7 +211,18 @@ if __name__ == "__main__":
     p.add_argument("--reps", type=int, default=7)
     p.add_argument("--rounds", type=int, default=3000)
     p.add_argument("--native", action="store_true")
+    p.add_argument(
+        "--fingerprint", help="candidate client template; baseline unchanged"
+    )
+    p.add_argument(
+        "--record-padding", action="store_true", help="pad candidate peers only"
+    )
     a = p.parse_args()
+    client_tls, server_tls = {}, {}
+    if a.fingerprint:
+        client_tls["fingerprint"] = a.fingerprint
+    if a.record_padding:
+        client_tls["record_padding"] = server_tls["record_padding"] = True
     if (
         a.reps < 1
         or a.rounds < 1
@@ -243,6 +270,8 @@ if __name__ == "__main__":
             a.rounds,
             folder / f"{index:03d}-{version}-{mode}",
             not a.native,
+            client_tls=client_tls if version == "after" else None,
+            server_tls=server_tls if version == "after" else None,
         )
         row.update(version=version, repetition=repeat, pair=pair)
         with (folder / "raw.jsonl").open("a") as out:

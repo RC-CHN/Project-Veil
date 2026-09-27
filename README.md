@@ -86,6 +86,8 @@ python3 scripts/reality_fingerprint.py --before .build/previous --out .build/rea
 
 对照目录中的 `veil-openssl`、`veil-batch` 和 `handshakebench-batch` 必须来自同一旧版源码，握手测量工具本身使用相同源码。CPU 对照采用相邻随机 A/B 配对，分别测两端 `perf task-clock`、指令数与周期数，并记录物理连接数；默认两端各固定一个 CPU。指纹工具比较归一化 ClientHello 和 TLS 记录序列，保留随机字段的摘要用于检查重复，不保存原始捕获内容；它不执行抗审查分类验收。
 
+这两个工具支持 `--fingerprint chrome149 --record-padding`，仅修改候选组配置，原版组保持不变。`browser_hello.py --browser /path/to/chrome --out .build/browser-hello` 使用独立临时浏览器配置向自有回环端点发送 ClientHello，保存归一化字段后退出；指纹工具通过 `--browser-result .build/browser-hello/result.json` 比较实测浏览器。静态字段匹配不代表扩展顺序分布、完整浏览器行为或实际抗审查能力相同。
+
 重建前可将旧二进制保存到 `.build/previous/`，用 `veil-opt-reality-previous` 变体与候选同时测试；对应目录必须包含 `veil-openssl` 和 `veil-batch`。测量元数据记录两套二进制摘要。
 
 `probe.py` 使用 OpenSSL ECDSA、OpenSSL RSA 和 Go TLS 三类参考端点，比较直连、裸上游 REALITY 与 Veil。正常 HTTPS、延迟请求、异常输入、重放、参考站点故障和 TLS 记录形态分别记录。为防止上游未传播 TCP EOF 阻塞单线程参考站点，每次裸 REALITY 异常探测后重置参考进程。
