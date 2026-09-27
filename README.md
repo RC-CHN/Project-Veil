@@ -6,7 +6,7 @@ v0.1 将首次 AUTH 与 OPEN 同批发送，目标连接成功后返回 OPEN_OK�
 
 ## 构建与运行
 
-使用 Go 1.26.3。原生构建不依赖 cgo 或 OpenSSL。
+使用 Go 1.26.3 和 Python 3。原生构建不依赖 cgo 或 OpenSSL。请用 Makefile 或 `scripts/build.py` 构建：所有后端均需要版本校验的 REALITY 回落接口补丁，直接 `go build` 不包含该接口，会编译失败。
 
 ```sh
 make build
@@ -70,7 +70,7 @@ python3 scripts/probe.py --out .build/probes-local
 
 `probe.py` 使用 OpenSSL ECDSA、OpenSSL RSA 和 Go TLS 三类参考端点，比较直连、裸上游 REALITY 与 Veil。正常 HTTPS、延迟请求、异常输入、重放、参考站点故障和 TLS 记录形态分别记录。为防止上游未传播 TCP EOF 阻塞单线程参考站点，每次裸 REALITY 异常探测后重置参考进程。
 
-当前 REALITY 回落仍受 `handshake_seconds` 的绝对时限约束，延迟或长时间 HTTPS 会话可能被提前关闭；满数据帧对齐也不消除短读和控制帧的长度特征。这些是已确认的验证边界。
+REALITY 收到参考站点响应并选择回落后，改用 `idle_seconds` 控制双向共享的空闲期限，单向传输也会续期；此前及代理连接的握手、业务鉴权阶段仍受 `handshake_seconds` 约束。回落传播 TCP 半关闭，错误与服务停止会关闭两端。空闲期限仍可能与参考站点不同；满数据帧对齐也不消除短读和控制帧的长度特征。
 
 20 ms RTT 模拟需 `iproute2` 和一次性网络命名空间。将 `USER` 替换为具有本机测试权限的普通用户：
 

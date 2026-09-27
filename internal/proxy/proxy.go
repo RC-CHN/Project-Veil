@@ -31,7 +31,7 @@ func New(cfg Config) (*Service, error) {
 	s := &Service{cfg: cfg, key: key}
 	var err error
 	if cfg.Role == "server" {
-		s.handshake, err = transport.Server(cfg.TLS, sec(cfg.HandshakeSeconds))
+		s.handshake, err = transport.Server(cfg.TLS, sec(cfg.HandshakeSeconds), sec(cfg.IdleSeconds))
 	} else {
 		s.handshake, err = transport.Client(cfg.TLS)
 		s.pool = newPool(cfg, key, s.handshake)

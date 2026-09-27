@@ -30,7 +30,7 @@ type Settings struct {
 
 type Handshake func(context.Context, net.Conn) (net.Conn, error)
 
-func Server(s Settings, timeout time.Duration) (Handshake, error) {
+func Server(s Settings, timeout, idle time.Duration) (Handshake, error) {
 	if s.ServerName == "" {
 		return nil, errors.New("transport: server_name required")
 	}
@@ -73,7 +73,10 @@ func Server(s Settings, timeout time.Duration) (Handshake, error) {
 		cfg.MinVersion = utls.VersionTLS13
 		cfg.MaxVersion = utls.VersionTLS13
 		cfg.SessionTicketsDisabled = true
-		return func(ctx context.Context, c net.Conn) (net.Conn, error) { return utls.RealityServer(ctx, c, cfg) }, nil
+		return func(ctx context.Context, c net.Conn) (net.Conn, error) {
+			f := fallback{handshake: ctx, idle: idle}
+			return utls.RealityServerWithFallback(ctx, c, cfg, f.copy)
+		}, nil
 	default:
 		return nil, errors.New("transport: mode must be tls or reality")
 	}

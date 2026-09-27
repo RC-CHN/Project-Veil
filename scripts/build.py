@@ -92,14 +92,80 @@ def conn_patch(s):
     return s + (ROOT / "patches/batch.go.in").read_text()
 
 
+def reality_patch(s):
+    # Keep the upstream entry point unchanged for differential probes. Veil's
+    # hook owns only the forwarding pumps, not authentication or TLS parsing.
+    signature = "func RealityServer(ctx context.Context, conn net.Conn, config *RealityConfig) (*Conn, error) {"
+    s = replace(
+        s,
+        signature,
+        signature
+        + """
+    return RealityServerWithFallback(ctx, conn, config, nil)
+}
+
+// RealityServerWithFallback permits a caller to own fallback forwarding.
+// forward runs concurrently, once per direction. first contains any bytes
+// already read from src, and is non-nil only for the downstream direction.
+// It must finish forwarding before returning. Nil preserves upstream behavior.
+func RealityServerWithFallback(ctx context.Context, conn net.Conn, config *RealityConfig, forward func(dst, src net.Conn, first []byte)) (*Conn, error) {
+    copyFallback := func(dst, src net.Conn, first []byte, limit *RealityLimitFallback) {
+        src = newRateLimitedConn(src, limit)
+        if forward != nil {
+            forward(dst, src, first)
+            return
+        }
+        if first != nil { dst.Write(first) }
+        io.Copy(dst, src)
+    }
+""",
+    )
+    upload = (
+        "io.Copy(target, newRateLimitedConn(underlying, &config.LimitFallbackUpload))"
+    )
+    if s.count(upload) != 2:
+        raise RuntimeError("upstream REALITY upload paths changed")
+    s = s.replace(
+        upload, "copyFallback(target, underlying, nil, &config.LimitFallbackUpload)"
+    )
+    return replace(
+        s,
+        "conn.Write(s2cSaved)\n\t\t\tio.Copy(underlying, newRateLimitedConn(target, &config.LimitFallbackDownload))",
+        "copyFallback(underlying, target, s2cSaved, &config.LimitFallbackDownload)",
+    )
+
+
 def generate(mode):
     out = ROOT / ".build" / mode
     out.mkdir(parents=True, exist_ok=True)
-    if mode == "native":
-        return ["-tags=with_utls"]
     module = ROOT / ".build/mod/github.com/metacubex/utls@v1.8.7"
     if not module.exists():
         run(["go", "mod", "download"])
+    reality = module / "reality.go"
+    if (
+        hashlib.sha256(reality.read_bytes()).hexdigest()
+        != "9258864cc512e05302f5eb7d6a95efd7ae64bafcb45cb3b725086368740ab393"
+    ):
+        raise RuntimeError("unsupported source version: " + str(reality))
+    patched_reality = out / "reality.go"
+    patched_reality.write_text(reality_patch(reality.read_text()))
+    run(["gofmt", "-w", str(patched_reality)])
+    fork = out / "utls"
+    if not fork.exists():
+        shutil.copytree(module, fork)
+    # Only our local module copy is made writable.
+    for path in [fork, *fork.rglob("*")]:
+        if not path.is_symlink():
+            path.chmod(path.stat().st_mode | 0o200)
+    shutil.copyfile(patched_reality, fork / "reality.go")
+    mod = (ROOT / "go.mod").read_text()
+    mod += f"\nreplace github.com/metacubex/utls => {fork}\n"
+    (out / "build.mod").write_text(mod)
+    shutil.copyfile(ROOT / "go.sum", out / "build.sum")
+    if mode == "native":
+        flags = ["-tags=with_utls", "-modfile=" + str(out / "build.mod")]
+        (out / "flags.json").write_text(json.dumps(flags))
+        return flags
     goroot = pathlib.Path(
         subprocess.check_output(["go", "env", "GOROOT"], text=True).strip()
     )
@@ -114,13 +180,6 @@ def generate(mode):
     for path, digest in checks.items():
         if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
             raise RuntimeError("unsupported source version: " + str(path))
-    fork = out / "utls"
-    if not fork.exists():
-        shutil.copytree(module, fork)
-    # Only our local module copy is made writable.
-    for path in [fork, *fork.rglob("*")]:
-        if not path.is_symlink():
-            path.chmod(path.stat().st_mode | 0o200)
     (fork / "conn.go").write_text(conn_patch((module / "conn.go").read_text()))
     std = out / "std-conn.go"
     std.write_text(conn_patch((goroot / "src/crypto/tls/conn.go").read_text()))
@@ -157,11 +216,6 @@ def generate(mode):
             tests
         )
     (out / "overlay.json").write_text(json.dumps(overlay, indent=2) + "\n")
-    mod = (
-        ROOT / "go.mod"
-    ).read_text() + f"\nreplace github.com/metacubex/utls => {fork}\n"
-    (out / "build.mod").write_text(mod)
-    shutil.copyfile(ROOT / "go.sum", out / "build.sum")
     flags = [
         "-tags=with_utls" + (",veil_openssl" if mode == "openssl" else ""),
         "-overlay=" + str(out / "overlay.json"),
