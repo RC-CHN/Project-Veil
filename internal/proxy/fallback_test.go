@@ -269,3 +269,33 @@ func TestRealityFallbackCancellation(t *testing.T) {
 	}
 	boundedClose(t, c, 0, time.Second)
 }
+
+func TestRealityClientRejectsWebsite(t *testing.T) {
+	cover, _ := fallbackCover(t, func(w http.ResponseWriter, r *http.Request) {})
+	_, settings := fallbackKeys(t, cover)
+	for _, name := range []string{"chrome120", "chrome131", "chrome133"} {
+		t.Run(name, func(t *testing.T) {
+			settings.Fingerprint = name
+			rejectWebsite(t, settings, cover)
+		})
+	}
+}
+
+func rejectWebsite(t *testing.T, settings transport.Settings, cover string) {
+	t.Helper()
+	handshake, err := transport.Client(settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := net.Dial("tcp", cover)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if c, err := handshake(ctx, raw); err == nil {
+		c.Close()
+		t.Fatal("normal website certificate accepted as REALITY authentication")
+	}
+}

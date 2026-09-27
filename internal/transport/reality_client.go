@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // REALITY client handshake adapted from SagerNet/sing-box v1.15.0-alpha.9,
 // common/tls/reality_client.go, Copyright (C) 2022 nekohasekai.
-// Veil uses public certificate parsing, rejects non-REALITY peers, and disables
+// Veil uses the TLS library's parsed certificate, rejects non-REALITY peers, and disables
 // TLS renegotiation to permit channel-bound TLS 1.3 exporter authentication.
 package transport
 
@@ -14,10 +14,10 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/sha512"
-	"crypto/x509"
 	"encoding/binary"
 	"errors"
 	"io"
+	"math/rand/v2"
 	"net"
 	"time"
 
@@ -34,8 +34,9 @@ func realityClient(s Settings) (Handshake, error) {
 	if err != nil {
 		return nil, err
 	}
-	if s.Fingerprint != "" && s.Fingerprint != "chrome" {
-		return nil, errors.New("only the pinned chrome REALITY fingerprint is supported")
+	profiles, err := realityProfiles(s)
+	if err != nil {
+		return nil, err
 	}
 	publicKey, err := ecdh.X25519().NewPublicKey(public)
 	if err != nil {
@@ -48,14 +49,11 @@ func realityClient(s Settings) (Handshake, error) {
 		cfg := &utls.Config{ServerName: s.ServerName, MinVersion: utls.VersionTLS13, MaxVersion: utls.VersionTLS13, SessionTicketsDisabled: true, InsecureSkipVerify: true}
 		// InsecureSkipVerify is paired with mandatory REALITY HMAC authentication.
 		// A normal trusted website certificate is insufficient for this transport.
-		cfg.VerifyPeerCertificate = func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
-			if len(rawCerts) == 0 || len(authKey) != 32 {
+		cfg.VerifyConnection = func(state utls.ConnectionState) error {
+			if len(state.PeerCertificates) == 0 || len(authKey) != 32 {
 				return errors.New("REALITY authentication failed")
 			}
-			cert, err := x509.ParseCertificate(rawCerts[0])
-			if err != nil {
-				return err
-			}
+			cert := state.PeerCertificates[0]
 			pub, ok := cert.PublicKey.(ed25519.PublicKey)
 			if !ok {
 				return errors.New("REALITY authentication failed")
@@ -68,38 +66,28 @@ func realityClient(s Settings) (Handshake, error) {
 			verified = true
 			return nil
 		}
-		c := utls.UClient(raw, cfg, utls.HelloChrome_Auto)
-		if err := c.BuildHandshakeState(); err != nil {
+		// Fix the profile before ApplyPreset generates key shares. Specs contain
+		// mutable slices and extension state, so each connection gets its own.
+		profile := profiles[0]
+		if len(profiles) > 1 {
+			// Template selection is not cryptographic; TLS randomness and keys
+			// still come from the TLS library's cryptographic random source.
+			profile = profiles[rand.IntN(len(profiles))]
+		}
+		spec, err := realitySpec(profile)
+		if err != nil {
 			return nil, err
 		}
-		for _, ext := range c.Extensions {
-			switch e := ext.(type) {
-			case *utls.SupportedCurvesExtension:
-				out := e.Curves[:0]
-				for _, v := range e.Curves {
-					if v != utls.X25519MLKEM768 {
-						out = append(out, v)
-					}
-				}
-				e.Curves = out
-			case *utls.KeyShareExtension:
-				out := e.KeyShares[:0]
-				for _, v := range e.KeyShares {
-					if v.Group != utls.X25519MLKEM768 {
-						out = append(out, v)
-					}
-				}
-				e.KeyShares = out
-			case *utls.RenegotiationInfoExtension:
-				e.Renegotiation = utls.RenegotiateNever
-			}
+		c := utls.UClient(raw, cfg, utls.HelloCustom)
+		if err := c.ApplyPreset(&spec); err != nil {
+			return nil, err
 		}
 		if err := c.BuildHandshakeState(); err != nil {
 			return nil, err
 		}
 		cfg.Renegotiation = utls.RenegotiateNever
 		hello := c.HandshakeState.Hello
-		if len(hello.Raw) < 71 || len(hello.Random) != 32 {
+		if len(hello.Raw) < 71 || len(hello.Random) != 32 || len(hello.SessionId) != 32 || hello.Raw[38] != 32 {
 			return nil, errors.New("unsupported REALITY ClientHello layout")
 		}
 		hello.SessionId = make([]byte, 32)
@@ -108,7 +96,7 @@ func realityClient(s Settings) (Handshake, error) {
 		binary.BigEndian.PutUint32(hello.SessionId[4:8], uint32(time.Now().Unix()))
 		copy(hello.SessionId[8:16], id[:])
 		ks := c.HandshakeState.State13.KeyShareKeys
-		if ks == nil || ks.Ecdhe == nil {
+		if ks == nil || ks.Ecdhe == nil || ks.Ecdhe.Curve() != ecdh.X25519() {
 			return nil, errors.New("REALITY requires X25519 key share")
 		}
 		authKey, err = ks.Ecdhe.ECDH(publicKey)

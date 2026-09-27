@@ -16,16 +16,17 @@ import (
 )
 
 type Settings struct {
-	Mode              string `json:"mode"`
-	ServerName        string `json:"server_name"`
-	Certificate       string `json:"certificate"`
-	PrivateKeyFile    string `json:"private_key_file"`
-	CAFile            string `json:"ca_file"`
-	RealityPrivateKey string `json:"reality_private_key"`
-	RealityPublicKey  string `json:"reality_public_key"`
-	ShortID           string `json:"short_id"`
-	CoverAddress      string `json:"cover_address"`
-	Fingerprint       string `json:"fingerprint"`
+	Mode              string   `json:"mode"`
+	ServerName        string   `json:"server_name"`
+	Certificate       string   `json:"certificate"`
+	PrivateKeyFile    string   `json:"private_key_file"`
+	CAFile            string   `json:"ca_file"`
+	RealityPrivateKey string   `json:"reality_private_key"`
+	RealityPublicKey  string   `json:"reality_public_key"`
+	ShortID           string   `json:"short_id"`
+	CoverAddress      string   `json:"cover_address"`
+	Fingerprint       string   `json:"fingerprint"`
+	Fingerprints      []string `json:"fingerprints"`
 }
 
 type Handshake func(context.Context, net.Conn) (net.Conn, error)
