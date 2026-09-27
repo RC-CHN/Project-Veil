@@ -46,7 +46,7 @@ func realityClient(s Settings) (Handshake, error) {
 		var err error
 		var authKey []byte
 		verified := false
-		cfg := &utls.Config{ServerName: s.ServerName, MinVersion: utls.VersionTLS13, MaxVersion: utls.VersionTLS13, SessionTicketsDisabled: true, InsecureSkipVerify: true}
+		cfg := &utls.Config{ServerName: s.ServerName, MinVersion: utls.VersionTLS13, MaxVersion: utls.VersionTLS13, SessionTicketsDisabled: true, DynamicRecordSizingDisabled: true, InsecureSkipVerify: true}
 		// InsecureSkipVerify is paired with mandatory REALITY HMAC authentication.
 		// A normal trusted website certificate is insufficient for this transport.
 		cfg.VerifyConnection = func(state utls.ConnectionState) error {

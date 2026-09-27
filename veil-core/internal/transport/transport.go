@@ -42,7 +42,7 @@ func Server(s Settings, timeout, idle time.Duration) (Handshake, error) {
 		if err != nil {
 			return nil, err
 		}
-		cfg := &utls.Config{MinVersion: utls.VersionTLS13, MaxVersion: utls.VersionTLS13, Certificates: []utls.Certificate{cert}, NextProtos: []string{"http/1.1"}, SessionTicketsDisabled: true}
+		cfg := &utls.Config{MinVersion: utls.VersionTLS13, MaxVersion: utls.VersionTLS13, Certificates: []utls.Certificate{cert}, NextProtos: []string{"http/1.1"}, SessionTicketsDisabled: true, DynamicRecordSizingDisabled: true}
 		return func(ctx context.Context, raw net.Conn) (net.Conn, error) {
 			c := utls.Server(raw, cfg)
 			err := c.HandshakeContext(ctx)
@@ -75,6 +75,9 @@ func Server(s Settings, timeout, idle time.Duration) (Handshake, error) {
 		cfg.MinVersion = utls.VersionTLS13
 		cfg.MaxVersion = utls.VersionTLS13
 		cfg.SessionTicketsDisabled = true
+		// Avoid Go's connection-age-dependent record ramp. Small writes still
+		// flush immediately; this neither pads nor waits for a full record.
+		cfg.DynamicRecordSizingDisabled = true
 		return func(ctx context.Context, c net.Conn) (net.Conn, error) {
 			f := fallback{handshake: ctx, idle: idle}
 			return utls.RealityServerWithFallback(ctx, c, cfg, f.copy)
@@ -102,7 +105,7 @@ func Client(s Settings) (Handshake, error) {
 				return nil, errors.New("transport: CA file contains no certificates")
 			}
 		}
-		cfg := &utls.Config{MinVersion: utls.VersionTLS13, MaxVersion: utls.VersionTLS13, ServerName: s.ServerName, RootCAs: roots, NextProtos: []string{"http/1.1"}, SessionTicketsDisabled: true}
+		cfg := &utls.Config{MinVersion: utls.VersionTLS13, MaxVersion: utls.VersionTLS13, ServerName: s.ServerName, RootCAs: roots, NextProtos: []string{"http/1.1"}, SessionTicketsDisabled: true, DynamicRecordSizingDisabled: true}
 		return func(ctx context.Context, raw net.Conn) (net.Conn, error) {
 			c := utls.Client(raw, cfg)
 			err := c.HandshakeContext(ctx)

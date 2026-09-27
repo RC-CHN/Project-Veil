@@ -6,6 +6,8 @@ v0.1 将首次 AUTH 与 OPEN 同批发送，目标连接成功后返回 OPEN_OK�
 
 REALITY 客户端在生成密钥前确定模板与扩展，并复用 TLS 库已解析的证书执行认证。服务端收到对端 FIN 后，若本地传输也结束，可在两个转发任务退出后将 FIN 与 DONE 同批写入；本地先结束时仍立即发送 FIN。帧格式不变，兼容已有 v0.1 对端。这些改动不代表已经消除流量指纹。
 
+TLS 与 REALITY 两端均关闭 Go TLS 的自适应记录长度递增：大块写入从开始即可使用 16 KiB 明文记录，小块写入仍立即发送，不等待凑满、不额外填充。这样消除随连接前段写入次数增长的固定切片阶梯，继续使用现有填充预算。记录长度不是 TCP 包长；较大记录在拥塞窗口小或丢包时可能延后首批明文交付，本机 CPU 成绩不能替代这项弱网延迟评估。
+
 ## 构建与运行
 
 本文命令均在仓库的 `veil-core/` 目录执行；仓库根目录的 Makefile 也可转发常用构建与检查目标。
@@ -152,6 +154,20 @@ sudo unshare -n -- sh -c 'ip link set lo up && exec runuser -u USER -- env VEIL_
 `benchmark.py --modes E --rounds 10000` 测热连接延迟；`--modes C --connections 1 --rounds 1` 测冷连接。输出目录不可覆盖已有原始结果；测量数据不纳入版本控制。
 
 `traffic_shapes.py --before .build/previous --after .build --out .build/shapes --samples 12` 必须在私有网络命名空间运行。两组 Veil 使用同一 Chrome 149 模板并开启填充，与受控 Python/OpenSSL HTTPS 比较新连接和连续六条业务流：记录 TLS 长度、方向、转发突发和时间，不保存原始流量。参考 HTTPS 在一条 TLS 连接上复用 HTTP，Veil 在一条外层连接中承载六次内层 TLS 握手；这项差异有意保留以展示嵌套握手特征。20 ms 夹具间隔、用户态转发时间均不代表真实 TCP 包时序，工具不提供抗审查分类结论。
+
+`browser_shapes.py` 提供负载一致的真实浏览器对照：同一 Chrome 页面访问自有 Node HTTPS 网站，比较直连、旧版/新版 SOCKS 代理，以及 Chrome 直接访问新版 REALITY 端口的未认证回落。覆盖 HTTP/2 长连接、HTTP/1.1 主动关闭，每种分别串行和并行获取六个资源；逐条校验正文、状态码与协商协议。每次使用新浏览器配置，仅对临时测试证书放行 SPKI；后台域名在独立网络空间内直接失败，不进入代理。需要 Node.js 与本机 Chromium/Chrome，不安装浏览器依赖。
+
+```sh
+sudo unshare -n -- sh -c 'ip link set lo up && exec runuser -u USER -- env VEIL_ISOLATED_NETNS=1 python3 scripts/browser_shapes.py --browser /path/to/chrome --before .build/previous --after .build --out .build/browser-shapes --samples 6'
+```
+
+两组二进制目录均须含 `veil-batch` 与 `veil-openssl`，构建目录另需 `veil-native` 生成测试密钥。输出 `samples.json`、`summary.json`、二进制及工具摘要；记录全部物理连接、TLS 长度、方向、关闭结果与浏览器连接复用信息，不保存 TLS 密文或正文。浏览器临时配置自动删除，测试证书及 Veil 临时配置在结果目录的 `fixture/` 中。可指定 `--delay-ms 5` 在每次转发前增加延迟；它是用户态敏感性检查，不是固定 RTT 或丢包仿真。浏览器退出可能重置连接，代理计数中的失败还包含监听就绪探测，因此不将这些计数等同于页面下载失败。
+
+2026-09-27 使用 Chrome 149.0.7827.55、Node 24.16.0，与 `adab5bd` 对照：最终 96 组中，旧版 23/24 出现相邻记录增加 1186 字节的阶梯，新版、直连及未认证回落均为 0/24；补充 5 ms 转发延迟的 24 组中，旧版、新版、直连分别为 8/8、0/8、0/8。24 组真实浏览器回落共完成 168 个页面/资源请求，含 HTTP/2 和 HTTP/1.1。此计数只针对已定位的 Go TLS 递增模式，不是通用分类器准确率。三种后端的真实密文记录回归与 race 检查通过；新测试对旧配置失败。五轮 batch 客户端/OpenSSL 服务端配对 CPU 效率中位数变化：上传 +3.53%、下载 −0.73%、热流回显 −0.37%、短流复用 +7.78%；新旧两端交叉互通通过。性能数据为本机回环结果。
+
+本轮没有消除嵌套 TLS：最终 HTTP/2 串行负载的方向突发中位数仍为直连 20、旧版 28、新版 28；并行为 10、18、18。AUTH/OPEN、内层握手、控制帧、连接寿命与复用行为仍可能提供判别信息。保持远端连接成功后才报告 SOCKS 成功，不用提前报成功来掩盖额外往返；也不强制流量比例或加入周期性假包。
+
+研究依据需区分实测与假设：[GFW Report 的 V2Ray 分析](https://gfw.report/blog/v2ray_weaknesses/en/)展示了重放、错误处理和关闭差异的探测价值；其 [2022 年 TLS 工具阻断文章](https://gfw.report/blog/blocking_of_tls_based_circumvention_tools/en/)明确将具体 TLS 指纹机制列为未实测的推测。[封装 TLS 握手研究](https://censoredplanet.org/assets/tls_in_tls.pdf)说明 ClientHello 模板和有限填充不能自动消除内层握手的长度、方向和往返依赖。上述本地回归以及正常网站回落成功，均不等于已经通过真实 GFW 抗识别验收。
 
 REALITY 回落回归以同一受控 HTTPS 网站为对照，覆盖 TLS 1.2/1.3、ALPN、分片 ClientHello、普通网站会话票据恢复、畸形握手和明文 HTTP；另测半关闭、长 HTTP 传输、静默目标与取消。普通网站回落的票据恢复不等于 Veil 启用了认证会话恢复或 0-RTT。
 
