@@ -21,10 +21,13 @@ if (a.role === 'server') {
     let body;
     if (url.pathname === '/run') {
       const parallel = url.searchParams.get('parallel') === '1';
+      const seed = Number(url.searchParams.get('seed') || 0);
+      const sizes = seed ? Array.from({length: 6}, (_, i) => 64 + ((seed * 1103515245 + i * 1234567) >>> 0) % 65536)
+        : [64,4096,32768,64,4096,32768];
       body = `<!doctype html><meta charset="utf-8"><link rel="icon" href="data:,">
 <title>Owned traffic fixture</title><script>
 (async()=>{try {
-  const sizes=[64,4096,32768,64,4096,32768];
+  const sizes=${JSON.stringify(sizes)};
   const fetchOne=async(size,index)=>{
     const r=await fetch('/data/'+size+'?i='+index,{cache:'no-store'});
     const b=await r.text();if(!r.ok||b!=='x'.repeat(size))throw Error('body mismatch');
@@ -111,7 +114,10 @@ if (a.role === 'server') {
     if (!result?.ok || responses.some(r => r.status !== 200) ||
         responses.filter(r => r.url.startsWith(a.url.split('/run')[0])).length !== 7)
       throw Error('Browser workload failed: '+JSON.stringify({result, responses, failures}));
-    process.stdout.write(JSON.stringify({version, result, responses})+'\n');
+    const navigation = await send('Runtime.evaluate', {expression:
+      '(()=>{const n=performance.getEntriesByType("navigation")[0];return {ttfb_ms:n.responseStart-n.startTime,connect_ms:n.connectEnd-n.connectStart}})()',
+      returnByValue: true}, sessionId);
+    process.stdout.write(JSON.stringify({version, result, responses, navigation: navigation.result.value})+'\n');
     await send('Browser.close').catch(() => {});
   } finally {
     for (const p of pending.values()) { clearTimeout(p.timer); p.reject(Error('browser closed')); }
