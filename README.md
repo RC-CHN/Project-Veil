@@ -47,6 +47,28 @@ python3 scripts/demo.py
 
 生成代码、依赖、临时凭据、日志和二进制集中在 `.build/`，由 `make clean` 删除。
 
+## 基准与本地探测
+
+```sh
+make optimized
+python3 scripts/build.py native --package ./cmd/benchpeer --output .build/benchpeer
+python3 scripts/bench_build.py native
+python3 scripts/bench_build.py batch
+python3 scripts/bench_build.py openssl
+python3 scripts/benchmark.py --out .build/bench-local --reps 7 --gib 3
+python3 scripts/probe.py --out .build/probes-local
+```
+
+工具仅连接自有回环端点。基准依赖 Linux `perf`、`taskset` 和本机 `sudo -n perf` 权限；服务端固定 CPU 14，参考站点/目标 16–17，负载 18–21，客户端 22–25，其他机器需调整亲和性。AnyTLS 对照使用固定版本 sing-box，其优化组应用同一 TLS 补丁。
+
+`benchmark.py --modes E --rounds 10000` 测热连接延迟；`--modes C --connections 1 --rounds 1` 测冷连接。输出目录不可覆盖已有原始结果；测量数据不纳入版本控制。
+
+20 ms RTT 模拟需 `iproute2` 和一次性网络命名空间。将 `USER` 替换为具有本机测试权限的普通用户：
+
+```sh
+sudo unshare -n -- sh -c 'ip link set lo up && exec runuser -u USER -- env VEIL_ISOLATED_NETNS=1 python3 scripts/delayed_benchmark.py'
+```
+
 ## 许可
 
 本项目使用 GPL-3.0-or-later；第三方代码来源见 [THIRD_PARTY.md](THIRD_PARTY.md) 和 [LICENSE](LICENSE)。
