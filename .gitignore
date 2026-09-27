@@ -1,4 +1,5 @@
 /.build/
+/veil-core/.build/
 /.rcoder/
 /.agents/
 /.codex/

@@ -7,7 +7,7 @@ import (
 	"time"
 	"veil/internal/socks"
 	"veil/internal/wire"
-	"veil/veil-core"
+	"veil/core"
 )
 
 // Handler owns conn and must close it on cancellation. Callers bound concurrent

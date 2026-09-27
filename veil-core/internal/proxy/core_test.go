@@ -12,7 +12,7 @@ import (
 	"veil/inbound"
 	"veil/internal/transport"
 	"veil/internal/wire"
-	"veil/veil-core"
+	"veil/core"
 )
 
 func startHandler(t *testing.T, handler inbound.Handler) (string, func()) {

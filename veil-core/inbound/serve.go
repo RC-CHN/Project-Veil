@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net"
 	"sync"
-	"veil/veil-core"
+	"veil/core"
 )
 
 type ServeOptions struct {

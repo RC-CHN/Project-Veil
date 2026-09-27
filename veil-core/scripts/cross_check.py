@@ -36,7 +36,7 @@ def main():
             env["GOMIPS"] = "softfloat"
         cmd = ["go", "build", *flags, "-buildvcs=false", "-trimpath"]
         if system == "android":
-            cmd += ["./veil-core", "./inbound"]
+            cmd += ["./core", "./inbound"]
         else:
             suffix = ".exe" if system == "windows" else ""
             cmd += ["-o", str(folder / f"veil-{system}-{arch}{suffix}"), "./cmd/veil"]

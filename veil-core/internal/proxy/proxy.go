@@ -5,7 +5,7 @@ import (
 	"context"
 	"net"
 	"veil/inbound"
-	"veil/veil-core"
+	"veil/core"
 )
 
 type Stats = core.Stats
