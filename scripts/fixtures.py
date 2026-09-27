@@ -20,7 +20,7 @@ def save(path, obj):
     return path
 
 
-def fixture(folder):
+def fixture(folder, rsa=False):
     folder.mkdir(parents=True, exist_ok=True)
     cert, key = folder / "cert.pem", folder / "key.pem"
     subprocess.run(
@@ -29,9 +29,7 @@ def fixture(folder):
             "req",
             "-x509",
             "-newkey",
-            "ec",
-            "-pkeyopt",
-            "ec_paramgen_curve:P-256",
+            *(["rsa:2048"] if rsa else ["ec", "-pkeyopt", "ec_paramgen_curve:P-256"]),
             "-nodes",
             "-keyout",
             str(key),
@@ -181,8 +179,11 @@ def configurations(f, variant, sp, cp, cover):
     sf = save(f["folder"] / "server.json", server)
     cf = save(f["folder"] / "client.json", client)
     prefix = [] if variant.startswith("veil") else ["run"]
-    return [ROOT / ".build" / sb, *prefix, configflag, sf], [
-        ROOT / ".build" / cb,
+    binaries = ROOT / ".build"
+    if variant.endswith("-previous"):
+        binaries /= "previous"
+    return [binaries / sb, *prefix, configflag, sf], [
+        binaries / cb,
         *prefix,
         configflag,
         cf,

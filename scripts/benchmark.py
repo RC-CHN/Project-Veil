@@ -11,6 +11,7 @@ import os
 import pathlib
 import random
 import select
+import shutil
 import statistics
 import subprocess
 
@@ -254,6 +255,48 @@ def summarize(rows):
     return results
 
 
+def metadata(arguments):
+    metadata = {
+        "arguments": arguments,
+        "cpu": subprocess.check_output(["lscpu"], text=True),
+        "go": subprocess.check_output(["go", "version"], text=True)
+        if shutil.which("go")
+        else "not in test PATH; binaries were built separately",
+        "openssl": subprocess.check_output(["openssl", "version"], text=True),
+        "cpu_affinity": {
+            "server": "14",
+            "backend_cover": "16,17",
+            "load": "18-21",
+            "client": "22-25",
+        },
+        "binary_sha256": {
+            str(p.relative_to(ROOT / ".build")): hashlib.sha256(
+                p.read_bytes()
+            ).hexdigest()
+            for directory in (ROOT / ".build", ROOT / ".build/previous")
+            for p in directory.glob("*")
+            if p.is_file()
+            and p.name
+            in [
+                "veil-native",
+                "veil-batch",
+                "veil-openssl",
+                "singbox-native",
+                "singbox-batch",
+                "singbox-openssl",
+                "benchpeer",
+            ]
+        },
+    }
+    metadata["source_sha256"] = {
+        str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for parent in ["cmd", "internal", "patches", "scripts"]
+        for path in (ROOT / parent).rglob("*")
+        if path.is_file() and "__pycache__" not in path.parts
+    }
+    return metadata
+
+
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--out", default=".build/bench-pilot")
@@ -283,40 +326,9 @@ if __name__ == "__main__":
         )
     )
     random.Random(20260927).shuffle(jobs)
-    metadata = {
-        "arguments": vars(a),
-        "cpu": subprocess.check_output(["lscpu"], text=True),
-        "go": subprocess.check_output(["go", "version"], text=True),
-        "openssl": subprocess.check_output(["openssl", "version"], text=True),
-        "cpu_affinity": {
-            "server": "14",
-            "backend_cover": "16,17",
-            "load": "18-21",
-            "client": "22-25",
-        },
-        "binary_sha256": {
-            p.name: hashlib.sha256(p.read_bytes()).hexdigest()
-            for p in (ROOT / ".build").glob("*")
-            if p.is_file()
-            and p.name
-            in [
-                "veil-native",
-                "veil-batch",
-                "veil-openssl",
-                "singbox-native",
-                "singbox-batch",
-                "singbox-openssl",
-                "benchpeer",
-            ]
-        },
-    }
-    metadata["source_sha256"] = {
-        str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
-        for parent in ["cmd", "internal", "patches", "scripts"]
-        for path in (ROOT / parent).rglob("*")
-        if path.is_file() and "__pycache__" not in path.parts
-    }
-    (folder / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
+    (folder / "metadata.json").write_text(
+        json.dumps(metadata(vars(a)), indent=2) + "\n"
+    )
     rows = []
     for i, (variant, mode, n, _) in enumerate(jobs):
         result = trial(f, variant, mode, n, int(a.gib * 2**30), a.rounds, i)

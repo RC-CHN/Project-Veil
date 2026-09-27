@@ -18,7 +18,7 @@ from build import ROOT
 from fixtures import configurations, fixture, port, spawn, stop, wait_port
 
 
-def tls_fetch(addr, cert):
+def tls_fetch(addr, cert, pause=0):
     ctx = ssl.create_default_context(cafile=cert)
     ctx.minimum_version = ssl.TLSVersion.TLSv1_3
     ctx.maximum_version = ssl.TLSVersion.TLSv1_3
@@ -27,20 +27,28 @@ def tls_fetch(addr, cert):
         with ctx.wrap_socket(raw, server_hostname="cover.test") as c:
             der = c.getpeercert(binary_form=True)
             cipher = c.cipher()
+            version, alpn = c.version(), c.selected_alpn_protocol()
+            time.sleep(pause)
             c.sendall(
                 b"GET / HTTP/1.1\r\nHost: cover.test\r\nConnection: close\r\n\r\n"
             )
             data = b""
-            while b"\r\n\r\n" not in data and len(data) < 65536:
+            while len(data) < 65536:
                 part = c.recv(4096)
                 if not part:
                     break
                 data += part
+            # Finish normal HTTPS cleanly. Abrupt/incomplete connections are
+            # separate probes and must not pin a single-threaded reference.
+            try:
+                c.unwrap().close()
+            except OSError:
+                pass
             return {
                 "certificate_sha256": hashlib.sha256(der).hexdigest(),
-                "version": c.version(),
+                "version": version,
                 "cipher": cipher[0],
-                "alpn": c.selected_alpn_protocol(),
+                "alpn": alpn,
                 "status": data.split(b"\r\n")[0].decode(errors="replace"),
             }
 
@@ -100,6 +108,8 @@ class Capture:
             a, _ = self.listener.accept()
             b = socket.create_connection(self.dest, timeout=3)
             self.pairs = [a, b]
+            for c in self.pairs:
+                c.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
             def pump(src, dst, direction):
                 try:
@@ -163,12 +173,8 @@ def histogram(data):
     }
 
 
-if __name__ == "__main__":
-    p = argparse.ArgumentParser()
-    p.add_argument("--out", default=".build/probes")
-    a = p.parse_args()
-    folder = ROOT / a.out
-    f = fixture(folder)
+def run_profile(folder, profile, repeats):
+    f = fixture(folder, rsa=profile == "openssl-rsa")
     procs = []
     logs = []
     capture = None
@@ -181,27 +187,42 @@ if __name__ == "__main__":
         return c
 
     try:
-        coverp, sp, cp, bp = [port() for _ in range(4)]
-        cover = launch(
-            [
-                "openssl",
-                "s_server",
-                "-accept",
+        coverp, sp, cp, bp, upstream_port = [port() for _ in range(5)]
+        cover_command = [
+            "openssl",
+            "s_server",
+            "-accept",
+            f"127.0.0.1:{coverp}",
+            "-cert",
+            f["cert"],
+            "-key",
+            f["key"],
+            "-tls1_3",
+            "-ciphersuites",
+            "TLS_AES_256_GCM_SHA384"
+            if profile == "openssl-rsa"
+            else "TLS_AES_128_GCM_SHA256",
+            "-groups",
+            "X25519",
+            "-www",
+            "-alpn",
+            "http/1.1",
+        ]
+        if profile == "go-tls":
+            cover_command = [
+                ROOT / ".build/probepeer",
+                "-role",
+                "cover",
+                "-listen",
                 f"127.0.0.1:{coverp}",
                 "-cert",
                 f["cert"],
                 "-key",
                 f["key"],
-                "-tls1_3",
-                "-ciphersuites",
-                "TLS_AES_128_GCM_SHA256",
-                "-groups",
-                "X25519",
-                "-www",
-                "-alpn",
-                "http/1.1",
+                "-timeout",
+                "2s",
             ]
-        )
+        cover = launch(cover_command)
         wait_port(coverp, cover)
         sc, cc = configurations(f, "veil-opt-reality", sp, cp, coverp)
         # Bound invalid-handshake tests to one second at the Veil edge.
@@ -210,16 +231,63 @@ if __name__ == "__main__":
         (folder / "server.json").write_text(json.dumps(cfg))
         server = launch(sc)
         wait_port(sp, server)
+        upstream = launch(
+            [
+                ROOT / ".build/probepeer",
+                "-role",
+                "upstream-reality",
+                "-listen",
+                f"127.0.0.1:{upstream_port}",
+                "-config",
+                folder / "server.json",
+            ]
+        )
+        wait_port(upstream_port, upstream)
+
+        def reset_reference():
+            nonlocal cover, upstream
+            stop(upstream)
+            stop(cover)
+            cover = launch(cover_command)
+            wait_port(coverp, cover)
+            upstream = launch(
+                [
+                    ROOT / ".build/probepeer",
+                    "-role",
+                    "upstream-reality",
+                    "-listen",
+                    f"127.0.0.1:{upstream_port}",
+                    "-config",
+                    folder / "server.json",
+                ]
+            )
+            wait_port(upstream_port, upstream)
+
+        endpoints = {
+            "direct": ("127.0.0.1", coverp),
+            "upstream_reality": ("127.0.0.1", upstream_port),
+            "via_veil": ("127.0.0.1", sp),
+        }
         result = {
             "scope": "owned loopback only; differential observations, not anti-detection certification",
+            "profile": profile,
             "normal_tls": {
-                "direct": tls_fetch(("127.0.0.1", coverp), f["cert"]),
-                "via_veil": tls_fetch(("127.0.0.1", sp), f["cert"]),
+                name: tls_fetch(addr, f["cert"]) for name, addr in endpoints.items()
             },
         }
         result["normal_tls"]["equal"] = (
-            result["normal_tls"]["direct"] == result["normal_tls"]["via_veil"]
+            len({json.dumps(v, sort_keys=True) for v in result["normal_tls"].values()})
+            == 1
         )
+        result["delayed_http"] = {}
+        for name, addr in endpoints.items():
+            try:
+                result["delayed_http"][name] = tls_fetch(addr, f["cert"], pause=1.3)
+            except (OSError, ssl.SSLError) as exc:
+                result["delayed_http"][name] = {
+                    "error": type(exc).__name__,
+                    "message": str(exc),
+                }
         capture = Capture(("127.0.0.1", sp))
         cfg = json.loads((folder / "client.json").read_text())
         cfg["server"] = f"127.0.0.1:{capture.port}"
@@ -260,8 +328,6 @@ if __name__ == "__main__":
             "output": load.stdout,
             "error": load.stderr,
         }
-        if load.returncode:
-            raise RuntimeError("valid session failed")
         stop(client)
         capture.done.wait(timeout=4)
         capture.close()
@@ -284,23 +350,25 @@ if __name__ == "__main__":
         }
         result["differential"] = {}
         for name, data in inputs.items():
-            result["differential"][name] = {
-                "direct": sample(("127.0.0.1", coverp), data),
-                "via_veil": sample(("127.0.0.1", sp), data),
-            }
+            result["differential"][name] = {}
+            for endpoint, addr in endpoints.items():
+                observations = []
+                for _ in range(repeats):
+                    observations.append(sample(addr, data))
+                    # Upstream fallback does not propagate TCP EOF to the
+                    # reference. Recycle after observing it, so the next probe
+                    # cannot inherit a blocked OpenSSL accept loop.
+                    if endpoint == "upstream_reality":
+                        reset_reference()
+                result["differential"][name][endpoint] = observations
         stop(cover)
-        result["cover_unavailable"] = sample(("127.0.0.1", sp), hello)
+        result["cover_unavailable"] = {
+            name: sample(addr, hello)
+            for name, addr in endpoints.items()
+            if name != "direct"
+        }
         (folder / "result.json").write_text(json.dumps(result, indent=2) + "\n")
-        print(
-            json.dumps(
-                {
-                    k: v
-                    for k, v in result.items()
-                    if k not in ("read_chunks", "record_shapes")
-                },
-                indent=2,
-            )
-        )
+        return result
     finally:
         if capture:
             capture.close()
@@ -308,3 +376,32 @@ if __name__ == "__main__":
             stop(c)
         for log in logs:
             log.close()
+
+
+if __name__ == "__main__":
+    p = argparse.ArgumentParser()
+    p.add_argument("--out", default=".build/probes")
+    p.add_argument("--profiles", default="openssl-ecdsa,openssl-rsa,go-tls")
+    p.add_argument("--reps", type=int, default=2)
+    a = p.parse_args()
+    folder = ROOT / a.out
+    if folder.exists():
+        raise SystemExit("use a fresh output directory")
+    results = {}
+    for profile in a.profiles.split(","):
+        if profile not in ("openssl-ecdsa", "openssl-rsa", "go-tls"):
+            p.error("unknown reference profile")
+        result = run_profile(folder / profile, profile, a.reps)
+        results[profile] = result
+        print(
+            json.dumps(
+                {
+                    "profile": profile,
+                    "normal_tls_equal": result["normal_tls"]["equal"],
+                    "valid_session_returncode": result["valid_session"]["returncode"],
+                    "delayed_http": result["delayed_http"],
+                }
+            ),
+            flush=True,
+        )
+    (folder / "result.json").write_text(json.dumps(results, indent=2) + "\n")

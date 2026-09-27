@@ -1,6 +1,8 @@
-# Veil v0
+# Veil v0.1
 
 Go TCP 代理，提供 SOCKS5 CONNECT 客户端、TLS 1.3/REALITY 服务端、业务鉴权、连接复用与双向半关闭。支持有界连接池、背压、取消和超时。当前为实验原型，不提供 TUN、UDP 或移动端 UI；流量特征与回落行为尚未通过抗识别验收。
+
+v0.1 将首次 AUTH 与 OPEN 同批发送，目标连接成功后返回 OPEN_OK；满 DATA 帧连同帧头为 128 KiB。客户端和服务端需要同时升级，旧版鉴权会被拒绝。
 
 ## 构建与运行
 
@@ -52,6 +54,7 @@ python3 scripts/demo.py
 ```sh
 make optimized
 python3 scripts/build.py native --package ./cmd/benchpeer --output .build/benchpeer
+python3 scripts/build.py native --package ./cmd/probepeer --output .build/probepeer
 python3 scripts/bench_build.py native
 python3 scripts/bench_build.py batch
 python3 scripts/bench_build.py openssl
@@ -59,15 +62,25 @@ python3 scripts/benchmark.py --out .build/bench-local --reps 7 --gib 3
 python3 scripts/probe.py --out .build/probes-local
 ```
 
-工具仅连接自有回环端点。基准依赖 Linux `perf`、`taskset` 和本机 `sudo -n perf` 权限；服务端固定 CPU 14，参考站点/目标 16–17，负载 18–21，客户端 22–25，其他机器需调整亲和性。AnyTLS 对照使用固定版本 sing-box，其优化组应用同一 TLS 补丁。
+上述工具仅连接自有回环端点。基准依赖 Linux `perf`、`taskset` 和本机 `sudo -n perf` 权限；服务端固定 CPU 14，参考站点/目标 16–17，负载 18–21，客户端 22–25，其他机器需调整亲和性。AnyTLS 对照使用固定版本 sing-box，其优化组应用同一 TLS 补丁。
 
 `benchmark.py --modes E --rounds 10000` 测热连接延迟；`--modes C --connections 1 --rounds 1` 测冷连接。输出目录不可覆盖已有原始结果；测量数据不纳入版本控制。
+
+重建前可将旧二进制保存到 `.build/previous/`，用 `veil-opt-reality-previous` 变体与候选同时测试；对应目录必须包含 `veil-openssl` 和 `veil-batch`。测量元数据记录两套二进制摘要。
+
+`probe.py` 使用 OpenSSL ECDSA、OpenSSL RSA 和 Go TLS 三类参考端点，比较直连、裸上游 REALITY 与 Veil。正常 HTTPS、延迟请求、异常输入、重放、参考站点故障和 TLS 记录形态分别记录。为防止上游未传播 TCP EOF 阻塞单线程参考站点，每次裸 REALITY 异常探测后重置参考进程。
+
+当前 REALITY 回落仍受 `handshake_seconds` 的绝对时限约束，延迟或长时间 HTTPS 会话可能被提前关闭；满数据帧对齐也不消除短读和控制帧的长度特征。这些是已确认的验证边界。
 
 20 ms RTT 模拟需 `iproute2` 和一次性网络命名空间。将 `USER` 替换为具有本机测试权限的普通用户：
 
 ```sh
 sudo unshare -n -- sh -c 'ip link set lo up && exec runuser -u USER -- env VEIL_ISOLATED_NETNS=1 python3 scripts/delayed_benchmark.py'
 ```
+
+`delayed_benchmark.py` 支持 `--out`、`--variants`、`--modes E,C`、`--delay-ms 10` 和 `--loss-percent 0.1`，并记录命名空间内 TCP 重传与 qdisc 丢弃计数。
+
+`network_smoke.py` 提供两台自有主机上的低流量 `server` / `client` 测试角色，验证半关闭完整性、复用、四连接回显、目标失败和取消，不测带宽上限。将脚本、待测二进制、`-keygen` 输出的测试用 `config.json` 与 `cert.pem`/`key.pem` 放入专用临时目录；客户端只需公钥、业务凭据与证书。参数见 `--help`。服务端在标准输入关闭时停止，两个角色均清理自己启动的进程；运行后删除两端临时目录。
 
 ## 许可
 

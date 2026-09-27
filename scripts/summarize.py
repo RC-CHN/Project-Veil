@@ -38,6 +38,7 @@ for (variant, mode, n), rs in sorted(groups.items()):
         "anytls-native-tls",
         "anytls-native-reality",
         "anytls-opt-reality",
+        "veil-opt-reality-previous",
         "veil-native-reality",
     ]:
         base = groups.get((name, mode, n))
