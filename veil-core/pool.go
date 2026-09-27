@@ -1,4 +1,4 @@
-package proxy
+package core
 
 import (
 	"context"
@@ -22,12 +22,12 @@ type pool struct {
 	all       map[*session]bool
 	total     int
 	closed    bool
-	cfg       Config
+	cfg       ClientConfig
 	key       []byte
 	handshake transport.Handshake
 }
 
-func newPool(cfg Config, key []byte, h transport.Handshake) *pool {
+func newPool(cfg ClientConfig, key []byte, h transport.Handshake) *pool {
 	return &pool{cfg: cfg, key: key, handshake: h, all: make(map[*session]bool)}
 }
 func (p *pool) drop(s *session) {
@@ -50,7 +50,7 @@ func (p *pool) get(ctx context.Context) (*session, error) {
 		s := p.idle[last]
 		p.idle[last] = nil
 		p.idle = p.idle[:last]
-		if time.Since(s.at) < sec(p.cfg.PoolSeconds) {
+		if time.Since(s.at) < p.cfg.PoolTimeout {
 			p.mu.Unlock()
 			return s, nil
 		}
@@ -80,15 +80,15 @@ func (p *pool) get(ctx context.Context) (*session, error) {
 	return s, nil
 }
 func (p *pool) dial(ctx context.Context) (*session, error) {
-	ctx, cancel := context.WithTimeout(ctx, sec(p.cfg.HandshakeSeconds))
+	ctx, cancel := context.WithTimeout(ctx, p.cfg.HandshakeTimeout)
 	defer cancel()
-	raw, err := (&net.Dialer{Timeout: sec(p.cfg.DialSeconds)}).DialContext(ctx, "tcp", p.cfg.Server)
+	raw, err := p.cfg.DialContext(ctx, "tcp", p.cfg.Server)
 	if err != nil {
 		return nil, err
 	}
 	stop := context.AfterFunc(ctx, func() { raw.Close() })
 	defer stop()
-	raw.SetDeadline(time.Now().Add(sec(p.cfg.HandshakeSeconds)))
+	raw.SetDeadline(time.Now().Add(p.cfg.HandshakeTimeout))
 	c, err := p.handshake(ctx, raw)
 	if err != nil {
 		raw.Close()
@@ -131,7 +131,7 @@ func (p *pool) expire() {
 	var expired []*session
 	keep := p.idle[:0]
 	for _, s := range p.idle {
-		if time.Since(s.at) >= sec(p.cfg.PoolSeconds) {
+		if time.Since(s.at) >= p.cfg.PoolTimeout {
 			expired = append(expired, s)
 		} else {
 			keep = append(keep, s)

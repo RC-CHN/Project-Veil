@@ -4,12 +4,14 @@ import (
 	"errors"
 	"time"
 	"veil/internal/transport"
+	"veil/internal/wire"
 )
 
 type Config struct {
 	Role             string             `json:"role"`
 	Listen           string             `json:"listen"`
 	Server           string             `json:"server"`
+	Target           string             `json:"target,omitempty"`
 	Secret           string             `json:"secret"`
 	TLS              transport.Settings `json:"tls"`
 	MaxConnections   int                `json:"max_connections"`
@@ -59,6 +61,14 @@ func (c *Config) Defaults() error {
 	}
 	if c.Role == "client" && c.Server == "" {
 		return errors.New("server address required")
+	}
+	if c.Target != "" {
+		if c.Role != "client" {
+			return errors.New("target is only valid for client forwarding")
+		}
+		if _, err := wire.EncodeAddress(c.Target); err != nil {
+			return err
+		}
 	}
 	_, err := transport.DecodeKey(c.Secret)
 	return err

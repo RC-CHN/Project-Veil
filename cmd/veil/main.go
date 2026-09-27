@@ -64,6 +64,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	defer svc.Close()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	ln, err := net.Listen("tcp", cfg.Listen)

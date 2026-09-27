@@ -400,9 +400,7 @@ func TestOpenFailureDoesNotReportSOCKSSuccess(t *testing.T) {
 		c.Close()
 		t.Fatal("SOCKS success before target connected")
 	}
-	client.pool.mu.Lock()
-	idle := len(client.pool.idle)
-	client.pool.mu.Unlock()
+	idle := client.client.PoolStats().Idle
 	if idle != 0 {
 		t.Fatal("failed OPEN returned to idle pool")
 	}
@@ -441,17 +439,13 @@ func TestPoolExpiry(t *testing.T) {
 	c.Close()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		client.pool.mu.Lock()
-		n := client.pool.total
-		client.pool.mu.Unlock()
+		n := client.client.PoolStats().Total
 		if n == 0 && client.Stats.Completed.Load() == 1 {
 			break
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	client.pool.mu.Lock()
-	n := client.pool.total
-	client.pool.mu.Unlock()
+	n := client.client.PoolStats().Total
 	if n != 0 {
 		t.Fatal("idle connection not reclaimed")
 	}
@@ -555,3 +549,5 @@ func TestCancelActiveService(t *testing.T) {
 		t.Fatal("shutdown left active transfer running")
 	}
 }
+
+func writeAll(w io.Writer, b []byte) error { _, err := io.Copy(w, bytes.NewReader(b)); return err }

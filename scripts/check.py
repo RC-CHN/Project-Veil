@@ -22,7 +22,7 @@ commands = [
         *(["-race"] if a.race else []),
         "-count=1",
         "-timeout=120s",
-        "./internal/...",
+        "./...",
     ]
 ]
 if a.mode == "native":

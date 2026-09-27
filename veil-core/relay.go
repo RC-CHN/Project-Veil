@@ -1,4 +1,4 @@
-package proxy
+package core
 
 import (
 	"context"
@@ -10,6 +10,10 @@ import (
 	"time"
 	"veil/internal/wire"
 )
+
+// A relay writer exclusively owns its scratch buffer until it exits. Pooling
+// avoids allocating 128 KiB for every short stream; GC can reclaim idle buffers.
+var sendBuffers = sync.Pool{New: func() any { return new([wire.MaxData + wire.HeaderSize]byte) }}
 
 func writeAll(w io.Writer, b []byte) error {
 	for len(b) > 0 {
@@ -45,7 +49,9 @@ func relay(ctx context.Context, local, remote net.Conn, r *wire.Reader, idle tim
 	workers.Add(2)
 	go func() {
 		defer workers.Done()
-		b := make([]byte, wire.MaxData+wire.HeaderSize)
+		buffer := sendBuffers.Get().(*[wire.MaxData + wire.HeaderSize]byte)
+		defer sendBuffers.Put(buffer)
+		b := buffer[:]
 		for {
 			n, err := local.Read(b[wire.HeaderSize:])
 			if n > 0 {
