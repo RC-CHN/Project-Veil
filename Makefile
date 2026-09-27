@@ -16,6 +16,14 @@ race:
 vet:
 	go vet ./...
 
-.PHONY: clean
+.PHONY: optimized demo clean
+optimized:
+	python3 scripts/build.py native
+	python3 scripts/build.py batch
+	python3 scripts/build.py openssl
+
+demo: optimized
+	python3 scripts/demo.py
+
 clean:
 	rm -rf -- .build

@@ -1,0 +1,148 @@
+//go:build veil_openssl && cgo && linux
+
+package tls
+
+/*
+#cgo pkg-config: openssl
+#include <openssl/evp.h>
+static EVP_CIPHER_CTX *veil_ctx(const unsigned char *key,int size,int enc){
+ const EVP_CIPHER *cipher=size==16?EVP_aes_128_gcm():EVP_aes_256_gcm();
+ EVP_CIPHER_CTX *ctx=EVP_CIPHER_CTX_new();if(!ctx)return NULL;
+ if(EVP_CipherInit_ex(ctx,cipher,NULL,key,NULL,enc)!=1){EVP_CIPHER_CTX_free(ctx);return NULL;}return ctx;
+}
+static int veil_seal(EVP_CIPHER_CTX *ctx,unsigned char *out,const unsigned char *in,int n,const unsigned char *nonce,const unsigned char *aad,int alen){
+ int written=0,final=0;
+ if(EVP_EncryptInit_ex(ctx,NULL,NULL,NULL,nonce)!=1)return 0;
+ if(alen && EVP_EncryptUpdate(ctx,NULL,&written,aad,alen)!=1)return 0;
+ if(EVP_EncryptUpdate(ctx,out,&written,in,n)!=1 || written!=n)return 0;
+ if(EVP_EncryptFinal_ex(ctx,out+written,&final)!=1 || final!=0)return 0;
+ return EVP_CIPHER_CTX_ctrl(ctx,EVP_CTRL_GCM_GET_TAG,16,out+n);
+}
+static int veil_open(EVP_CIPHER_CTX *ctx,unsigned char *out,const unsigned char *in,int n,const unsigned char *nonce,const unsigned char *aad,int alen){
+ int written=0,final=0;
+ if(EVP_DecryptInit_ex(ctx,NULL,NULL,NULL,nonce)!=1)return 0;
+ if(alen && EVP_DecryptUpdate(ctx,NULL,&written,aad,alen)!=1)return 0;
+ if(EVP_CIPHER_CTX_ctrl(ctx,EVP_CTRL_GCM_SET_TAG,16,(void *)(in+n))!=1)return 0;
+ if(EVP_DecryptUpdate(ctx,out,&written,in,n)!=1 || written!=n)return 0;
+ return EVP_DecryptFinal_ex(ctx,out+written,&final)==1 && final==0;
+}
+*/
+import "C"
+import (
+	"crypto/cipher"
+	"errors"
+	"runtime"
+	"sync"
+	"unsafe"
+)
+
+type veilOpenSSL struct {
+	mu       sync.Mutex
+	enc, dec *C.EVP_CIPHER_CTX
+}
+
+func veilNewGCM(key []byte) cipher.AEAD {
+	if len(key) != 16 && len(key) != 32 {
+		panic("Veil: AES key size")
+	}
+	g := &veilOpenSSL{enc: C.veil_ctx(veilPtr(key), C.int(len(key)), 1), dec: C.veil_ctx(veilPtr(key), C.int(len(key)), 0)}
+	if g.enc == nil || g.dec == nil {
+		g.Close()
+		panic("Veil: EVP allocation failed")
+	}
+	runtime.SetFinalizer(g, func(g *veilOpenSSL) { g.Close() })
+	return g
+}
+func (g *veilOpenSSL) Close() error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	C.EVP_CIPHER_CTX_free(g.enc)
+	C.EVP_CIPHER_CTX_free(g.dec)
+	g.enc = nil
+	g.dec = nil
+	return nil
+}
+func (*veilOpenSSL) NonceSize() int { return 12 }
+func (*veilOpenSSL) Overhead() int  { return 16 }
+func veilPtr(b []byte) *C.uchar {
+	if len(b) == 0 {
+		return nil
+	}
+	return (*C.uchar)(unsafe.Pointer(&b[0]))
+}
+func veilOverlap(a, b []byte) bool {
+	if len(a) == 0 || len(b) == 0 {
+		return false
+	}
+	x, y := uintptr(unsafe.Pointer(&a[0])), uintptr(unsafe.Pointer(&b[0]))
+	return x <= y+uintptr(len(b)-1) && y <= x+uintptr(len(a)-1)
+}
+func veilAppend(dst []byte, n int) (head, tail []byte) {
+	total := len(dst) + n
+	if total < len(dst) {
+		panic("Veil: overflow")
+	}
+	if total <= cap(dst) {
+		head = dst[:total]
+	} else {
+		head = make([]byte, total)
+		copy(head, dst)
+	}
+	return head, head[len(dst):]
+}
+func veilCheck(nonce, data, aad []byte) {
+	if len(nonce) != 12 || len(data) > 1<<20 || len(aad) > 1<<20 {
+		panic("Veil: invalid AEAD input")
+	}
+}
+func (g *veilOpenSSL) Seal(dst, nonce, p, aad []byte) []byte {
+	veilCheck(nonce, p, aad)
+	head, out := veilAppend(dst, len(p)+16)
+	if veilOverlap(out, p) && (len(p) == 0 || &out[0] != &p[0]) || veilOverlap(out, aad) {
+		panic("Veil: invalid overlap")
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.enc == nil {
+		panic("Veil: closed AEAD")
+	}
+	ok := C.veil_seal(g.enc, veilPtr(out), veilPtr(p), C.int(len(p)), veilPtr(nonce), veilPtr(aad), C.int(len(aad)))
+	runtime.KeepAlive(g)
+	if ok != 1 {
+		panic("Veil: encryption failed")
+	}
+	return head
+}
+func (g *veilOpenSSL) Open(dst, nonce, p, aad []byte) ([]byte, error) {
+	veilCheck(nonce, p, aad)
+	bad := errors.New("cipher: message authentication failed")
+	if len(p) < 16 {
+		return nil, bad
+	}
+	n := len(p) - 16
+	head, out := veilAppend(dst, n)
+	if veilOverlap(out, p) && (len(out) == 0 || &out[0] != &p[0]) || veilOverlap(out, aad) {
+		panic("Veil: invalid overlap")
+	}
+	target := out
+	if n == 0 {
+		target = make([]byte, 1)
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.dec == nil {
+		for i := range out {
+			out[i] = 0
+		}
+		return nil, bad
+	}
+	ok := C.veil_open(g.dec, veilPtr(target), veilPtr(p), C.int(n), veilPtr(nonce), veilPtr(aad), C.int(len(aad)))
+	runtime.KeepAlive(g)
+	if ok != 1 {
+		for i := range out {
+			out[i] = 0
+		}
+		return nil, bad
+	}
+	return head, nil
+}

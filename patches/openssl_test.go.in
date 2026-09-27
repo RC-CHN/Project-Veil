@@ -1,0 +1,107 @@
+//go:build veil_openssl && cgo && linux
+
+package tls
+
+import (
+	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
+	"testing"
+)
+
+func TestVeilOpenSSL(t *testing.T) {
+	for _, size := range []int{16, 32} {
+		key := bytes.Repeat([]byte{7}, size)
+		block, _ := aes.NewCipher(key)
+		ref, _ := cipher.NewGCM(block)
+		g := veilNewGCM(key).(*veilOpenSSL)
+		for _, n := range []int{0, 1, 15, 16, 17, 64, 16384, 32768} {
+			p := bytes.Repeat([]byte{9}, n)
+			nonce := bytes.Repeat([]byte{3}, 12)
+			aad := []byte("header")
+			want := ref.Seal(nil, nonce, p, aad)
+			got := g.Seal(nil, nonce, p, aad)
+			if !bytes.Equal(got, want) {
+				t.Fatalf("ciphertext mismatch key=%d size=%d", size, n)
+			}
+			out, e := g.Open(nil, nonce, got, aad)
+			if e != nil || !bytes.Equal(p, out) {
+				t.Fatal("roundtrip")
+			}
+			inplace := append(make([]byte, 0, n+16), p...)
+			inplace = g.Seal(inplace[:0], nonce, inplace, aad)
+			if !bytes.Equal(inplace, want) {
+				t.Fatal("inplace seal")
+			}
+			out, e = g.Open(inplace[:0], nonce, inplace, aad)
+			if e != nil || !bytes.Equal(out, p) {
+				t.Fatal("inplace open")
+			}
+			prefix := []byte{1, 2}
+			out = g.Seal(prefix, nonce, p, aad)
+			if !bytes.Equal(out[2:], want) || !bytes.Equal(out[:2], prefix) {
+				t.Fatal("prefix")
+			}
+			for _, which := range []string{"tag", "nonce", "aad"} {
+				ct := append([]byte(nil), want...)
+				nn := append([]byte(nil), nonce...)
+				aa := append([]byte(nil), aad...)
+				switch which {
+				case "tag":
+					ct[len(ct)-1] ^= 1
+				case "nonce":
+					nn[0] ^= 1
+				case "aad":
+					aa[0] ^= 1
+				}
+				dst := bytes.Repeat([]byte{255}, n)
+				if _, e = g.Open(dst[:0], nn, ct, aa); e == nil {
+					t.Fatal("authentication accepted")
+				}
+				if !bytes.Equal(dst, make([]byte, n)) {
+					t.Fatal("untrusted output retained")
+				}
+				if _, e = g.Open(nil, nonce, want, aad); e != nil {
+					t.Fatal("context unusable after failure")
+				}
+			}
+		}
+		g.Close()
+		g.Close()
+		if _, e := g.Open(nil, make([]byte, 12), make([]byte, 16), nil); e == nil {
+			t.Fatal("closed context used")
+		}
+	}
+}
+
+func TestVeilOpenSSLOverlapAndLifetime(t *testing.T) {
+	g := veilNewGCM(make([]byte, 16)).(*veilOpenSSL)
+	nonce := make([]byte, 12)
+	for _, operation := range []func(){
+		func() { b := make([]byte, 80); g.Seal(b[1:1], nonce, b[:32], nil) },
+		func() { b := make([]byte, 80); g.Open(b[1:1], nonce, b[:48], nil) },
+		func() { g.Seal(nil, make([]byte, 11), nil, nil) },
+	} {
+		func() {
+			defer func() {
+				if recover() == nil {
+					t.Error("invalid AEAD input accepted")
+				}
+			}()
+			operation()
+		}()
+	}
+	g.Close()
+	c := veilTestConn(new(veilMemoryConn))
+	old := c.in.cipher.(*xorNonceAEAD).aead.(*veilOpenSSL)
+	c.in.setTrafficSecret(cipherSuiteTLS13ByID(TLS_AES_128_GCM_SHA256), QUICEncryptionLevelApplication, make([]byte, 32))
+	if old.enc != nil || old.dec != nil {
+		t.Fatal("old traffic key context not released")
+	}
+	current := c.in.cipher.(*xorNonceAEAD).aead.(*veilOpenSSL)
+	out := c.out.cipher.(*xorNonceAEAD).aead.(*veilOpenSSL)
+	c.Close()
+	if current.enc != nil || current.dec != nil || out.enc != nil || out.dec != nil {
+		t.Fatal("Close retained EVP contexts")
+	}
+}

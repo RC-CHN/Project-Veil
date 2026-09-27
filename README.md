@@ -29,6 +29,24 @@ make vet
 
 TLS/REALITY 集成测试使用本机 `openssl s_server`，只连接自有回环端点。
 
+## 优化构建
+
+需要 Python 3。OpenSSL 后端另需 C 编译器、`pkg-config` 和 OpenSSL 开发库，验证版本为 3.5.5。
+
+```sh
+make optimized
+python3 scripts/check.py openssl --race --stdlib
+python3 scripts/demo.py
+.build/veil-openssl -config server.json
+.build/veil-batch -config client.json
+```
+
+`make optimized` 生成 `veil-native`、`veil-batch` 和 `veil-openssl`，均位于 `.build/`。推荐客户端使用批量记录后端，Linux 服务端使用 OpenSSL 后端；原生后端仍可独立使用。
+
+构建器校验固定 Go/uTLS 源码摘要，通过 build overlay 和本地模块副本应用补丁，不修改系统工具链或下载缓存。版本不匹配时先审查补丁并执行回归。演示使用自有 HTTPS 端点验证完整 SOCKS5/REALITY 路径。
+
+生成代码、依赖、临时凭据、日志和二进制集中在 `.build/`，由 `make clean` 删除。
+
 ## 许可
 
 本项目使用 GPL-3.0-or-later；第三方代码来源见 [THIRD_PARTY.md](THIRD_PARTY.md) 和 [LICENSE](LICENSE)。
