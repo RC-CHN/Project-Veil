@@ -27,16 +27,53 @@ const (
 	Data
 	Fin
 	Done
-	Cancel
 )
 
 var ErrProtocol = errors.New("veil: invalid frame or state")
+
+// OPEN_ERROR already carries one byte. Codes refine authenticated failure
+// reporting without changing framing; old peers still reject failed opens.
+type OpenFailure byte
+
+const (
+	OpenFailed OpenFailure = iota + 1
+	OpenDNS
+	OpenRefused
+	OpenTimeout
+)
+
+func (e OpenFailure) Error() string {
+	switch e {
+	case OpenDNS:
+		return "veil: target DNS lookup failed"
+	case OpenRefused:
+		return "veil: target connection refused"
+	case OpenTimeout:
+		return "veil: target dial timed out"
+	default:
+		return "veil: target dial failed"
+	}
+}
+
+func ReadOpenResult(r *Reader) error {
+	t, p, err := r.Read()
+	if err != nil {
+		return err
+	}
+	if t == OpenOK {
+		return nil
+	}
+	if t == OpenError {
+		return OpenFailure(p[0])
+	}
+	return ErrProtocol
+}
 
 func valid(t byte, n int) bool {
 	switch t {
 	case Auth:
 		return n == 49
-	case OpenOK, Fin, Done, Cancel:
+	case OpenOK, Fin, Done:
 		return n == 0
 	case Open:
 		return n >= 4 && n <= 259
@@ -52,26 +89,37 @@ func valid(t byte, n int) bool {
 // Reader owns its returned slice until the next Read. Limits are checked before
 // allocation. Idle connections retain only a small control buffer.
 type Reader struct {
-	R   io.Reader
-	buf []byte
+	R      io.Reader
+	buf    []byte
+	header [HeaderSize]byte
 }
 
 func (r *Reader) Read() (byte, []byte, error) {
-	var h [4]byte
-	if _, err := io.ReadFull(r.R, h[:]); err != nil {
+	t, n, err := r.ReadHeader()
+	if err != nil {
 		return 0, nil, err
-	}
-	n := int(h[1])<<16 | int(h[2])<<8 | int(h[3])
-	if !valid(h[0], n) {
-		return 0, nil, ErrProtocol
 	}
 	if cap(r.buf) < n {
 		r.buf = make([]byte, n)
 	} else {
 		r.buf = r.buf[:n]
 	}
-	_, err := io.ReadFull(r.R, r.buf)
-	return h[0], r.buf, err
+	_, err = io.ReadFull(r.R, r.buf)
+	return t, r.buf, err
+}
+
+// ReadHeader validates the length before a caller allocates or streams payload.
+// The caller must consume exactly n bytes before reading another header.
+func (r *Reader) ReadHeader() (t byte, n int, err error) {
+	h := r.header[:]
+	if _, err := io.ReadFull(r.R, h[:]); err != nil {
+		return 0, 0, err
+	}
+	n = int(h[1])<<16 | int(h[2])<<8 | int(h[3])
+	if !valid(h[0], n) {
+		return 0, 0, ErrProtocol
+	}
+	return h[0], n, nil
 }
 func (r *Reader) Release() { r.buf = nil }
 

@@ -8,7 +8,7 @@ import (
 )
 
 func TestBoundsAndTruncation(t *testing.T) {
-	for _, h := range [][]byte{{Data, 2, 0, 1}, {Auth, 0, 0, 48}, {2, 0, 0, 0}, {Fin, 0, 0, 1}, {255, 0, 0, 0}, {Data, 0, 0, 0}} {
+	for _, h := range [][]byte{{Data, 2, 0, 1}, {Auth, 0, 0, 48}, {2, 0, 0, 0}, {9, 0, 0, 0}, {Fin, 0, 0, 1}, {255, 0, 0, 0}, {Data, 0, 0, 0}} {
 		r := Reader{R: bytes.NewReader(h)}
 		if _, _, err := r.Read(); !errors.Is(err, ErrProtocol) {
 			t.Fatalf("header %x: %v", h, err)

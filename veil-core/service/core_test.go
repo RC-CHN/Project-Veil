@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -47,6 +48,48 @@ func newCoreClient(t *testing.T, cfg core.ClientConfig) *core.Client {
 	}
 	t.Cleanup(func() { client.Close() })
 	return client
+}
+
+func TestCoreReuseAfterQuietInterval(t *testing.T) {
+	for _, mode := range []string{"tls", "reality"} {
+		for _, closed := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/closed=%v", mode, closed), func(t *testing.T) {
+				st, ct := settings(t, mode)
+				server, err := core.NewServer(core.ServerConfig{Config: core.Config{Secret: testKey, TLS: st}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				accepted := make(chan net.Conn, 4)
+				addr, _ := startHandler(t, func(ctx context.Context, c net.Conn) error { accepted <- c; return server.Handle(ctx, c) })
+				client := newCoreClient(t, core.ClientConfig{Config: core.Config{Secret: testKey, TLS: ct, MaxConnections: 1}, Server: addr})
+				dst := target(t, func(c net.Conn) { p, _ := io.ReadAll(c); writeAll(c, p) })
+				handler, _ := inbound.Forward(client, dst)
+				entry, _ := startHandler(t, handler)
+				for i := 0; i < 2; i++ {
+					c, err := net.Dial("tcp", entry)
+					if err != nil {
+						t.Fatal(err)
+					}
+					halfEchoPayload(t, c, []byte("idle reuse"))
+					await(t, func() bool { return client.PoolStats().Idle == 1 })
+					if i == 0 {
+						raw := <-accepted
+						if closed {
+							raw.Close()
+						}
+						time.Sleep(1100 * time.Millisecond)
+					}
+				}
+				want := uint64(1)
+				if closed {
+					want = 2
+				}
+				if server.Stats.Authenticated.Load() != want {
+					t.Fatal("unexpected redial or poisoned TLS read", server.Stats.Authenticated.Load())
+				}
+			})
+		}
+	}
 }
 
 func await(t *testing.T, condition func() bool) {

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net"
 	"sync"
+	"sync/atomic"
+	"veil/core"
 )
 
 // Runtime serializes application lifecycle operations. Its zero value is ready
@@ -16,12 +18,13 @@ type Runtime struct {
 }
 
 type running struct {
-	svc    *Service
-	listen string
-	role   string
-	cancel context.CancelFunc
-	done   chan struct{}
-	err    error // published by closing done
+	svc                 *Service
+	listen              string
+	role                string
+	cancel              context.CancelFunc
+	done                chan struct{}
+	err                 error // published by closing done
+	lastConnectionError atomic.Pointer[string]
 }
 
 type Counters struct {
@@ -33,11 +36,12 @@ type Counters struct {
 }
 
 type Snapshot struct {
-	State  string   `json:"state"`
-	Listen string   `json:"listen,omitempty"`
-	Role   string   `json:"role,omitempty"`
-	Stats  Counters `json:"stats"`
-	Error  string   `json:"error,omitempty"`
+	State               string   `json:"state"`
+	Listen              string   `json:"listen,omitempty"`
+	Role                string   `json:"role,omitempty"`
+	Stats               Counters `json:"stats"`
+	Error               string   `json:"error,omitempty"`
+	LastConnectionError string   `json:"last_connection_error,omitempty"`
 }
 
 func (r *Runtime) active() bool {
@@ -77,6 +81,13 @@ func (r *Runtime) start(s *Service) error {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	x := &running{svc: s, listen: ln.Addr().String(), role: s.cfg.Role, cancel: cancel, done: make(chan struct{})}
+	s.OnError = func(err error) {
+		var op *core.OpError
+		if errors.As(err, &op) {
+			message := err.Error()
+			x.lastConnectionError.Store(&message)
+		}
+	}
 	r.run = x
 	go func() {
 		defer close(x.done)
@@ -136,6 +147,9 @@ func (r *Runtime) Snapshot() Snapshot {
 			s.Error = x.err.Error()
 		}
 		c := x.svc.Stats
+		if message := x.lastConnectionError.Load(); message != nil {
+			s.LastConnectionError = *message
+		}
 		s.Stats = Counters{c.Accepted.Load(), c.Rejected.Load(), c.Completed.Load(), c.Failed.Load(), c.Authenticated.Load()}
 	}
 	return s

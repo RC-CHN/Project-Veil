@@ -85,7 +85,7 @@ func (c *Client) Open(ctx context.Context, address string) (*Stream, error) {
 	if err != nil {
 		stopClient()
 		cancel()
-		return nil, err
+		return nil, opError("acquire tunnel", err)
 	}
 	s := &Stream{client: c, channel: channel, ctx: ctx, cancel: cancel, stopClient: stopClient, busy: true}
 	// Install under the lock so an already-cancelled context cannot race setup.
@@ -98,7 +98,7 @@ func (c *Client) Open(ctx context.Context, address string) (*Stream, error) {
 		err = wire.WriteOpen(channel, channel.auth, payload)
 	}
 	if err == nil {
-		err = wire.Expect(&channel.r, wire.OpenOK)
+		err = wire.ReadOpenResult(&channel.r)
 	}
 	if err == nil {
 		channel.auth = nil
@@ -112,7 +112,7 @@ func (c *Client) Open(ctx context.Context, address string) (*Stream, error) {
 	}
 	if err != nil {
 		s.finishLocked(false)
-		return nil, err
+		return nil, opError("open target", err)
 	}
 	return s, nil
 }

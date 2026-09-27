@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"os"
 	"testing"
 	"time"
 )
@@ -13,14 +14,39 @@ type veilMemoryConn struct {
 	input, output bytes.Buffer
 	reads, writes int
 	fail          error
+	readErr       error
 }
 
 func (c *veilMemoryConn) Read(p []byte) (int, error) {
 	c.reads++
 	if c.input.Len() == 0 {
+		if c.readErr != nil { return 0, c.readErr }
 		return 0, io.ErrNoProgress
 	}
 	return c.input.Read(p)
+}
+
+func TestVeilPartialRecordTimeoutAndBufferRelease(t *testing.T) {
+	raw := new(veilMemoryConn)
+	w := veilTestConn(raw)
+	defer w.veilReleaseCrypto()
+	plain := bytes.Repeat([]byte{71}, 2*maxPlaintext)
+	w.Write(plain)
+	ciphertext := append([]byte(nil),raw.output.Bytes()...)
+	rr := &veilMemoryConn{readErr:os.ErrDeadlineExceeded}
+	rr.input.Write(ciphertext[:len(ciphertext)-7])
+	r := veilTestConn(rr)
+	defer r.veilReleaseCrypto()
+	b := make([]byte,len(plain))
+	n,err := r.Read(b)
+	if err != nil || n != maxPlaintext { t.Fatal(n,err) }
+	r.VeilReleaseBuffers()
+	if r.rawInput.Len()==0 { t.Fatal("discarded partial next record") }
+	if _,err:=r.Read(b[n:]); !errors.Is(err,os.ErrDeadlineExceeded) || r.in.err!=nil {t.Fatal("temporary read poisoned TLS",err,r.in.err)}
+	rr.input.Write(ciphertext[len(ciphertext)-7:])
+	if _,err:=io.ReadFull(r,b[n:]);err!=nil || !bytes.Equal(b,plain) {t.Fatal("timeout resume changed plaintext",err)}
+	r.VeilReleaseBuffers()
+	if r.rawInput.Cap()!=0 {t.Fatal("idle buffer retained")}
 }
 func (c *veilMemoryConn) Write(p []byte) (int, error) {
 	c.writes++
@@ -50,7 +76,7 @@ func TestVeilBatchAndDrain(t *testing.T) {
 	raw := new(veilMemoryConn)
 	w := veilTestConn(raw)
 	defer w.veilReleaseCrypto()
-	plain := bytes.Repeat([]byte{31}, 4*maxPlaintext)
+	plain := bytes.Repeat([]byte{31}, 8*maxPlaintext)
 	if n, e := w.Write(plain); e != nil || n != len(plain) {
 		t.Fatalf("write %d %v", n, e)
 	}
@@ -69,7 +95,7 @@ func TestVeilBatchAndDrain(t *testing.T) {
 	if rr.reads != 1 {
 		t.Fatalf("extra read: %d", rr.reads)
 	}
-	if r.rawInput.Cap() > 128*1024 {
+	if r.rawInput.Cap() > veilBatchBytes {
 		t.Fatalf("unbounded input buffer %d", r.rawInput.Cap())
 	}
 	r.VeilReleaseBuffers()

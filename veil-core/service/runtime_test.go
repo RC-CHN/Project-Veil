@@ -102,6 +102,37 @@ func TestRuntimeConcurrentClose(t *testing.T) {
 	}
 }
 
+func TestRuntimeReportsConnectionFailure(t *testing.T) {
+	st, ct := settings(t, "tls")
+	var server, client Runtime
+	defer server.Close()
+	defer client.Close()
+	if err := server.Start(Config{Role: "server", Listen: "127.0.0.1:0", Secret: testKey, TLS: st}); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.Start(Config{Role: "client", Listen: "127.0.0.1:0", Server: server.Snapshot().Listen, Secret: testKey, TLS: ct}); err != nil {
+		t.Fatal(err)
+	}
+	unavailable, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst := unavailable.Addr().String()
+	unavailable.Close()
+	if c, err := socksDial(client.Snapshot().Listen, dst); err == nil {
+		c.Close()
+		t.Fatal("failed target accepted")
+	}
+	await(t, func() bool {
+		return strings.Contains(client.Snapshot().LastConnectionError, "target connection refused") && strings.Contains(server.Snapshot().LastConnectionError, "target dial")
+	})
+	client.Stop()
+	server.Stop() // callback must not acquire Runtime's lifecycle lock
+	if client.Snapshot().LastConnectionError == "" {
+		t.Fatal("failure lost at stop")
+	}
+}
+
 func TestStrictConfig(t *testing.T) {
 	_, ct := settings(t, "tls")
 	b, _ := json.Marshal(Config{Role: "client", Secret: testKey, TLS: ct, Server: "127.0.0.1:9"})

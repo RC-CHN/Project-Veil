@@ -88,8 +88,8 @@ func (s *Server) Handle(ctx context.Context, raw net.Conn) error {
 		target, err := s.cfg.DialContext(ctx, "tcp", address)
 		if err != nil {
 			c.SetWriteDeadline(time.Now().Add(s.cfg.HandshakeTimeout))
-			wire.Write(c, wire.OpenError, []byte{1})
-			return err
+			wire.Write(c, wire.OpenError, []byte{byte(targetFailure(err))})
+			return opError("target dial", err)
 		}
 		c.SetWriteDeadline(time.Now().Add(s.cfg.HandshakeTimeout))
 		if err = wire.Write(c, wire.OpenOK, nil); err != nil {

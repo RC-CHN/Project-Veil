@@ -52,6 +52,8 @@ python3 scripts/cross_check.py
 
 运行中保存不同配置后，`restart_required` 为 true。`restart` 后若新端口被占用，实例保持 stopped 并报告错误；不宣称端口切换无缝或自动回滚。`-autostart` 仅在 daemon 启动时启动已有配置；没有配置则等待导入，启动失败也保留控制入口以便修复。`stop` 只停止本次运行，重启带 `-autostart` 的 daemon 会再次启动保存配置。
 
+`status.last_connection_error` 可选，保留本次运行最近一条转发或拨号操作错误，含失败方向/操作，可能包含底层网络地址；不包含业务载荷或配置密钥。它不表示整个实例停止，实例重启后清空。`veilctl` 与 `veild` 应配套升级。
+
 仅通过 `save` 更新配置。运行期间手工改 `config.json` 不会热加载。配置文件或目录损坏会在 daemon 启动时明确报错。若 rename 后目录 fsync 失败，返回 `durability_uncertain` 和已提交的 revision，表示磁盘掉电持久性未确认，内存状态已与文件保持一致。
 
 ## 本地控制协议 v1

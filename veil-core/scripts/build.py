@@ -40,6 +40,20 @@ def conn_patch(s):
     )
     s = replace(
         s,
+        "\thc.cipher = suite.aead(key, iv)",
+        "\tveilReleaseAEAD(hc.cipher)\n\thc.cipher = suite.aead(key, iv)",
+    )
+    s = replace(
+        s,
+        "\tif x != 0 {\n\t\t// io.Writer and io.Closer",
+        "\tdefer c.veilReleaseCrypto()\n\tif x != 0 {\n\t\t// io.Writer and io.Closer",
+    )
+    return s + (ROOT / "patches/batch.go.in").read_text()
+
+
+def reader_patch(s):
+    s = replace(
+        s,
         "\tneeds := n - c.rawInput.Len()",
         "\tif c.veilDraining { return errVeilNeedRecord }\n\tneeds := n - c.rawInput.Len()",
     )
@@ -47,10 +61,10 @@ def conn_patch(s):
         s,
         "\tc.rawInput.Grow(needs + bytes.MinRead)",
         """\tif c.isHandshakeComplete.Load() && c.vers==VersionTLS13 {
-        const limit=128*1024
+        const limit=veilBatchBytes
         // Compact explicitly so bytes.Buffer.Grow cannot double the cap.
         pending:=c.rawInput.Bytes()
-        if c.rawInput.Cap()!=limit { c.rawInput=*bytes.NewBuffer(make([]byte,0,limit)) } else { c.rawInput.Reset() }
+        if c.rawInput.Cap()!=limit { c.rawInput=*bytes.NewBuffer(veilTakeBuffer()) } else { c.rawInput.Reset() }
         c.rawInput.Write(pending)
         r=io.LimitReader(r,int64(limit-c.rawInput.Len()))
     } else { c.rawInput.Grow(needs+bytes.MinRead) }""",
@@ -63,6 +77,12 @@ def conn_patch(s):
     for call in ("recordHeaderLen", "recordHeaderLen+n"):
         a = "if err := c.readFromUntil(c.conn, " + call + "); err != nil {"
         s = replace(s, a, a + "\n\t\tif err == errVeilNeedRecord { return err }")
+    s = read_patch(s)
+    return s + (ROOT / "patches/reader.go.in").read_text()
+
+
+def read_patch(s):
+    # Conn and UConn have separate Read implementations and ticket handlers.
     s = replace(
         s,
         """\tfor c.input.Len() == 0 {
@@ -77,27 +97,17 @@ def conn_patch(s):
         "\tn, _ := c.input.Read(b)",
         """\tn, _ := c.input.Read(b)
     if c.vers==VersionTLS13 && len(b)>maxPlaintext {
-        var err error;n,err=c.veilDrainBufferedRecords(b,n);if err!=nil{return n,err}
+        var err error;n,err=c.veilDrainBufferedRecords(b,n,c.handlePostHandshakeMessage);if err!=nil{return n,err}
     }""",
     )
-    s = replace(
-        s,
-        "\thc.cipher = suite.aead(key, iv)",
-        "\tveilReleaseAEAD(hc.cipher)\n\thc.cipher = suite.aead(key, iv)",
-    )
-    s = replace(
-        s,
-        "\tif x != 0 {\n\t\t// io.Writer and io.Closer",
-        "\tdefer c.veilReleaseCrypto()\n\tif x != 0 {\n\t\t// io.Writer and io.Closer",
-    )
-    return s + (ROOT / "patches/batch.go.in").read_text()
+    return s
 
 
 def padding_patch(s):
     s = replace(
         s,
         "type halfConn struct {",
-        "type halfConn struct {\n\tveilPadRecords uint8 // protected by Conn.out mutex",
+        "type halfConn struct {\n\tveilPadRecords, veilPadWindow uint8\n\tveilPadBytes, veilPadLimit uint16 // protected by Conn.out mutex",
     )
     return replace(
         s,
@@ -183,10 +193,17 @@ def generate(mode):
         != "e8027769d42706f263ef78d76ebd6e8a592299407a1f86b88b9ba5217bfe7dba"
     ):
         raise RuntimeError("unsupported source version: " + str(conn))
-    patched_conn = padding_patch(conn.read_text())
+    patched_conn = reader_patch(padding_patch(conn.read_text()))
     if mode != "native":
         patched_conn = conn_patch(patched_conn)
     (fork / "conn.go").write_text(patched_conn)
+    uconn = module / "u_conn.go"
+    if (
+        hashlib.sha256(uconn.read_bytes()).hexdigest()
+        != "4a34d3717dfc4558980a7f344cb73982656ca3eba2acefb1cb35dd884a073467"
+    ):
+        raise RuntimeError("unsupported source version: " + str(uconn))
+    (fork / "u_conn.go").write_text(read_patch(uconn.read_text()))
     shutil.copyfile(ROOT / "patches/padding.go.in", fork / "veil_padding.go")
     shutil.copyfile(ROOT / "patches/padding_test.go.in", fork / "veil_padding_test.go")
     run(
@@ -194,6 +211,7 @@ def generate(mode):
             "gofmt",
             "-w",
             str(fork / "conn.go"),
+            str(fork / "u_conn.go"),
             str(fork / "veil_padding.go"),
             str(fork / "veil_padding_test.go"),
         ]
@@ -221,7 +239,9 @@ def generate(mode):
         if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
             raise RuntimeError("unsupported source version: " + str(path))
     std = out / "std-conn.go"
-    std.write_text(conn_patch((goroot / "src/crypto/tls/conn.go").read_text()))
+    std.write_text(
+        conn_patch(reader_patch((goroot / "src/crypto/tls/conn.go").read_text()))
+    )
     suites = (module / "cipher_suites.go").read_text()
     if mode == "openssl":
         a = suites.index("func aeadAESGCMTLS13(")
@@ -242,6 +262,7 @@ def generate(mode):
     tests = ROOT / "patches/record_test.go.in"
     if tests.exists():
         (fork / "veil_record_test.go").write_text(tests.read_text())
+    shutil.copyfile(ROOT / "patches/uconn_test.go.in", fork / "veil_uconn_test.go")
     crypto_tests = ROOT / "patches/openssl_test.go.in"
     if mode == "openssl" and crypto_tests.exists():
         (fork / "veil_openssl_test.go").write_text(crypto_tests.read_text())

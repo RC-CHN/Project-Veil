@@ -40,44 +40,71 @@ func (p *pool) drop(s *session) {
 	}
 }
 func (p *pool) get(ctx context.Context) (*session, error) {
-	p.mu.Lock()
-	if p.closed {
-		p.mu.Unlock()
-		return nil, net.ErrClosed
-	}
-	for len(p.idle) > 0 {
-		last := len(p.idle) - 1
-		s := p.idle[last]
-		p.idle[last] = nil
-		p.idle = p.idle[:last]
-		if time.Since(s.at) < p.cfg.PoolTimeout {
-			p.mu.Unlock()
-			return s, nil
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
 		}
-		delete(p.all, s)
-		p.total--
-		s.Close()
-	}
-	if p.total >= p.cfg.MaxConnections {
+		p.mu.Lock()
+		if p.closed {
+			p.mu.Unlock()
+			return nil, net.ErrClosed
+		}
+		if len(p.idle) > 0 {
+			last := len(p.idle) - 1
+			s := p.idle[last]
+			p.idle[last] = nil
+			p.idle = p.idle[:last]
+			age := time.Since(s.at)
+			p.mu.Unlock()
+			// Hot reuse performs no read, timer or extra round trip. After a quiet
+			// interval, consume a pending TLS close/error before sending any OPEN.
+			if age < p.cfg.PoolTimeout && (age < time.Second || s.idleUsable(ctx)) {
+				return s, nil
+			}
+			p.drop(s)
+			continue
+		}
+		if p.total >= p.cfg.MaxConnections {
+			p.mu.Unlock()
+			return nil, errors.New("veil: connection pool limit")
+		}
+		p.total++
 		p.mu.Unlock()
-		return nil, errors.New("veil: connection pool limit")
+		s, err := p.dial(ctx)
+		p.mu.Lock()
+		if err != nil {
+			p.total--
+			p.mu.Unlock()
+			return nil, err
+		}
+		if p.closed {
+			p.total--
+			p.mu.Unlock()
+			s.Close()
+			return nil, net.ErrClosed
+		}
+		p.all[s] = true
+		p.mu.Unlock()
+		return s, nil
 	}
-	p.total++
-	p.mu.Unlock()
-	s, err := p.dial(ctx)
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if err != nil {
-		p.total--
-		return nil, err
+}
+
+// This is a bounded drain of already pending EOF/alerts, not a heartbeat or a
+// guarantee against blackholes. A timeout is temporary in TLS Read; unexpected
+// application bytes mean the FIN/DONE barrier was violated. Nothing is replayed.
+func (s *session) idleUsable(ctx context.Context) bool {
+	deadline := time.Now().Add(2 * time.Millisecond)
+	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
+		deadline = d
 	}
-	if p.closed {
-		p.total--
-		s.Close()
-		return nil, net.ErrClosed
+	if s.SetDeadline(deadline) != nil {
+		return false
 	}
-	p.all[s] = true
-	return s, nil
+	var b [1]byte
+	n, err := s.Read(b[:])
+	clearErr := s.SetDeadline(time.Time{})
+	var e net.Error
+	return n == 0 && errors.As(err, &e) && e.Timeout() && clearErr == nil && ctx.Err() == nil
 }
 func (p *pool) dial(ctx context.Context) (*session, error) {
 	ctx, cancel := context.WithTimeout(ctx, p.cfg.HandshakeTimeout)

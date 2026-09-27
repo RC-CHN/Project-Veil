@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -14,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"veil/core"
 	"veil/service"
 )
 
@@ -55,6 +57,12 @@ func run() error {
 		return err
 	}
 	defer svc.Close()
+	svc.OnError = func(err error) {
+		var op *core.OpError
+		if errors.As(err, &op) {
+			log.Printf("connection: %v", err)
+		}
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	ln, err := net.Listen("tcp", cfg.Listen)

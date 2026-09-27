@@ -1,20 +1,8 @@
-// Veil: bounded cache of ciphertext batches. Only current Write data is batched.
-const veilBatchBytes = 8 * (maxPlaintext + recordHeaderLen + 256)
-
-var veilBatchPool = make(chan []byte, 16)
-
+// Batch only the current Write; never wait for future plaintext.
 func (c *Conn) veilWriteApplicationBatchLocked(data []byte) (int, error) {
-	var b []byte
-	select {
-	case b = <-veilBatchPool:
-	default:
-		b = make([]byte, 0, veilBatchBytes)
-	}
+	b := veilTakeBuffer()
 	defer func() {
-		select {
-		case veilBatchPool <- b[:0]:
-		default:
-		}
+		veilPutBuffer(b)
 	}()
 	n, pending := 0, 0
 	flush := func() error {
@@ -63,50 +51,6 @@ func (c *Conn) veilWriteApplicationBatchLocked(data []byte) (int, error) {
 	}
 	err := flush()
 	return n, err
-}
-
-var errVeilNeedRecord = errors.New("tls: Veil drain requires more ciphertext")
-
-func (c *Conn) veilDrainBufferedRecords(b []byte, n int) (int, error) {
-	c.veilDraining = true
-	defer func() { c.veilDraining = false }()
-	for count := 0; count < 8 && n < len(b) && c.input.Len() == 0 && c.hand.Len() == 0 && c.rawInput.Len() >= recordHeaderLen; count++ {
-		err := c.readRecord()
-		if err == errVeilNeedRecord {
-			break
-		}
-		if err != nil {
-			return n, err
-		}
-		for c.hand.Len() > 0 {
-			h := c.hand.Bytes()
-			if len(h) < 4 {
-				return n, nil
-			}
-			length := int(h[1])<<16 | int(h[2])<<8 | int(h[3])
-			if len(h) < 4+length {
-				return n, nil
-			}
-			if err := c.handlePostHandshakeMessage(); err != nil {
-				return n, err
-			}
-		}
-		m, _ := c.input.Read(b[n:])
-		n += m
-	}
-	return n, nil
-}
-
-// Called only between streams, with no application Read/Write in flight.
-// Never discard read-ahead data that belongs to the next control message.
-func (c *Conn) VeilReleaseBuffers() {
-	c.in.Lock()
-	defer c.in.Unlock()
-	if c.input.Len() == 0 && c.rawInput.Len() == 0 && c.hand.Len() == 0 {
-		c.input.Reset(nil)
-		c.rawInput = bytes.Buffer{}
-		c.hand = bytes.Buffer{}
-	}
 }
 
 // EVP resources are also released on traffic-key replacement, not only at GC.

@@ -1,0 +1,29 @@
+package tls
+
+import (
+	"bytes"
+	"testing"
+)
+
+func TestVeilUConnDrain(t *testing.T) {
+	raw := new(veilMemoryConn)
+	w := veilTestConn(raw)
+	defer w.veilReleaseCrypto()
+	plain := bytes.Repeat([]byte{47},8*maxPlaintext)
+	w.Write(plain)
+	w.writeRecordLocked(recordTypeHandshake, []byte{24,0,0,1,1})
+	rr := new(veilMemoryConn)
+	rr.input.Write(raw.output.Bytes())
+	r := veilTestConn(rr)
+	r.isClient = true
+	defer r.veilReleaseCrypto()
+	u := &UConn{Conn:r}
+	b := make([]byte,len(plain)+1)
+	n,err := u.Read(b)
+	if err != nil || n != len(plain) || !bytes.Equal(b[:n],plain) || rr.reads != 1 {
+		t.Fatal("UConn did not drain full batch",n,err,rr.reads)
+	}
+	if bytes.Equal(r.in.trafficSecret,make([]byte,32)) || rr.writes != 1 {t.Fatal("UConn lost KeyUpdate")}
+	r.VeilReleaseBuffers()
+	if r.rawInput.Cap()!=0 {t.Fatal("idle UConn retained buffer")}
+}

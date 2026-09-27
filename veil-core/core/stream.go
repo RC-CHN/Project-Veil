@@ -91,7 +91,7 @@ func (s *Stream) Relay(local net.Conn) (err error) {
 		return err
 	}
 	channel.SetReadDeadline(time.Now().Add(s.client.cfg.HandshakeTimeout))
-	err = wire.Expect(&channel.r, wire.Done)
+	err = opError("tunnel DONE", wire.Expect(&channel.r, wire.Done))
 	channel.SetReadDeadline(time.Time{})
 	return err
 }
