@@ -290,7 +290,7 @@ def metadata(arguments):
     }
     metadata["source_sha256"] = {
         str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
-        for parent in ["cmd", "internal", "patches", "scripts"]
+        for parent in ["cmd", "veil-core", "inbound", "internal", "patches", "scripts"]
         for path in (ROOT / parent).rglob("*")
         if path.is_file() and "__pycache__" not in path.parts
     }

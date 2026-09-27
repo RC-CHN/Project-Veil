@@ -1,8 +1,8 @@
 # Veil v0.1
 
-Go TCP 代理，提供 SOCKS5 CONNECT 客户端、TLS 1.3/REALITY 服务端、业务鉴权、连接复用与双向半关闭。支持有界连接池、背压、取消和超时。当前为实验原型，不提供 TUN、UDP 或移动端 UI；流量特征与回落行为尚未通过抗识别验收。
+Go TCP 代理，提供可嵌入的核心、SOCKS5 CONNECT 与固定目标转发入口、TLS 1.3/REALITY 服务端、业务鉴权、连接复用与双向半关闭。支持有界连接池、背压、取消和超时。当前为实验原型，不提供 TUN、UDP 或移动端 UI；流量特征与回落行为尚未通过抗识别验收。
 
-v0.1 将首次 AUTH 与 OPEN 同批发送，目标连接成功后返回 OPEN_OK；满 DATA 帧连同帧头为 128 KiB。客户端和服务端需要同时升级，旧版鉴权会被拒绝。
+v0.1 将首次 AUTH 与 OPEN 同批发送，目标连接成功后返回 OPEN_OK；满 DATA 帧连同帧头为 128 KiB。从 v0 升至 v0.1 时两端需同时升级，v0 鉴权会被拒绝；本轮核心抽取保持 v0.1 线协议，可与抽取前的 v0.1 两端互通。
 
 REALITY 客户端在生成密钥前确定模板与扩展，并复用 TLS 库已解析的证书执行认证。服务端收到对端 FIN 后，若本地传输也结束，可在两个转发任务退出后将 FIN 与 DONE 同批写入；本地先结束时仍立即发送 FIN。帧格式不变，兼容已有 v0.1 对端。这些改动不代表已经消除流量指纹。
 
@@ -30,6 +30,57 @@ REALITY 客户端可用 `tls.fingerprint` 指定 `chrome120`、`chrome131`、`ch
 这层填充削弱精确记录长度特征，不能消除突发总量、方向、时序或嵌套 TLS 握手的往返依赖；短流的相对流量开销可能较大。多模板与填充均不等于通过抗识别验收。
 
 SOCKS5 入口仅支持无认证 CONNECT，默认监听回环地址。按需修改监听地址、连接数和超时配置；超时单位为秒。
+
+客户端增加 `"target": "example.com:443"` 后，监听端口接受原始 TCP 数据，经过 Veil 连接服务端，再由服务端连接该固定目标，见 `examples/client.forward.json`。省略 `target` 继续提供原有 SOCKS5 入口，已有配置无需修改。这里的转发入口不代替中转机上的裸 TCP 透传服务。
+
+## 复用核心
+
+`veil-core`（Go 包名 `core`）负责握手、鉴权、流生命周期和连接池；`inbound` 负责 SOCKS5、固定目标转发与有界监听循环；`internal/proxy` 将现有 CLI JSON 配置组合成这些组件。数据仍沿用原转发循环，一方向一个写入者，无额外数据队列或进程间转发。
+
+发送方向的 128 KiB 工作缓冲通过 `sync.Pool` 复用，写入任务退出后才归还；不改变读取大小、DATA 帧或 TLS 写入方式。这样减少短流的分配与 GC，闲置缓存由 GC 回收，不挂在每条空闲 TLS 会话上。
+
+以下片段使用 `"veil/veil-core"` 导入路径（包名为 `core`）：
+
+```go
+client, err := core.NewClient(core.ClientConfig{
+    Config: core.Config{Secret: secret, TLS: tlsConfig},
+    Server: serverAddress,
+})
+if err != nil { return err }
+defer client.Close()
+
+stream, err := client.Open(ctx, "example.com:443")
+if err != nil { return err }
+defer stream.Close()
+// 此时远端已返回 OPEN_OK，适配器才可向本地客户端报告连接成功。
+return stream.Relay(localConn)
+```
+
+同一个 `*core.Client` 可同时传给 `inbound.SOCKS5(client, timeout)` 和 `inbound.Forward(client, target)`，各自用 `inbound.Serve` 监听。停止其中一个监听器只取消其连接；应用在全部入口退出后调用 `client.Close()`。服务端通过 `core.NewServer` 创建，用同一监听循环调用 `server.Handle`；直接调用 `Handle` 的应用自行限制并发。
+
+`Open` 的 context 覆盖整条流，不能在 Open 返回后立即取消。`Stream.Relay` 接管并关闭本地连接，该连接须实现 `CloseWrite`；每条 Stream 只能 Relay 一次。只有双向 FIN 和 DONE 都完成才回池；提前 Close、取消、目标失败或协议错误丢弃连接。旧 Stream 在连接复用后再次 Close 是安全的。`Client.Close` 中止拨号和流并停止池维护；调用方负责等待自己的处理任务退出。`PoolStats` 提供连接总数（含拨号预留）与空闲数，`Stats` 提供原有计数。
+
+`ClientConfig.DialContext` 可接平台的 socket 保护/绑定逻辑，`ServerConfig.DialContext` 可接目标访问策略；两者须遵守 context。没有实现这些钩子时，保持普通 TCP 拨号。配置在构造时复制，变更通过创建新实例生效。核心不修改系统路由、DNS、防火墙或服务状态。
+
+预期平台分工如下，平台组件本轮尚未实现：
+
+| 平台 | 平台层负责的工作 | 复用方式 |
+| --- | --- | --- |
+| OpenWrt / LuCI / CLI | UCI 配置、procd 生命周期、路由和防火墙 | Go CLI/核心；LuCI 管理配置和状态 |
+| systemd Linux | unit、权限、配置应用、网络配置 | 同一 Go CLI/核心 |
+| OPNsense | FreeBSD 服务、配置与 pf 集成 | FreeBSD CLI/核心 |
+| Windows CLI、Windows/Linux 桌面 | 进程管理、权限、系统代理/路由 | CLI；Tauri 界面通过受限控制接口管理本地进程 |
+| Android | VpnService、socket protect、TUN/DNS、应用生命周期 | 原生壳加 Go 绑定；后续需用户态 TCP 栈与 UDP 方案 |
+
+界面只走控制通道，数据直接走核心；保存配置和应用配置应为不同操作。Android 的 TUN 数据不是 `net.Conn`，本轮 TCP 接口不能直接宣称已有完整 VPN 支持。桌面 Tauri、LuCI、OPNsense 插件和 Android 绑定均为后续工作。
+
+当前公开包用于同模块复用，仍需构建器生成的补丁 uTLS 模块；仓库尚未发布可直接 `go get` 的独立 SDK。移动端绑定也须沿用此构建链。无 cgo 原生后端用于跨平台基线，批量记录后端和 Linux OpenSSL 后端保持原实现。编译检查：
+
+```sh
+python3 scripts/cross_check.py
+```
+
+检查 Linux amd64/arm64/ARMv7/MIPS/MIPSLE、FreeBSD amd64、Windows amd64/arm64 CLI，以及 Android arm64 的 veil-core/inbound 包。结果在 `.build/cross/results.json`；交叉编译通过不代表设备、安装包、VPN 权限或平台网络集成已验证。
 
 ## 检查
 
@@ -59,6 +110,8 @@ python3 scripts/demo.py
 
 生成代码、依赖、临时凭据、日志和二进制集中在 `.build/`，由 `make clean` 删除。
 
+不要把运行中的服务部署在构建清理目录内；对正在使用的版本做改动时，应在独立工作树构建和验证，部署另行切换。
+
 ## 基准与本地探测
 
 ```sh
@@ -73,6 +126,14 @@ python3 scripts/probe.py --out .build/probes-local
 ```
 
 上述工具仅连接自有回环端点。基准依赖 Linux `perf`、`taskset` 和本机 `sudo -n perf` 权限；服务端固定 CPU 14，参考站点/目标 16–17，负载 18–21，客户端 22–25，其他机器需调整亲和性。AnyTLS 对照使用固定版本 sing-box，其优化组应用同一 TLS 补丁。
+
+`core_regression.py` 比较重构前后的实际二进制：先验证新旧两端交叉互通，再随机交替测 U/D 吞吐、E 热流回显和 S 短流复用。两端各一个 CPU、同一 Chrome 149 模板和填充设置，用 perf 分别记录 CPU 时间、周期和指令数。旧目录需提供 `veil-client`（batch）、`veil-server`（openssl）和固定版本的 `benchpeer`；候选目录提供 `veil-batch`、`veil-openssl`、`veil-native`（生成临时密钥）。
+
+```sh
+sudo unshare -n -- sh -c 'ip link set lo up && exec runuser -u USER -- env VEIL_ISOLATED_NETNS=1 python3 scripts/core_regression.py --before .build/baseline --peer .build/baseline/benchpeer --out .build/core-regression --cores 14,22,17,18'
+```
+
+测试强制私有网络命名空间，进程退出即清理测试监听；证书、配置、原始结果和二进制摘要保存在输出目录，未经授权不操作任何已部署服务。`summary.json` 保留逐配对差值及其中位数，不能只凭单次成绩宣称无回退。
 
 `benchmark.py --modes E --rounds 10000` 测热连接延迟；`--modes C --connections 1 --rounds 1` 测冷连接。输出目录不可覆盖已有原始结果；测量数据不纳入版本控制。
 
