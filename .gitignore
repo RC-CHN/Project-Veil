@@ -1,0 +1,9 @@
+/.build/
+/.rcoder/
+/.agents/
+/.codex/
+/docs/
+/validation/
+*.test
+*.prof
+__pycache__/

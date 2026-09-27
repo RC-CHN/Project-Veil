@@ -1,0 +1,11 @@
+{
+  "role": "server",
+  "listen": "127.0.0.1:8443",
+  "secret": "REPLACE_WITH_KEYGEN_SECRET",
+  "tls": {
+    "mode": "tls",
+    "server_name": "server.example",
+    "certificate": "cert.pem",
+    "private_key_file": "key.pem"
+  }
+}

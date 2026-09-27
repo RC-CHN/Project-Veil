@@ -1,0 +1,15 @@
+{
+  "role": "client",
+  "listen": "127.0.0.1:1080",
+  "server": "127.0.0.1:8443",
+  "secret": "REPLACE_WITH_KEYGEN_SECRET",
+  "tls": {
+    "mode": "reality",
+    "server_name": "cover.example",
+    "reality_public_key": "REPLACE_WITH_KEYGEN_PUBLIC_KEY",
+    "short_id": "REPLACE_WITH_16_HEX_CHARACTERS",
+    "fingerprint": "chrome"
+  },
+  "max_connections": 64,
+  "max_idle": 8
+}
