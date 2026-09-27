@@ -50,6 +50,11 @@ func certs(t *testing.T) (string, string) {
 }
 func cover(t *testing.T, cp, kp string) string {
 	t.Helper()
+	return coverGroup(t, cp, kp, "X25519")
+}
+
+func coverGroup(t *testing.T, cp, kp, group string) string {
+	t.Helper()
 	if _, e := exec.LookPath("openssl"); e != nil {
 		t.Skip("openssl required for REALITY integration")
 	}
@@ -59,7 +64,7 @@ func cover(t *testing.T, cp, kp string) string {
 	}
 	addr := l.Addr().String()
 	l.Close()
-	cmd := exec.Command("openssl", "s_server", "-accept", addr, "-cert", cp, "-key", kp, "-tls1_3", "-ciphersuites", "TLS_AES_128_GCM_SHA256", "-groups", "X25519", "-www", "-alpn", "http/1.1")
+	cmd := exec.Command("openssl", "s_server", "-accept", addr, "-cert", cp, "-key", kp, "-tls1_3", "-ciphersuites", "TLS_AES_128_GCM_SHA256", "-groups", group, "-www", "-alpn", "http/1.1")
 	var log bytes.Buffer
 	cmd.Stdout = &log
 	cmd.Stderr = &log
@@ -183,7 +188,7 @@ func target(t *testing.T, fn func(net.Conn)) string {
 var testKey = base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{73}, 32))
 
 func TestEndToEndHalfCloseReuse(t *testing.T) {
-	for _, name := range []string{"tls", "reality", "chrome120", "chrome131", "chrome133", "pool"} {
+	for _, name := range []string{"tls", "reality", "chrome120", "chrome131", "chrome133", "chrome149", "pool"} {
 		t.Run(name, func(t *testing.T) {
 			mode := "reality"
 			if name == "tls" {
@@ -191,10 +196,10 @@ func TestEndToEndHalfCloseReuse(t *testing.T) {
 			}
 			st, ct := settings(t, mode)
 			switch name {
-			case "chrome120", "chrome131", "chrome133":
+			case "chrome120", "chrome131", "chrome133", "chrome149":
 				ct.Fingerprint = name
 			case "pool":
-				ct.Fingerprints = []string{"chrome120", "chrome131", "chrome133"}
+				ct.Fingerprints = []string{"chrome120", "chrome131", "chrome133", "chrome149"}
 			}
 			server, addr := start(t, Config{Role: "server", Secret: testKey, TLS: st, HandshakeSeconds: 3, IdleSeconds: 3})
 			client, entry := start(t, Config{Role: "client", Secret: testKey, TLS: ct, Server: addr, HandshakeSeconds: 3, IdleSeconds: 3})

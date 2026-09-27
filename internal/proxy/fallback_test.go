@@ -273,10 +273,39 @@ func TestRealityFallbackCancellation(t *testing.T) {
 func TestRealityClientRejectsWebsite(t *testing.T) {
 	cover, _ := fallbackCover(t, func(w http.ResponseWriter, r *http.Request) {})
 	_, settings := fallbackKeys(t, cover)
-	for _, name := range []string{"chrome120", "chrome131", "chrome133"} {
+	for _, name := range []string{"chrome120", "chrome131", "chrome133", "chrome149"} {
 		t.Run(name, func(t *testing.T) {
 			settings.Fingerprint = name
 			rejectWebsite(t, settings, cover)
+		})
+	}
+}
+
+func TestRealityHybridKeyExchange(t *testing.T) {
+	for _, name := range []string{"chrome131", "chrome133", "chrome149"} {
+		t.Run(name, func(t *testing.T) {
+			cp, kp := certs(t)
+			// A hybrid-only cover forces both the offer and the actual exchange.
+			cover := coverGroup(t, cp, kp, "X25519MLKEM768")
+			st, ct := fallbackKeys(t, cover)
+			ct.Fingerprint = name
+			_, addr := start(t, Config{Role: "server", Secret: testKey, TLS: st})
+			_, entry := start(t, Config{Role: "client", Secret: testKey, TLS: ct, Server: addr})
+			dst := target(t, func(c net.Conn) { io.Copy(c, c) })
+			c, err := socksDial(entry, dst)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer c.Close()
+			payload := bytes.Repeat([]byte("hybrid TLS integrity\x00"), 1024)
+			if err := writeAll(c, payload); err != nil {
+				t.Fatal(err)
+			}
+			c.CloseWrite()
+			got, err := io.ReadAll(c)
+			if err != nil || !bytes.Equal(got, payload) {
+				t.Fatalf("hybrid echo: bytes=%d error=%v", len(got), err)
+			}
 		})
 	}
 }

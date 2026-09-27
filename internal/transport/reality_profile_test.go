@@ -38,7 +38,7 @@ func TestRealityClientHelloFresh(t *testing.T) {
 	h, err := Client(Settings{
 		Mode: "reality", ServerName: "cover.test", ShortID: "0000000000000000",
 		RealityPublicKey: base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes()),
-		Fingerprints:     []string{"chrome120", "chrome131", "chrome133"},
+		Fingerprints:     []string{"chrome120", "chrome131", "chrome133", "chrome149"},
 	})
 	if err != nil {
 		t.Fatal(err)

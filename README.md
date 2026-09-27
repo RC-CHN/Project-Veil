@@ -21,11 +21,9 @@ make build
 
 REALITY 的 `cover_address` 指向兼容所用浏览器模板的 TLS 1.3 参考站点，两端 `server_name` 一致。普通 TLS 模式使用 `certificate` 和 `private_key_file`，客户端通过 `ca_file` 增加自有 CA；证书和主机名验证始终启用。
 
-REALITY 客户端可用 `tls.fingerprint` 指定 `chrome120`、`chrome131` 或 `chrome133`；省略时及旧名称 `chrome` 均使用 133。也可将该字段替换为 `"fingerprints": ["chrome120", "chrome131", "chrome133"]`：每条新建的物理 TLS 连接等概率选一个模板，连接复用期间保持不变。两个字段不能同时设置；空列表、未知名称和重复模板会在启动时拒绝。程序调用者可在 `transport.Client(Settings)` 中指定模板或候选列表，选择只发生在返回的握手函数被调用时。
+REALITY 客户端可用 `tls.fingerprint` 指定 `chrome120`、`chrome131`、`chrome133` 或 `chrome149`；省略时及旧名称 `chrome` 均使用 133。也可将该字段替换为 `"fingerprints": ["chrome131", "chrome133", "chrome149"]`：每条新建的物理 TLS 连接等概率选一个模板，连接复用期间保持不变。两个字段不能同时设置；空列表、未知名称和重复模板会在启动时拒绝。程序调用者可在 `transport.Client(Settings)` 中指定模板或候选列表，选择只发生在返回的握手函数被调用时。
 
-这些名称对应固定 uTLS 版本中的历史模板，不表示当前浏览器版本。131/133 移除了 X25519MLKEM768，所有模板均禁用重新协商，因此不能宣称完整复现浏览器；每条连接仍独立生成密钥、随机数、GREASE 与扩展顺序。多个模板不等于抗识别能力已经提高，默认仍采用单模板。
-
-调整后 120 与 131 的 ClientHello 在不触发 120 的长度填充时可重合；133 使用不同的 ALPS 扩展编号。三个模板名称不等于三种完全独立的指纹。
+120/131/133 对应固定 uTLS 版本中的模板；131/133 保留其 X25519MLKEM768 密钥份额，不再为减少冷连接开销而删除它。149 基于 Linux Chrome for Testing 149.0.7827.55 的新建连接抓包，在 133 基础上加入空 `trust_anchors` 向量并重新打乱扩展顺序；这里只匹配 ClientHello，不实现浏览器的信任锚重试、DNS 策略或 HTTP 行为。所有模板在本地禁用 TLS 重新协商，这不改变该扩展的线上字节。每条连接独立生成密钥、随机数、GREASE 与扩展顺序。
 
 SOCKS5 入口仅支持无认证 CONNECT，默认监听回环地址。按需修改监听地址、连接数和超时配置；超时单位为秒。
 
