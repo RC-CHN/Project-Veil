@@ -74,6 +74,16 @@ python3 scripts/probe.py --out .build/probes-local
 
 `benchmark.py --modes E --rounds 10000` 测热连接延迟；`--modes C --connections 1 --rounds 1` 测冷连接。输出目录不可覆盖已有原始结果；测量数据不纳入版本控制。
 
+`benchpeer -mode S` 测反复建立 SOCKS 流、64 字节双向回显与半关闭，底层 TLS 会话可复用。`handshakebench` 则每次重新建立 REALITY/TLS 会话，并完成 AUTH、OPEN、回显与 FIN/DONE；其延迟统计截止 OPEN_OK，CPU 计数覆盖整个事务。构建时使用与被测客户端相同的后端：
+
+```sh
+python3 scripts/build.py batch --package ./cmd/handshakebench --output .build/handshakebench-batch
+python3 scripts/reality_benchmark.py --before .build/previous --out .build/reality-cpu
+python3 scripts/reality_fingerprint.py --before .build/previous --out .build/reality-shapes
+```
+
+对照目录中的 `veil-openssl`、`veil-batch` 和 `handshakebench-batch` 必须来自同一旧版源码，握手测量工具本身使用相同源码。CPU 对照采用相邻随机 A/B 配对，分别测两端 `perf task-clock`、指令数与周期数，并记录物理连接数；默认两端各固定一个 CPU。指纹工具比较归一化 ClientHello 和 TLS 记录序列，保留随机字段的摘要用于检查重复，不保存原始捕获内容；它不执行抗审查分类验收。
+
 重建前可将旧二进制保存到 `.build/previous/`，用 `veil-opt-reality-previous` 变体与候选同时测试；对应目录必须包含 `veil-openssl` 和 `veil-batch`。测量元数据记录两套二进制摘要。
 
 `probe.py` 使用 OpenSSL ECDSA、OpenSSL RSA 和 Go TLS 三类参考端点，比较直连、裸上游 REALITY 与 Veil。正常 HTTPS、延迟请求、异常输入、重放、参考站点故障和 TLS 记录形态分别记录。为防止上游未传播 TCP EOF 阻塞单线程参考站点，每次裸 REALITY 异常探测后重置参考进程。

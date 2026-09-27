@@ -72,6 +72,25 @@ func request(c net.Conn, mode byte, n int64) error {
 	_, e := io.ReadFull(c, ack[:])
 	return e
 }
+
+func shortStream(socks, target string) error {
+	c, err := dial(socks, target)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	if err := request(c, 'E', 64); err != nil {
+		return err
+	}
+	if err := c.(*net.TCPConn).CloseWrite(); err != nil {
+		return err
+	}
+	n, err := io.Copy(io.Discard, c)
+	if err == nil && n != 0 {
+		return fmt.Errorf("unexpected bytes after echo: %d", n)
+	}
+	return err
+}
 func backend(c net.Conn) {
 	defer c.Close()
 	c.SetDeadline(time.Now().Add(120 * time.Second))
@@ -186,7 +205,7 @@ func main() {
 			go backend(c)
 		}
 	}
-	if *count < 1 || *count > 64 || *total < 0 || *rounds < 1 || (*mode != "U" && *mode != "D" && *mode != "E" && *mode != "C") {
+	if *count < 1 || *count > 64 || *total < 0 || *rounds < 1 || (*mode != "U" && *mode != "D" && *mode != "E" && *mode != "C" && *mode != "S") {
 		panic("invalid benchmark parameters")
 	}
 	conns := make([]net.Conn, *count)
@@ -197,6 +216,15 @@ func main() {
 		go func() {
 			defer wg.Done()
 			if *mode == "C" {
+				return
+			}
+			if *mode == "S" {
+				for range 16 {
+					if err := shortStream(*socks, *target); err != nil {
+						errs <- err
+						return
+					}
+				}
 				return
 			}
 			c, e := dial(*socks, *target)
@@ -233,6 +261,17 @@ func main() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			if *mode == "S" {
+				for range *rounds {
+					t := time.Now()
+					if err := shortStream(*socks, *target); err != nil {
+						errs <- err
+						return
+					}
+					latencies[i] = append(latencies[i], time.Since(t).Nanoseconds())
+				}
+				return
+			}
 			if *mode == "C" {
 				for range *rounds {
 					t := time.Now()
@@ -275,7 +314,7 @@ func main() {
 		panic(<-errs)
 	}
 	result := map[string]any{"seconds": elapsed, "bytes": *total, "connections": *count, "mode": *mode}
-	if *mode == "E" || *mode == "C" {
+	if *mode == "E" || *mode == "C" || *mode == "S" {
 		var all []int64
 		for _, a := range latencies {
 			all = append(all, a...)
