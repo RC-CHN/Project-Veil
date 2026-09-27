@@ -24,14 +24,15 @@ func TestRuntimeRelayAndLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	addr := client.Snapshot().Listen
-	for range 3 {
+	for i := range 3 {
 		c, err := socksDial(addr, dst)
 		if err != nil {
 			t.Fatal(err)
 		}
 		halfEcho(t, c)
+		// Local EOF can precede DONE and the return of the TLS connection to the pool.
+		await(t, func() bool { return client.Snapshot().Stats.Completed == uint64(i+1) })
 	}
-	await(t, func() bool { return client.Snapshot().Stats.Completed == 3 })
 	if n := server.Snapshot().Stats.Authenticated; n != 1 {
 		t.Fatalf("TLS pool not reused: %d", n)
 	}
