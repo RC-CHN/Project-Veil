@@ -1,0 +1,211 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'ci/**']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      extended:
+        description: Include the real 30-second download-pause regression
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOTOOLCHAIN: local
+  GOCACHE: ${{ github.workspace }}/veil-core/.build/cache
+  GOMODCACHE: ${{ github.workspace }}/veil-core/.build/mod
+  CARGO_TERM_COLOR: always
+
+jobs:
+  changes:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 3
+    outputs:
+      core: ${{ steps.changes.outputs.core }}
+      service: ${{ steps.changes.outputs.service }}
+      interop: ${{ steps.changes.outputs.interop }}
+      cross: ${{ steps.changes.outputs.cross }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Check CI routing
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+      - name: Validate workflow syntax and expressions
+        run: bash .github/scripts/lint-workflow.sh
+      - name: Select affected components
+        id: changes
+        run: python3 .github/scripts/ci.py changes
+
+  core:
+    needs: changes
+    if: needs.changes.outputs.core == 'true'
+    name: Core / ${{ matrix.backend }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [native, batch, openssl]
+    env:
+      BACKEND: ${{ matrix.backend }}
+      VEIL_LONG_DOWNLOAD_TEST: ${{ inputs.extended && matrix.backend == 'batch' && '1' || '' }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/go
+        with:
+          scope: core-${{ matrix.backend }}
+      - name: Check Go formatting
+        if: matrix.backend == 'native'
+        run: |
+          unformatted=$(git ls-files 'veil-core/*.go' | xargs gofmt -l)
+          if [[ -n "$unformatted" ]]; then
+            printf '%s\n' "$unformatted"
+            exit 1
+          fi
+      - name: Check required integration dependencies
+        run: |
+          command -v openssl curl
+          pkg-config --modversion openssl
+          openssl version
+      - name: Protocol, integration, TLS and race regressions
+        run: |
+          extra=()
+          if [[ "$BACKEND" == batch ]]; then extra+=(--stdlib); fi
+          python3 veil-core/scripts/check.py "$BACKEND" --race "${extra[@]}"
+
+  service:
+    needs: changes
+    if: needs.changes.outputs.service == 'true'
+    name: Control service
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/go
+        with:
+          scope: service
+      - name: Go formatting and platform script syntax
+        run: |
+          unformatted=$(git ls-files 'veil-service/*.go' | xargs gofmt -l)
+          if [[ -n "$unformatted" ]]; then
+            printf '%s\n' "$unformatted"
+            exit 1
+          fi
+          sh -n veil-service/platform/openwrt/veil
+          sh -n veil-service/platform/freebsd/veil
+      - name: Control API, persistence, lifecycle, race and vet
+        run: python3 veil-service/scripts/build.py batch --check --race
+      - name: Build daemon and CLI
+        run: python3 veil-service/scripts/build.py batch
+      - name: Real process lifecycle in a private network namespace
+        run: |
+          sudo -n unshare -n sh -ec '
+            ip link set lo up
+            exec runuser -u "$1" -- env VEIL_ISOLATED_NETNS=1 python3 veil-service/scripts/smoke.py
+          ' sh "$(id -un)"
+
+  interop:
+    needs: changes
+    if: needs.changes.outputs.interop == 'true'
+    name: Rust interoperability
+    runs-on: ubuntu-26.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/go
+        with:
+          scope: interop
+      - name: Install pinned Rust toolchain
+        working-directory: interop/rust
+        run: rustup show
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            interop/rust/target
+          key: rust-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('interop/rust/rust-toolchain.toml', 'interop/rust/Cargo.lock') }}-${{ hashFiles('interop/rust/src/**', 'interop/rust/Cargo.toml') }}
+          restore-keys: |
+            rust-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('interop/rust/rust-toolchain.toml', 'interop/rust/Cargo.lock') }}-
+      - name: Format, lint and build independent Rust peer
+        working-directory: interop/rust
+        run: |
+          cargo fmt --check
+          cargo clippy --locked -- -D warnings
+          cargo build --locked
+      - name: Verify standalone specification vectors
+        run: |
+          interop/rust/target/debug/veil-interop vectors > "$RUNNER_TEMP/vectors.json"
+          python3 .github/scripts/ci.py vectors "$RUNNER_TEMP/vectors.json"
+      - name: Build Go peers and verify both roles and transports
+        run: |
+          mkdir -p veil-core/.build/ci
+          for backend in batch openssl; do
+            binary="$PWD/veil-core/.build/ci/veil-$backend"
+            python3 veil-core/scripts/build.py "$backend" --output "$binary"
+            interop/rust/target/debug/veil-interop selftest "$binary"
+          done
+
+  cross:
+    needs: changes
+    if: needs.changes.outputs.cross == 'true'
+    name: Compile / ${{ matrix.target }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - linux/arm64
+          - linux/arm
+          - linux/mips
+          - linux/mipsle
+          - freebsd/amd64
+          - windows/amd64
+          - windows/arm64
+          - android/arm64
+    env:
+      TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/go
+        with:
+          scope: cross-${{ matrix.target }}
+      - name: Core and supported control components
+        run: |
+          python3 veil-core/scripts/cross_check.py --target "$TARGET"
+          python3 veil-service/scripts/cross_check.py --target "$TARGET"
+
+  ci:
+    name: CI
+    needs: [changes, core, service, interop, cross]
+    if: always()
+    runs-on: ubuntu-26.04
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Require every selected check to succeed
+        env:
+          CI_NEEDS: ${{ toJSON(needs) }}
+        run: python3 .github/scripts/ci.py gate

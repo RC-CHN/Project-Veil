@@ -29,6 +29,8 @@ veil-service/
 
 ## 构建与检查
 
+GitHub Actions 的并行检查、缓存和平台覆盖见 [CI 说明](.github/README.md)。
+
 需要 Go 1.26.3、Python 3；集成测试另需 OpenSSL。仓库根目录可以执行：
 
 ```sh
