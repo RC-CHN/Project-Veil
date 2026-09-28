@@ -13,7 +13,7 @@ GitHub Actions 在 `main`、`ci/**` 分支 push、所有 PR 和手动运行时�
 
 Linux amd64 已由运行测试覆盖。Windows 包含原生控制测试与桌面构建，Android 仅检查公共核心/控制包；交叉编译不代表对应设备运行、安装包或 UI 已完成。服务进程 smoke 在私有网络命名空间中运行，无需外部代理节点。
 
-Windows 桌面任务直接运行刚生成的发行包，通过 Playwright CDP 操作其真实 WebView2。测试使用临时配置和回环 TLS 服务，核验 SOCKS5 / HTTP 访问 HTTP / HTTPS、系统代理自动设置 / 保持 / 清除、断开与明确退出恢复，以及中英、深浅色和窄窗口。原生 `WM_CLOSE` 后核验窗口隐藏且转发继续；通知区图标和菜单的实际鼠标交互仍单独验收。截图和诊断保存为 `windows-desktop-gui` artifact，保留 7 天；临时凭据和状态目录不上传。调试端口只由测试用户的临时 WebView2 策略启用，结束后恢复原策略和系统代理。
+Windows 桌面任务直接运行刚生成的发行包，通过 Playwright CDP 操作其真实 WebView2。测试使用临时配置和回环 TLS 服务，核验 SOCKS5 / HTTP 访问 HTTP / HTTPS、系统代理自动设置 / 保持 / 清除、断开与明确退出恢复，以及中英、深浅色和窄窗口。原生 `WM_CLOSE` 后核验窗口隐藏且转发继续；通知区图标和菜单的实际鼠标交互仍单独验收。截图和诊断保存为 `windows-desktop-gui` artifact，保留 7 天；临时凭据和状态目录不上传。调试端口只在测试启动参数中通过 WebView2 的 `--edge-webview-switches` 开启，结束后关闭测试进程并恢复系统代理。
 
 这项检查复用 Windows 桌面构建与 Go 缓存，只安装锁定的 `playwright-core`，不下载 Playwright 浏览器；已有 WebView2 时不重复安装。需要本地复现时，在隔离 Windows 用户中设置 `VEIL_TEST_SYSTEM_PROXY=1`，执行工作流中的 GUI 步骤。
 

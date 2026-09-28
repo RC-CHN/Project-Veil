@@ -40,35 +40,17 @@ def main():
         )
     args.server = args.server.resolve(strict=True)
     args.package = args.package.resolve(strict=True)
-    import winreg
     import windows
 
     args.artifacts = args.artifacts.resolve()
     args.artifacts.mkdir(parents=True, exist_ok=True)
     original = windows.snapshot()
-    policy = r"Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments"
-    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, policy) as key:
-        try:
-            old_policy = winreg.QueryValueEx(key, "veil-desktop.exe")
-        except FileNotFoundError:
-            old_policy = None
     with tempfile.TemporaryDirectory(prefix="veil desktop gui ") as temp:
         root = Path(temp)
         processes, servers = [], []
 
-        def restore_policy():
-            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, policy) as key:
-                if old_policy is None:
-                    with contextlib.suppress(FileNotFoundError):
-                        winreg.DeleteValue(key, "veil-desktop.exe")
-                else:
-                    winreg.SetValueEx(
-                        key, "veil-desktop.exe", 0, old_policy[1], old_policy[0]
-                    )
-
         with contextlib.ExitStack() as stack:
             # Restore user settings even if process teardown itself fails.
-            stack.callback(restore_policy)
             stack.callback(windows.write, original)
             try:
                 zipfile.ZipFile(args.package).extractall(root / "package")
@@ -150,14 +132,6 @@ def main():
                     pac="http://127.0.0.1:9/veil-test.pac",
                 )
                 windows.write(baseline)
-                with winreg.CreateKey(winreg.HKEY_CURRENT_USER, policy) as key:
-                    winreg.SetValueEx(
-                        key,
-                        "veil-desktop.exe",
-                        0,
-                        winreg.REG_SZ,
-                        f"--remote-debugging-port={cdp_port}",
-                    )
                 for name, command in [
                     (
                         "server",
@@ -167,7 +141,18 @@ def main():
                             str(root / "server.json"),
                         ],
                     ),
-                    ("desktop", [str(binary), "-state-dir", str(root / "state")]),
+                    (
+                        "desktop",
+                        [
+                            str(binary),
+                            "-state-dir",
+                            str(root / "state"),
+                            # Go stops parsing at this positional argument; WebView2
+                            # reads its documented switch from the process command line.
+                            "gui-acceptance",
+                            f"--edge-webview-switches=--remote-debugging-port={cdp_port}",
+                        ],
+                    ),
                 ]:
                     log = stack.enter_context(
                         (args.artifacts / f"{name}.log").open("wb")
