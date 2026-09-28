@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Isolated old/new v0.1 interop and paired CPU/performance regression.
+"""Isolated old/new protocol interop and paired CPU/performance regression.
 
 Requires a private network namespace, Linux perf and owned loopback fixtures.
 Both proxies get one CPU and GOMAXPROCS=1; no deployed paths are touched.
@@ -197,6 +197,7 @@ def main():
         "--cores", default="14,22,17,18", help="server,client,backend,load CPU IDs"
     )
     p.add_argument("--no-padding", action="store_true")
+    p.add_argument("--skip-interop", action="store_true", help="compare intentionally incompatible wire versions without cross-version connections")
     a = p.parse_args()
     if os.environ.get("VEIL_ISOLATED_NETNS") != "1" or os.readlink(
         "/proc/self/ns/net"
@@ -263,12 +264,13 @@ def main():
         (out / "results.json").write_text(json.dumps(rows, indent=2) + "\n")
         print(json.dumps(row), flush=True)
 
-    # Half-close, authentication and sequential pool reuse across both versions.
+    # Cross-version checks apply only when wire compatibility is intended.
     for group, binaries in (
         ("old-client-new-server", (new[0], old[1])),
         ("new-client-old-server", (old[0], new[1])),
     ):
-        run(group, binaries, "S", -1, 100, 0)
+        if not a.skip_interop:
+            run(group, binaries, "S", -1, 100, 0)
     rng = random.Random(149)
     for pair in range(a.reps):
         for mode in modes:

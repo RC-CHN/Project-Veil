@@ -8,7 +8,7 @@ import (
 )
 
 func TestBoundsAndTruncation(t *testing.T) {
-	for _, h := range [][]byte{{Data, 2, 0, 1}, {Auth, 0, 0, 48}, {2, 0, 0, 0}, {9, 0, 0, 0}, {Fin, 0, 0, 1}, {255, 0, 0, 0}, {Data, 0, 0, 0}} {
+	for _, h := range [][]byte{{Auth, 2, 0, 1}, {Auth, 0, 0, 48}, {2, 0, 0, 0}, {9, 0, 0, 0}, {255, 0, 0, 0}} {
 		r := Reader{R: bytes.NewReader(h)}
 		if _, _, err := r.Read(); !errors.Is(err, ErrProtocol) {
 			t.Fatalf("header %x: %v", h, err)
@@ -17,7 +17,7 @@ func TestBoundsAndTruncation(t *testing.T) {
 			t.Fatal("allocated before header validation")
 		}
 	}
-	r := Reader{R: bytes.NewReader([]byte{Data, 0, 0, 4, 1})}
+	r := Reader{R: bytes.NewReader([]byte{Auth, 0, 0, AuthSize, 1})}
 	if _, _, err := r.Read(); !errors.Is(err, io.ErrUnexpectedEOF) {
 		t.Fatal(err)
 	}
@@ -37,10 +37,12 @@ func TestProofBoundToTLS(t *testing.T) {
 	if VerifyAuth(key, a, p) {
 		t.Fatal("tampered nonce accepted")
 	}
-	p[0] = 0
-	copy(p[17:], proof(key, a, p[:17]))
-	if VerifyAuth(key, a, p) {
-		t.Fatal("old protocol version accepted")
+	for _, version := range []byte{0, 1} {
+		p[0] = version
+		copy(p[17:], proof(key, a, p[:17]))
+		if VerifyAuth(key, a, p) {
+			t.Fatal("old protocol version accepted")
+		}
 	}
 }
 
@@ -57,68 +59,29 @@ func (w *recordingWriter) Write(p []byte) (int, error) {
 	}
 	return w.Buffer.Write(p)
 }
-func TestPipelinedOpen(t *testing.T) {
+func TestAuthWrite(t *testing.T) {
 	auth, err := AuthPayload(make([]byte, 32), make([]byte, 32))
 	if err != nil {
 		t.Fatal(err)
 	}
-	address, _ := EncodeAddress("127.0.0.1:443")
-	for _, first := range []bool{true, false} {
-		w := new(recordingWriter)
-		var proof []byte
-		if first {
-			proof = auth
-		}
-		if err := WriteOpen(w, proof, address); err != nil {
-			t.Fatal(err)
-		}
-		if w.writes != 1 {
-			t.Fatalf("separate TLS writes: %d", w.writes)
-		}
-		r := Reader{R: w}
-		if first {
-			typ, p, err := r.Read()
-			if err != nil || typ != Auth || !bytes.Equal(p, auth) {
-				t.Fatal("AUTH not first", err)
-			}
-		}
-		typ, p, err := r.Read()
-		if err != nil || typ != Open || !bytes.Equal(p, address) {
-			t.Fatal("OPEN lost", err)
-		}
-		if w.Len() != 0 {
-			t.Fatal("unexpected trailing frames")
-		}
+	w := new(recordingWriter)
+	if err := Write(w, Auth, auth); err != nil {
+		t.Fatal(err)
 	}
-	w := &recordingWriter{short: true}
-	if err := WriteOpen(w, auth, address); !errors.Is(err, io.ErrShortWrite) {
+	r := Reader{R: w}
+	typ, got, err := r.Read()
+	if err != nil || typ != Auth || !bytes.Equal(got, auth) || w.writes != 1 {
+		t.Fatal("auth round trip", err)
+	}
+	if err := Write(&recordingWriter{short: true}, Auth, auth); !errors.Is(err, io.ErrShortWrite) {
 		t.Fatal(err)
 	}
 	w = new(recordingWriter)
-	if err := WriteOpen(w, auth[:48], address); err == nil || w.writes != 0 {
-		t.Fatal("invalid AUTH emitted")
+	if err := Write(w, Auth, auth[:48]); err == nil || w.writes != 0 {
+		t.Fatal("invalid auth emitted")
 	}
 }
 
-func TestFullDataFrameFitsEightTLSRecords(t *testing.T) {
-	w := new(recordingWriter)
-	b := make([]byte, HeaderSize+MaxData)
-	if err := WriteBuffer(w, Data, b, MaxData); err != nil {
-		t.Fatal(err)
-	}
-	if w.Len() != 8*16384 {
-		t.Fatalf("frame leaves a TLS tail: %d", w.Len())
-	}
-	r := Reader{R: w}
-	typ, p, err := r.Read()
-	if err != nil || typ != Data || len(p) != MaxData {
-		t.Fatal("max frame rejected", err)
-	}
-	r = Reader{R: bytes.NewReader([]byte{Data, 2, 0, 0})}
-	if _, _, err := r.Read(); !errors.Is(err, ErrProtocol) {
-		t.Fatal("old oversized frame accepted", err)
-	}
-}
 func TestAddresses(t *testing.T) {
 	for _, a := range []string{"127.0.0.1:443", "[::1]:443", "example.com:443"} {
 		p, e := EncodeAddress(a)
@@ -135,12 +98,12 @@ func TestAddresses(t *testing.T) {
 	}
 }
 func FuzzRead(f *testing.F) {
-	f.Add([]byte{Fin, 0, 0, 0})
-	f.Add([]byte{Data, 0, 0, 1, 42})
+	f.Add([]byte{Auth, 0, 0, AuthSize})
+	f.Add([]byte{2, 0, 0, 1, 42})
 	f.Fuzz(func(t *testing.T, b []byte) {
 		r := Reader{R: bytes.NewReader(b)}
 		_, p, _ := r.Read()
-		if len(p) > MaxData {
+		if len(p) > AuthSize {
 			t.Fatal("unbounded payload")
 		}
 	})

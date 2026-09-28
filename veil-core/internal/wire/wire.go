@@ -1,8 +1,7 @@
-// Package wire implements the bounded, sequential Veil framing layer.
+// Package wire implements TLS-bound authentication and destination encoding.
 package wire
 
 import (
-	"bytes"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -13,26 +12,16 @@ import (
 	"strconv"
 )
 
-const HeaderSize = 4
-
-// Include the frame header in the eight-record TLS plaintext budget.
-const MaxData = 128*1024 - HeaderSize
-const authVersion = 1
 const (
-	Auth byte = iota + 1
-	_         // v0 AUTH_OK is no longer accepted.
-	Open
-	OpenOK
-	OpenError
-	Data
-	Fin
-	Done
+	HeaderSize       = 4
+	AuthSize         = 49
+	authVersion      = 2
+	Auth        byte = 1
 )
 
 var ErrProtocol = errors.New("veil: invalid frame or state")
 
-// OPEN_ERROR already carries one byte. Codes refine authenticated failure
-// reporting without changing framing; old peers still reject failed opens.
+// OpenFailure reports a failed destination dial to the caller.
 type OpenFailure byte
 
 const (
@@ -52,37 +41,6 @@ func (e OpenFailure) Error() string {
 		return "veil: target dial timed out"
 	default:
 		return "veil: target dial failed"
-	}
-}
-
-func ReadOpenResult(r *Reader) error {
-	t, p, err := r.Read()
-	if err != nil {
-		return err
-	}
-	if t == OpenOK {
-		return nil
-	}
-	if t == OpenError {
-		return OpenFailure(p[0])
-	}
-	return ErrProtocol
-}
-
-func valid(t byte, n int) bool {
-	switch t {
-	case Auth:
-		return n == 49
-	case OpenOK, Fin, Done:
-		return n == 0
-	case Open:
-		return n >= 4 && n <= 259
-	case OpenError:
-		return n == 1
-	case Data:
-		return n > 0 && n <= MaxData
-	default:
-		return false
 	}
 }
 
@@ -116,84 +74,33 @@ func (r *Reader) ReadHeader() (t byte, n int, err error) {
 		return 0, 0, err
 	}
 	n = int(h[1])<<16 | int(h[2])<<8 | int(h[3])
-	if !valid(h[0], n) {
+	if h[0] != Auth || n != AuthSize {
 		return 0, 0, ErrProtocol
 	}
 	return h[0], n, nil
 }
 func (r *Reader) Release() { r.buf = nil }
 
-// WriteBuffer writes one header and payload in one TLS Write. The caller owns
-// storage and must reserve HeaderSize leading bytes. No concurrent writers.
-func WriteBuffer(w io.Writer, t byte, storage []byte, n int) error {
-	if n < 0 || len(storage) < n+4 || !valid(t, n) {
+// Write emits the authentication frame in one write. Stream frames belong to mux.
+func Write(w io.Writer, t byte, p []byte) error {
+	if t != Auth || len(p) != AuthSize {
 		return ErrProtocol
 	}
-	storage[0], storage[1], storage[2], storage[3] = t, byte(n>>16), byte(n>>8), byte(n)
-	written, err := w.Write(storage[:n+4])
-	if err == nil && written != n+4 {
-		err = io.ErrShortWrite
-	}
-	return err
-}
-func Write(w io.Writer, t byte, p []byte) error {
-	b := make([]byte, 4+len(p))
-	copy(b[4:], p)
-	return WriteBuffer(w, t, b, len(p))
-}
-
-// WriteDone preserves the two frame types while sharing one TLS record when
-// FIN can be deferred until the stream's completion barrier. No timer or queue.
-func WriteDone(w io.Writer, finPending bool) error {
-	if !finPending {
-		return Write(w, Done, nil)
-	}
-	b := [2 * HeaderSize]byte{Fin, 0, 0, 0, Done, 0, 0, 0}
+	var b [HeaderSize + AuthSize]byte
+	b[0], b[3] = Auth, AuthSize
+	copy(b[HeaderSize:], p)
 	n, err := w.Write(b[:])
 	if err == nil && n != len(b) {
-		err = io.ErrShortWrite
-	}
-	return err
-}
-
-// WriteOpen sends the first AUTH and OPEN in one TLS Write, with no AUTH_OK
-// round trip. Reused connections pass nil for auth and send only OPEN.
-func WriteOpen(w io.Writer, auth, address []byte) error {
-	if !valid(Open, len(address)) || (auth != nil && !valid(Auth, len(auth))) {
-		return ErrProtocol
-	}
-	if auth == nil {
-		return Write(w, Open, address)
-	}
-	var b bytes.Buffer
-	if err := Write(&b, Auth, auth); err != nil {
-		return err
-	}
-	if err := Write(&b, Open, address); err != nil {
-		return err
-	}
-	n, err := w.Write(b.Bytes())
-	if err == nil && n != b.Len() {
 		return io.ErrShortWrite
 	}
 	return err
-}
-func Expect(r *Reader, t byte) error {
-	got, _, err := r.Read()
-	if err != nil {
-		return err
-	}
-	if got != t {
-		return ErrProtocol
-	}
-	return nil
 }
 
 // Authentication is tied to this TLS connection's exporter; replaying a proof
 // on another connection fails, including across TLS session resumption.
 func proof(key, exporter, body []byte) []byte {
 	m := hmac.New(sha256.New, key)
-	m.Write([]byte("Veil-v0.1 client authentication\x00"))
+	m.Write([]byte("Veil-v0.2 client authentication\x00"))
 	m.Write(exporter)
 	m.Write(body)
 	return m.Sum(nil)
@@ -202,7 +109,7 @@ func AuthPayload(key, exporter []byte) ([]byte, error) {
 	if len(key) != 32 || len(exporter) != 32 {
 		return nil, ErrProtocol
 	}
-	b := make([]byte, 49)
+	b := make([]byte, AuthSize)
 	b[0] = authVersion
 	if _, err := rand.Read(b[1:17]); err != nil {
 		return nil, err
@@ -211,7 +118,7 @@ func AuthPayload(key, exporter []byte) ([]byte, error) {
 	return b, nil
 }
 func VerifyAuth(key, exporter, p []byte) bool {
-	return len(key) == 32 && len(exporter) == 32 && len(p) == 49 && p[0] == authVersion && hmac.Equal(p[17:], proof(key, exporter, p[:17]))
+	return len(key) == 32 && len(exporter) == 32 && len(p) == AuthSize && p[0] == authVersion && hmac.Equal(p[17:], proof(key, exporter, p[:17]))
 }
 
 func EncodeAddress(address string) ([]byte, error) {

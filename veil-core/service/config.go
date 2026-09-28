@@ -3,26 +3,35 @@ package service
 import (
 	"errors"
 	"time"
+	"veil/core"
 	"veil/internal/transport"
 	"veil/internal/wire"
 )
 
 type Config struct {
-	Role             string             `json:"role"`
-	Listen           string             `json:"listen"`
-	Server           string             `json:"server"`
-	Target           string             `json:"target,omitempty"`
-	Secret           string             `json:"secret"`
-	TLS              transport.Settings `json:"tls"`
-	MaxConnections   int                `json:"max_connections"`
-	MaxIdle          int                `json:"max_idle"`
-	HandshakeSeconds int                `json:"handshake_seconds"`
-	DialSeconds      int                `json:"dial_seconds"`
-	IdleSeconds      int                `json:"idle_seconds"`
-	PoolSeconds      int                `json:"pool_seconds"`
+	Role             string               `json:"role"`
+	Listen           string               `json:"listen"`
+	Server           string               `json:"server"`
+	Target           string               `json:"target,omitempty"`
+	Secret           string               `json:"secret"`
+	TLS              transport.Settings   `json:"tls"`
+	Traffic          *core.TrafficProfile `json:"traffic,omitempty"`
+	MaxConnections   int                  `json:"max_connections"`
+	MaxIdle          int                  `json:"max_idle"`
+	HandshakeSeconds int                  `json:"handshake_seconds"`
+	DialSeconds      int                  `json:"dial_seconds"`
+	IdleSeconds      int                  `json:"idle_seconds"`
+	PoolSeconds      int                  `json:"pool_seconds"`
 }
 
 func (c *Config) Defaults() error {
+	if c.Traffic != nil {
+		p := *c.Traffic
+		if err := p.Validate(); err != nil {
+			return err
+		}
+		c.Traffic = &p
+	}
 	if c.MaxConnections == 0 {
 		c.MaxConnections = 64
 	}

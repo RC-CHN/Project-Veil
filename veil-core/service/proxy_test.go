@@ -23,6 +23,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"veil/internal/mux"
 	"veil/internal/transport"
 	"veil/internal/wire"
 )
@@ -350,32 +351,44 @@ func TestReplayAndStateRejection(t *testing.T) {
 	var accepted atomic.Int32
 	dst := target(t, func(c net.Conn) { accepted.Add(1); io.Copy(io.Discard, c) })
 	address, _ := wire.EncodeAddress(dst)
-	if e = wire.WriteOpen(c, proof, address); e != nil {
+	var prefix bytes.Buffer
+	wire.Write(&prefix, wire.Auth, proof)
+	m, e := mux.New(c, mux.Options{Profile: mux.DefaultProfile(), Prefix: prefix.Bytes()})
+	if e != nil {
 		t.Fatal(e)
 	}
-	r := wire.Reader{R: c}
-	if e = wire.Expect(&r, wire.OpenOK); e != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	stream, e := m.Open(ctx, address)
+	if e != nil {
 		t.Fatal(e)
 	}
-	c.Close()
+	stream.Close()
+	m.Close()
+	m.Wait()
 	c2 := directTLS(t, ct, addr)
-	wire.WriteOpen(c2, proof, address)
-	r = wire.Reader{R: c2}
-	if e = wire.Expect(&r, wire.OpenOK); e == nil {
+	replay, e := mux.New(c2, mux.Options{Profile: mux.DefaultProfile(), Prefix: prefix.Bytes()})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if stream, e = replay.Open(ctx, address); e == nil {
+		stream.Close()
 		t.Fatal("cross-connection proof replay accepted")
 	}
-	c2.Close()
+	replay.Close()
+	replay.Wait()
 	c3 := directTLS(t, ct, addr)
 	ekm, e := transport.Export(c3)
 	if e != nil {
 		t.Fatal(e)
 	}
-	p, _ := wire.AuthPayload(key, ekm)
-	wire.Write(c3, wire.Auth, p)
-	r = wire.Reader{R: c3}
-	wire.Write(c3, wire.Data, []byte{1})
+	proof, _ = wire.AuthPayload(key, ekm)
+	wire.Write(c3, wire.Auth, proof)
+	// A DATA frame for a never-opened stream must fail before any allocation.
+	c3.Write([]byte{4, 0, 0, 0, 1, 0, 0, 1, 42})
 	c3.SetReadDeadline(time.Now().Add(time.Second))
-	if _, _, e = r.Read(); e == nil {
+	var one [1]byte
+	if _, e = c3.Read(one[:]); e == nil {
 		t.Fatal("DATA before OPEN accepted")
 	}
 	if server.Stats.Authenticated.Load() != 2 {
@@ -388,7 +401,7 @@ func TestReplayAndStateRejection(t *testing.T) {
 
 func TestOpenFailureDoesNotReportSOCKSSuccess(t *testing.T) {
 	st, ct := settings(t, "tls")
-	_, addr := start(t, Config{Role: "server", Secret: testKey, TLS: st})
+	server, addr := start(t, Config{Role: "server", Secret: testKey, TLS: st})
 	client, entry := start(t, Config{Role: "client", Secret: testKey, TLS: ct, Server: addr})
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -401,8 +414,17 @@ func TestOpenFailureDoesNotReportSOCKSSuccess(t *testing.T) {
 		t.Fatal("SOCKS success before target connected")
 	}
 	idle := client.client.PoolStats().Idle
-	if idle != 0 {
-		t.Fatal("failed OPEN returned to idle pool")
+	if idle != 1 {
+		t.Fatal("failed logical OPEN destroyed the physical connection")
+	}
+	good := target(t, func(c net.Conn) { p, _ := io.ReadAll(c); writeAll(c, p) })
+	c, err := socksDial(entry, good)
+	if err != nil {
+		t.Fatal(err)
+	}
+	halfEchoPayload(t, c, []byte("after a failed destination"))
+	if server.Stats.Authenticated.Load() != 1 {
+		t.Fatal("dial failure prevented physical reuse")
 	}
 }
 func TestActiveIdleTimeout(t *testing.T) {

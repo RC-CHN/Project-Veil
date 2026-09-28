@@ -148,7 +148,7 @@ func Export(c net.Conn) ([]byte, error) {
 	if !st.HandshakeComplete || st.Version != utls.VersionTLS13 {
 		return nil, errors.New("transport: completed TLS 1.3 handshake required")
 	}
-	return st.ExportKeyingMaterial("EXPORTER-Veil-v0.1", nil, 32)
+	return st.ExportKeyingMaterial("EXPORTER-Veil-v0.2", nil, 32)
 }
 
 // ReleaseBuffers is a no-op with the original TLS library. The patched method
@@ -159,15 +159,14 @@ func ReleaseBuffers(c net.Conn) {
 	}
 }
 
-// RecordPadding starts a bounded, variable local budget at a stream boundary.
-// TLS 1.3 peers already strip these zero bytes, so no wire negotiation is needed.
-func RecordPadding(c net.Conn, enabled bool) error {
-	if x, ok := c.(interface{ VeilSetPadding(bool) }); ok {
-		x.VeilSetPadding(enabled)
+// RecordBudget sets a bounded local TLS 1.3 application-record padding budget.
+// It does not modify handshake or fallback bytes.
+func RecordBudget(c net.Conn, limit, records, budget int) error {
+	if x, ok := c.(interface{ VeilSetPaddingBudget(int, int, int) error }); ok {
+		return x.VeilSetPaddingBudget(limit, records, budget)
+	}
+	if limit == 0 || records == 0 || budget == 0 {
 		return nil
 	}
-	if enabled {
-		return errors.New("transport: record padding requires the patched TLS library")
-	}
-	return nil
+	return errors.New("transport: traffic profile requires the patched TLS library")
 }

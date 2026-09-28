@@ -12,6 +12,7 @@ import (
 	"time"
 	"veil/core"
 	"veil/inbound"
+	"veil/internal/mux"
 	"veil/internal/transport"
 	"veil/internal/wire"
 )
@@ -242,30 +243,35 @@ func TestCoreAbandonOpen(t *testing.T) {
 	dst := target(t, func(c net.Conn) { io.Copy(io.Discard, c) })
 	server, addr := start(t, Config{Role: "server", Secret: testKey, TLS: st})
 	client := newCoreClient(t, core.ClientConfig{Config: core.Config{Secret: testKey, TLS: ct, MaxConnections: 1}, Server: addr})
-	for i := 0; i < 3; i++ {
-		ctx, cancel := context.WithCancel(context.Background())
-		stream, err := client.Open(ctx, dst)
+	streams := make([]*core.Stream, 0, mux.MaxStreams)
+	for range mux.MaxStreams {
+		stream, err := client.Open(context.Background(), dst)
 		if err != nil {
-			cancel()
 			t.Fatal(err)
 		}
-		if excess, err := client.Open(ctx, dst); err == nil {
-			excess.Close()
-			t.Fatal("aggregate pool limit exceeded")
-		}
-		if i == 0 {
-			stream.Close()
-		} else if i == 1 {
-			cancel()
-		} else {
-			client.Close()
-		}
-		await(t, func() bool { return client.PoolStats().Total == 0 })
-		cancel()
+		streams = append(streams, stream)
+		defer stream.Close()
+	}
+	if extra, err := client.Open(context.Background(), dst); err == nil {
+		extra.Close()
+		t.Fatal("aggregate stream limit exceeded")
+	}
+	streams[0].Close()
+	replacement, err := client.Open(context.Background(), dst)
+	if err != nil {
+		t.Fatal("abandoned slot was not reusable", err)
+	}
+	replacement.Close()
+	for _, stream := range streams {
 		stream.Close()
 	}
-	if server.Stats.Authenticated.Load() != 3 {
-		t.Fatal("abandoned stream was reused")
+	await(t, func() bool { return client.PoolStats().Idle == 1 })
+	if server.Stats.Authenticated.Load() != 1 {
+		t.Fatal("logical cancellation destroyed physical connection")
+	}
+	client.Close()
+	if client.PoolStats().Total != 0 {
+		t.Fatal("client close retained physical connection")
 	}
 }
 
@@ -334,8 +340,8 @@ func TestCoreLateCloseAndActiveCancel(t *testing.T) {
 	_, aborted := streamPair(t, stream)
 	stream.Close()
 	relayResult(t, aborted, false)
-	if client.PoolStats().Total != 0 {
-		t.Fatal("aborted relay was retained")
+	if client.PoolStats().Total != 1 || client.PoolStats().Idle != 1 {
+		t.Fatal("cancelled stream did not release its slot")
 	}
 	stream, err = client.Open(context.Background(), dst)
 	if err != nil {
@@ -387,15 +393,15 @@ func TestCoreCloseAfterRemoteFIN(t *testing.T) {
 	// blocked. Closing only TLS would leave Relay waiting for the idle timeout.
 	stream.Close()
 	relayResult(t, done, false)
-	if client.PoolStats().Total != 0 {
-		t.Fatal("aborted half-closed stream was reused")
+	if client.PoolStats().Total != 1 || client.PoolStats().Idle != 1 {
+		t.Fatal("half-closed stream did not release its slot")
 	}
 }
 
-// A FIN without DONE is not the reuse barrier. Also exercise cancellation
-// while Open is waiting for OPEN_OK, rather than only during TCP dialing.
+// Cancellation must interrupt a missing OPEN reply and a peer that leaves its
+// write half open after receiving our FIN. Neither requires closing other streams.
 func TestCoreIncompleteControlExchange(t *testing.T) {
-	for _, phase := range []string{"open", "done"} {
+	for _, phase := range []string{"open", "fin"} {
 		t.Run(phase, func(t *testing.T) {
 			st, ct := settings(t, "tls")
 			h, err := transport.Server(st, time.Second, time.Second)
@@ -417,23 +423,27 @@ func TestCoreIncompleteControlExchange(t *testing.T) {
 				if typ, _, err := r.Read(); err != nil || typ != wire.Auth {
 					return wire.ErrProtocol
 				}
-				if typ, _, err := r.Read(); err != nil || typ != wire.Open {
-					return wire.ErrProtocol
+				m, err := mux.New(c, mux.Options{Server: true, Profile: mux.DefaultProfile()})
+				if err != nil {
+					return err
 				}
-				if phase == "done" {
-					if err := wire.Write(c, wire.OpenOK, nil); err != nil {
+				defer func() { m.Close(); m.Wait() }()
+				stream, err := m.Accept(ctx)
+				if err != nil {
+					return err
+				}
+				defer stream.Close()
+				if phase == "fin" {
+					if err = stream.Respond(0); err != nil {
 						return err
 					}
-					if err := wire.Expect(&r, wire.Fin); err != nil {
-						return err
-					}
-					if err := wire.Write(c, wire.Fin, nil); err != nil {
+					if _, err = io.Copy(io.Discard, stream); err != nil {
 						return err
 					}
 				}
 				close(waiting)
-				_, err = io.Copy(io.Discard, c)
-				return err
+				<-ctx.Done()
+				return nil
 			})
 			client := newCoreClient(t, core.ClientConfig{Config: core.Config{Secret: testKey, TLS: ct}, Server: addr})
 			ctx, cancel := context.WithCancel(context.Background())
@@ -458,9 +468,65 @@ func TestCoreIncompleteControlExchange(t *testing.T) {
 			}
 			cancel()
 			relayResult(t, done, false)
-			if client.PoolStats().Total != 0 || client.Stats.Completed.Load() != 0 {
-				t.Fatal("incomplete exchange reused")
+			if client.PoolStats().Total != 1 || client.PoolStats().Idle != 1 || client.Stats.Completed.Load() != 0 {
+				t.Fatal("incomplete stream did not release its slot")
 			}
 		})
+	}
+}
+
+func TestRemoteDialCancellationIsolated(t *testing.T) {
+	st, ct := settings(t, "tls")
+	entered, cancelled := make(chan struct{}), make(chan struct{})
+	dst := target(t, func(c net.Conn) { p, _ := io.ReadAll(c); writeAll(c, p) })
+	server, err := core.NewServer(core.ServerConfig{Config: core.Config{Secret: testKey, TLS: st}, DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+		if address == "pending.test:443" {
+			close(entered)
+			<-ctx.Done()
+			close(cancelled)
+			return nil, ctx.Err()
+		}
+		return (&net.Dialer{}).DialContext(ctx, network, address)
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr, _ := startHandler(t, server.Handle)
+	client := newCoreClient(t, core.ClientConfig{Config: core.Config{Secret: testKey, TLS: ct, MaxConnections: 1}, Server: addr})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	result := make(chan error, 1)
+	go func() { _, err := client.Open(ctx, "pending.test:443"); result <- err }()
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("remote dial did not start")
+	}
+	live, err := client.Open(context.Background(), dst)
+	if err != nil {
+		t.Fatal("pending dial blocked another stream:", err)
+	}
+	defer live.Close()
+	cancel()
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Open did not cancel")
+	}
+	select {
+	case <-cancelled:
+	case <-time.After(time.Second):
+		t.Fatal("remote target dial was not cancelled")
+	}
+	local, done := streamPair(t, live)
+	halfEcho(t, local)
+	if err := <-done; err != nil {
+		t.Fatal("cancel destroyed another stream:", err)
+	}
+	if server.Stats.Authenticated.Load() != 1 {
+		t.Fatal("unexpected replacement TLS connection")
 	}
 }

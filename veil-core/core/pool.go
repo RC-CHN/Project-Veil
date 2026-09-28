@@ -1,44 +1,60 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
+	"veil/internal/mux"
 	"veil/internal/transport"
 	"veil/internal/wire"
 )
 
 type session struct {
-	net.Conn
-	r    wire.Reader
-	at   time.Time
-	auth []byte // pending first-OPEN proof; never retained by an idle session
+	mux    *mux.Session
+	active int
+	at     time.Time
 }
 type pool struct {
-	mu        sync.Mutex
-	idle      []*session
-	all       map[*session]bool
-	total     int
-	closed    bool
-	cfg       ClientConfig
-	key       []byte
-	handshake transport.Handshake
+	mu              sync.Mutex
+	all             map[*session]bool
+	total           int
+	closed, dialing bool
+	changed         chan struct{}
+	cfg             ClientConfig
+	key             []byte
+	handshake       transport.Handshake
+	traffic         atomic.Pointer[TrafficProfile]
 }
 
 func newPool(cfg ClientConfig, key []byte, h transport.Handshake) *pool {
-	return &pool{cfg: cfg, key: key, handshake: h, all: make(map[*session]bool)}
+	p := &pool{cfg: cfg, key: key, handshake: h, all: make(map[*session]bool), changed: make(chan struct{})}
+	p.traffic.Store(cfg.Traffic)
+	return p
 }
-func (p *pool) drop(s *session) {
-	s.Close()
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.all[s] {
-		delete(p.all, s)
-		p.total--
+func (p *pool) notifyLocked() { close(p.changed); p.changed = make(chan struct{}) }
+func (p *pool) idleLocked() int {
+	n := 0
+	for s := range p.all {
+		if s.active == 0 {
+			n++
+		}
 	}
+	return n
 }
+func (p *pool) removeLocked(s *session) bool {
+	if !p.all[s] {
+		return false
+	}
+	delete(p.all, s)
+	p.total--
+	p.notifyLocked()
+	return true
+}
+func stopSession(s *session) { s.mux.Close(); s.mux.Wait() }
 func (p *pool) get(ctx context.Context) (*session, error) {
 	for {
 		if err := ctx.Err(); err != nil {
@@ -49,64 +65,84 @@ func (p *pool) get(ctx context.Context) (*session, error) {
 			p.mu.Unlock()
 			return nil, net.ErrClosed
 		}
-		if len(p.idle) > 0 {
-			last := len(p.idle) - 1
-			s := p.idle[last]
-			p.idle[last] = nil
-			p.idle = p.idle[:last]
-			age := time.Since(s.at)
-			p.mu.Unlock()
-			// Hot reuse performs no read, timer or extra round trip. After a quiet
-			// interval, consume a pending TLS close/error before sending any OPEN.
-			if age < p.cfg.PoolTimeout && (age < time.Second || s.idleUsable(ctx)) {
-				return s, nil
+		var best *session
+		var dead []*session
+		bestBulk := false
+		for s := range p.all {
+			_, bulk, closed := s.mux.Snapshot()
+			if closed || s.active == 0 && time.Since(s.at) >= p.cfg.PoolTimeout {
+				p.removeLocked(s)
+				dead = append(dead, s)
+				continue
 			}
-			p.drop(s)
+			if s.active < mux.MaxStreams && (best == nil || bestBulk && !bulk || bestBulk == bulk && s.active < best.active) {
+				best = s
+				bestBulk = bulk
+			}
+		}
+		if len(dead) > 0 {
+			p.mu.Unlock()
+			for _, s := range dead {
+				stopSession(s)
+			}
 			continue
 		}
-		if p.total >= p.cfg.MaxConnections {
+		// Mix real concurrency first. A second TCP lane separates sustained bulk
+		// transfer or a busier group from new interactive work.
+		wantNew := best == nil || (p.total < min(2, p.cfg.MaxConnections) && (bestBulk || best.active >= 4))
+		if wantNew && p.total < p.cfg.MaxConnections && !p.dialing {
+			p.total++
+			p.dialing = true
 			p.mu.Unlock()
-			return nil, errors.New("veil: connection pool limit")
+			s, err := p.dial(ctx)
+			p.mu.Lock()
+			p.dialing = false
+			p.notifyLocked()
+			if err != nil {
+				p.total--
+				p.mu.Unlock()
+				return nil, err
+			}
+			if p.closed {
+				p.total--
+				p.mu.Unlock()
+				stopSession(s)
+				return nil, net.ErrClosed
+			}
+			s.active = 1
+			p.all[s] = true
+			p.mu.Unlock()
+			return s, nil
 		}
-		p.total++
+		if wantNew && p.dialing {
+			changed := p.changed
+			p.mu.Unlock()
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-changed:
+				continue
+			}
+		}
+		if best != nil {
+			best.active++
+			p.mu.Unlock()
+			return best, nil
+		}
 		p.mu.Unlock()
-		s, err := p.dial(ctx)
-		p.mu.Lock()
-		if err != nil {
-			p.total--
-			p.mu.Unlock()
-			return nil, err
-		}
-		if p.closed {
-			p.total--
-			p.mu.Unlock()
-			s.Close()
-			return nil, net.ErrClosed
-		}
-		p.all[s] = true
-		p.mu.Unlock()
-		return s, nil
+		return nil, errors.New("veil: connection pool limit")
 	}
 }
-
-// This is a bounded drain of already pending EOF/alerts, not a heartbeat or a
-// guarantee against blackholes. A timeout is temporary in TLS Read; unexpected
-// application bytes mean the FIN/DONE barrier was violated. Nothing is replayed.
-func (s *session) idleUsable(ctx context.Context) bool {
-	deadline := time.Now().Add(2 * time.Millisecond)
-	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
-		deadline = d
+func muxOptions(c net.Conn, cfg Config, server bool) mux.Options {
+	opts := mux.Options{Server: server, Profile: *cfg.Traffic, IdleTimeout: 2 * cfg.PoolTimeout, WriteTimeout: cfg.IdleTimeout}
+	if cfg.TLS.RecordPadding {
+		opts.Padding = func(limit, records, budget int) error { return transport.RecordBudget(c, limit, records, budget) }
 	}
-	if s.SetDeadline(deadline) != nil {
-		return false
-	}
-	var b [1]byte
-	n, err := s.Read(b[:])
-	clearErr := s.SetDeadline(time.Time{})
-	var e net.Error
-	return n == 0 && errors.As(err, &e) && e.Timeout() && clearErr == nil && ctx.Err() == nil
+	return opts
 }
 func (p *pool) dial(ctx context.Context) (*session, error) {
+	cfg := p.cfg.Config
+	cfg.Traffic = p.traffic.Load()
 	ctx, cancel := context.WithTimeout(ctx, p.cfg.HandshakeTimeout)
 	defer cancel()
 	raw, err := p.cfg.DialContext(ctx, "tcp", p.cfg.Server)
@@ -121,15 +157,13 @@ func (p *pool) dial(ctx context.Context) (*session, error) {
 		raw.Close()
 		return nil, err
 	}
-	s := &session{Conn: c, r: wire.Reader{R: c}}
 	exporter, err := transport.Export(c)
 	if err != nil {
 		c.Close()
 		return nil, err
 	}
-	s.auth, err = wire.AuthPayload(p.key, exporter)
+	auth, err := wire.AuthPayload(p.key, exporter)
 	if err != nil {
-		raw.Close()
 		c.Close()
 		return nil, err
 	}
@@ -138,51 +172,66 @@ func (p *pool) dial(ctx context.Context) (*session, error) {
 		return nil, err
 	}
 	c.SetDeadline(time.Time{})
-	return s, nil
+	var prefix bytes.Buffer
+	if err = wire.Write(&prefix, wire.Auth, auth); err != nil {
+		c.Close()
+		return nil, err
+	}
+	opts := muxOptions(c, cfg, false)
+	opts.Prefix = prefix.Bytes()
+	m, err := mux.New(c, opts)
+	if err != nil {
+		c.Close()
+		return nil, err
+	}
+	return &session{mux: m}, nil
 }
 func (p *pool) put(s *session) {
-	s.r.Release()
-	transport.ReleaseBuffers(s.Conn)
-	s.at = time.Now()
 	p.mu.Lock()
-	if p.closed || len(p.idle) >= p.cfg.MaxIdle {
+	if !p.all[s] {
 		p.mu.Unlock()
-		p.drop(s)
 		return
 	}
-	p.idle = append(p.idle, s)
+	s.active--
+	s.at = time.Now()
+	_, _, closed := s.mux.Snapshot()
+	drop := closed || p.closed || (s.active == 0 && p.idleLocked() > p.cfg.MaxIdle)
+	if drop {
+		p.removeLocked(s)
+	} else {
+		p.notifyLocked()
+	}
 	p.mu.Unlock()
+	if drop {
+		stopSession(s)
+	}
 }
 func (p *pool) expire() {
 	p.mu.Lock()
 	var expired []*session
-	keep := p.idle[:0]
-	for _, s := range p.idle {
-		if time.Since(s.at) >= p.cfg.PoolTimeout {
+	for s := range p.all {
+		_, _, closed := s.mux.Snapshot()
+		if closed || s.active == 0 && time.Since(s.at) >= p.cfg.PoolTimeout {
+			p.removeLocked(s)
 			expired = append(expired, s)
-		} else {
-			keep = append(keep, s)
 		}
 	}
-	for i := len(keep); i < len(p.idle); i++ {
-		p.idle[i] = nil
-	}
-	p.idle = keep
 	p.mu.Unlock()
 	for _, s := range expired {
-		p.drop(s)
+		stopSession(s)
 	}
 }
 func (p *pool) close() {
 	p.mu.Lock()
 	p.closed = true
-	all := make([]*session, 0, len(p.all))
+	p.notifyLocked()
+	var all []*session
 	for s := range p.all {
+		p.removeLocked(s)
 		all = append(all, s)
 	}
-	p.idle = nil
 	p.mu.Unlock()
 	for _, s := range all {
-		p.drop(s)
+		stopSession(s)
 	}
 }

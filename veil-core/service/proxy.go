@@ -22,7 +22,7 @@ func New(cfg Config) (*Service, error) {
 		return nil, err
 	}
 	opts := core.Config{
-		Secret: cfg.Secret, TLS: cfg.TLS,
+		Secret: cfg.Secret, TLS: cfg.TLS, Traffic: cfg.Traffic,
 		MaxConnections: cfg.MaxConnections, MaxIdle: cfg.MaxIdle,
 		HandshakeTimeout: sec(cfg.HandshakeSeconds), DialTimeout: sec(cfg.DialSeconds),
 		IdleTimeout: sec(cfg.IdleSeconds), PoolTimeout: sec(cfg.PoolSeconds),
@@ -34,6 +34,11 @@ func New(cfg Config) (*Service, error) {
 			return nil, err
 		}
 		s.handle, s.Stats = server.Handle, &server.Stats
+		server.OnStreamError = func(err error) {
+			if s.OnError != nil {
+				s.OnError(err)
+			}
+		}
 	} else {
 		client, err := core.NewClient(core.ClientConfig{Config: opts, Server: cfg.Server})
 		if err != nil {

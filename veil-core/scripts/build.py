@@ -107,7 +107,7 @@ def padding_patch(s):
     s = replace(
         s,
         "type halfConn struct {",
-        "type halfConn struct {\n\tveilPadRecords, veilPadWindow uint8\n\tveilPadBytes, veilPadLimit uint16 // protected by Conn.out mutex",
+        "type halfConn struct {\n\tveilPadRecords uint8\n\tveilPadBytes, veilPadLimit uint16 // protected by Conn.out mutex",
     )
     return replace(
         s,

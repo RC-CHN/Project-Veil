@@ -1,25 +1,25 @@
 package tls
 
-import "math/rand/v2"
+import (
+	"errors"
+	"math/rand/v2"
+)
 
-// VeilSetPadding starts a bounded send budget at a business-stream boundary.
-// It affects application records only; handshake and fallback bytes are intact.
-// Call before writing OPEN/OPEN_OK, with no application writes in flight.
-func (c *Conn) VeilSetPadding(enabled bool) {
+// VeilSetPaddingBudget installs one sender's externally configured profile.
+// The connection's sole writer calls this at a stream activation boundary.
+func (c *Conn) VeilSetPaddingBudget(limit, records, budget int) error {
+	if limit < 0 || limit > 512 || records < 0 || records > 12 || budget < 0 || budget > 4096 {
+		return errors.New("TLS padding budget outside allowed range")
+	}
 	c.out.Lock()
 	defer c.out.Unlock()
-	c.out.veilPadRecords = 0
-	c.out.veilPadBytes = 0
-	if enabled && c.vers == VersionTLS13 && c.isHandshakeComplete.Load() {
-		// Keep one connection's range stable, but vary each stream's extent.
-		// These are bounded length perturbations, not a browser traffic model.
-		if c.out.veilPadLimit == 0 {
-			c.out.veilPadLimit = uint16(128 + rand.IntN(129))
-			c.out.veilPadWindow = uint8(4 + rand.IntN(5))
-		}
-		c.out.veilPadRecords = uint8(2 + rand.IntN(int(c.out.veilPadWindow)-1))
-		c.out.veilPadBytes = uint16(512 + rand.IntN(513))
+	c.out.veilPadRecords, c.out.veilPadBytes = 0, 0
+	if c.vers == VersionTLS13 && c.isHandshakeComplete.Load() {
+		c.out.veilPadLimit = uint16(limit)
+		c.out.veilPadRecords = uint8(records)
+		c.out.veilPadBytes = uint16(budget)
 	}
+	return nil
 }
 
 func (hc *halfConn) veilRecordPadding(n int) int {

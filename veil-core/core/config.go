@@ -8,11 +8,14 @@ import (
 	"slices"
 	"sync/atomic"
 	"time"
+	"veil/internal/mux"
 	"veil/internal/transport"
 )
 
 // TLSConfig selects the existing TLS 1.3 or REALITY transport.
 type TLSConfig = transport.Settings
+type TrafficProfile = mux.Profile
+type TrafficRange = mux.Range
 
 // DialFunc must honor ctx and return a connection supporting TCP half-close.
 // Client hooks can bind/protect sockets; server hooks can apply destination policy.
@@ -36,6 +39,7 @@ func withDialTimeout(dial DialFunc, timeout time.Duration) DialFunc {
 type Config struct {
 	Secret                                                  string
 	TLS                                                     TLSConfig
+	Traffic                                                 *TrafficProfile
 	MaxConnections, MaxIdle                                 int
 	HandshakeTimeout, DialTimeout, IdleTimeout, PoolTimeout time.Duration
 }
@@ -51,8 +55,8 @@ type ServerConfig struct {
 	DialContext DialFunc
 }
 
-// Stats contains monotonic counters. Core updates Completed and Authenticated;
-// an optional listener runner updates Accepted, Rejected and Failed.
+// Stats contains monotonic counters. Core updates Completed, Authenticated and
+// server stream failures; a listener runner counts accepts and connection failures.
 // Do not copy Stats after use.
 type Stats struct{ Accepted, Rejected, Completed, Failed, Authenticated atomic.Uint64 }
 
@@ -84,5 +88,13 @@ func (c *Config) defaults() error {
 		}
 	}
 	c.TLS.Fingerprints = slices.Clone(c.TLS.Fingerprints)
+	p := mux.DefaultProfile()
+	if c.Traffic != nil {
+		p = *c.Traffic
+	}
+	if err := p.Validate(); err != nil {
+		return err
+	}
+	c.Traffic = &p
 	return nil
 }

@@ -5,16 +5,16 @@ import (
 	"errors"
 	"net"
 	"sync"
-	"time"
-	"veil/internal/wire"
+	"veil/internal/mux"
 )
 
-// Stream is a single-use lease, not the physical TLS connection. Close may run
-// concurrently with Relay. Only a successful FIN/DONE barrier permits reuse.
+// Stream owns one logical channel. Closing it never cancels another channel
+// sharing the same physical connection.
 type Stream struct {
 	mu                     sync.Mutex
 	client                 *Client
-	channel                *session
+	channel                *mux.Stream
+	session                *session
 	ctx                    context.Context
 	cancel                 context.CancelFunc
 	stop, stopClient       func() bool
@@ -49,18 +49,16 @@ func (s *Stream) finishLocked(reuse bool) {
 	s.stopClient()
 	reuse = reuse && !s.closed && s.ctx.Err() == nil
 	s.cancel()
+	s.channel.Close()
+	s.client.pool.put(s.session)
 	if reuse {
-		s.client.pool.put(s.channel)
 		s.client.Stats.Completed.Add(1)
-	} else {
-		s.channel.r.Release()
-		s.client.pool.drop(s.channel)
 	}
 }
 
 // Relay takes ownership of local and closes it on return. local must support
 // CloseWrite; an adapter (SOCKS, forwarding, or a future userspace TCP stack)
-// supplies the plain byte stream. No extra payload queue or framing is added.
+// supplies the plain byte stream. Per-stream credit bounds receive buffering.
 func (s *Stream) Relay(local net.Conn) (err error) {
 	defer local.Close()
 	s.mu.Lock()
@@ -86,12 +84,10 @@ func (s *Stream) Relay(local net.Conn) (err error) {
 		s.busy = false
 		s.finishLocked(err == nil)
 	}()
-	channel := s.channel
-	if _, err = relay(s.ctx, local, channel, &channel.r, s.client.cfg.IdleTimeout, false); err != nil {
+	if err = relay(s.ctx, local, s.channel, s.client.cfg.IdleTimeout); err != nil {
 		return err
 	}
-	channel.SetReadDeadline(time.Now().Add(s.client.cfg.HandshakeTimeout))
-	err = opError("tunnel DONE", wire.Expect(&channel.r, wire.Done))
-	channel.SetReadDeadline(time.Time{})
-	return err
+	doneCtx, cancel := context.WithTimeout(s.ctx, s.client.cfg.HandshakeTimeout)
+	defer cancel()
+	return opError("tunnel DONE", s.channel.WaitDone(doneCtx))
 }

@@ -100,3 +100,5 @@ VEIL_ISOLATED_NETNS=1 python3 scripts/smoke.py
 核心测试覆盖真实转发、半关闭、池复用、运行生命周期、curl 提前 EOF/RST、下载停顿及双向背压；组件测试覆盖保存不生效、revision 冲突、并发控制、关闭后禁止启动、持久保存、请求边界、socket 权限/占用/遗留恢复。systemd/procd/rc.d 模板检查不能替代相应操作系统安装与运行验收。
 
 `scripts/regression.py` 复用核心性能夹具，对同一 TLS 后端的原 CLI 与 veild 做随机相邻 A/B，并检查两个方向互通。需要先构建核心 `veil-native`、`veil-batch`、`benchpeer` 和 batch 版 veild；必须在独立网络命名空间设 `VEIL_ISOLATED_NETNS=1`，例如调用 `python3 scripts/regression.py --out .build/perf-run`。原始样本、汇总和二进制摘要都写入指定目录。结果仅代表本机回环和测试工作负载，不代表 WAN、ARM 或抗识别验收。
+
+`veilctl profilegen` 不需要控制 socket，在本机生成范围式 `traffic` 配置，供外层随连接信息分发；客户端与服务端各自设置本地发送策略。字段、预算及生效时机见[核心说明](../veil-core/README.md)。保存包含新策略的配置后仍需显式 restart，现有连接不会在保存配置时改变策略。

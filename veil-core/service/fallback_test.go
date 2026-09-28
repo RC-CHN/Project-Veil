@@ -346,7 +346,7 @@ func TestRecordPaddingWithStandardTLS(t *testing.T) {
 	})
 	c := directTLS(t, ct, dst)
 	for range 2 {
-		if err := transport.RecordPadding(c, true); err != nil {
+		if err := transport.RecordBudget(c, 256, 6, 1024); err != nil {
 			t.Fatal(err)
 		}
 		for _, size := range []int{4, 257, 1024, 16384, 17} {

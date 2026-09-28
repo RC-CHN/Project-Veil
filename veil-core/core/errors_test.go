@@ -1,7 +1,6 @@
 package core
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -26,15 +25,8 @@ func TestTargetFailureReporting(t *testing.T) {
 		if got != tc.code {
 			t.Fatal(got, tc.code)
 		}
-		var b bytes.Buffer
-		wire.Write(&b, wire.OpenError, []byte{byte(got)})
-		if err := wire.ReadOpenResult(&wire.Reader{R: &b}); !errors.Is(err, tc.code) {
+		if err := wire.OpenFailure(byte(got)); !errors.Is(err, tc.code) {
 			t.Fatal(err)
 		}
-	}
-	var b bytes.Buffer
-	wire.Write(&b, wire.OpenOK, nil)
-	if err := wire.ReadOpenResult(&wire.Reader{R: &b}); err != nil {
-		t.Fatal(err)
 	}
 }

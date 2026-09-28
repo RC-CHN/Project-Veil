@@ -32,25 +32,20 @@ func TestVeilPaddingBudgetAndIntegrity(t *testing.T) {
 	raw := new(veilPaddingMemory)
 	w := veilPaddingConn(raw)
 	defer w.Close()
-	w.VeilSetPadding(true)
+	w.VeilSetPaddingBudget(256, 6, 1024)
 	if n, err := w.Write(nil); n != 0 || err != nil || raw.Len() != 0 {
 		t.Fatal("empty write emitted a record", n, err)
 	}
 	var plain []byte
-	limit, window := w.out.veilPadLimit, w.out.veilPadWindow
-	counts := make(map[uint8]bool)
+	limit := uint16(256)
 	for stream := 0; stream < 64; stream++ {
-		w.VeilSetPadding(true)
-		budget, count := int(w.out.veilPadBytes), w.out.veilPadRecords
-		counts[count] = true
-		if budget < 512 || budget > 1024 || count < 2 || count > window || window > 8 || window < 4 || limit < 128 || limit > 256 {
-			t.Fatal("invalid connection/stream budget", budget, count, window, limit)
-		}
-		if w.out.veilPadLimit != limit || w.out.veilPadWindow != window {
-			t.Fatal("connection range changed")
+		count := uint8(stream%12 + 1)
+		budget := 64 + stream*61
+		if err := w.VeilSetPaddingBudget(int(limit), int(count), budget); err != nil {
+			t.Fatal(err)
 		}
 		added := 0
-		for i, size := range []int{64, 128, 513, maxPlaintext, 7, 4096, 32, 16, 100, 100} {
+		for i, size := range []int{64, 128, 513, maxPlaintext, 7, 4096, 32, 16, 100, 100, 256, 512, 1024} {
 			p := bytes.Repeat([]byte{byte(i + 1)}, size)
 			p[len(p)-1], p[len(p)-2] = 0, 0 // content zeros must not be stripped
 			plain = append(plain, p...)
@@ -77,10 +72,7 @@ func TestVeilPaddingBudgetAndIntegrity(t *testing.T) {
 			t.Fatal("per-stream padding budget exceeded", added)
 		}
 	}
-	if len(counts) < 2 {
-		t.Fatal("fixed stream padding window")
-	}
-	w.VeilSetPadding(false)
+	w.VeilSetPaddingBudget(0, 0, 0)
 	if w.out.veilPadRecords != 0 || w.out.veilPadBytes != 0 {
 		t.Fatal("padding not disabled")
 	}
@@ -108,7 +100,7 @@ func TestVeilPaddingSkipsAlerts(t *testing.T) {
 	raw := new(veilPaddingMemory)
 	c := veilPaddingConn(raw)
 	defer c.Close()
-	c.VeilSetPadding(true)
+	c.VeilSetPaddingBudget(256, 6, 1024)
 	count, budget := c.out.veilPadRecords, c.out.veilPadBytes
 	if _, err := c.writeRecordLocked(recordTypeAlert, []byte{alertLevelWarning, byte(alertCloseNotify)}); err != nil {
 		t.Fatal(err)
@@ -137,5 +129,15 @@ func TestVeilPaddingReaderDrain(t *testing.T) {
 	r.VeilReleaseBuffers()
 	if r.rawInput.Cap() != 0 {
 		t.Fatal("idle buffer retained")
+	}
+}
+
+func TestVeilPaddingRejectUnsafeBudget(t *testing.T) {
+	c := veilPaddingConn(new(veilPaddingMemory))
+	defer c.Close()
+	for _, v := range [][3]int{{-1, 1, 1}, {513, 1, 1}, {1, -1, 1}, {1, 13, 1}, {1, 1, -1}, {1, 1, 4097}} {
+		if c.VeilSetPaddingBudget(v[0], v[1], v[2]) == nil {
+			t.Fatal("unsafe budget accepted", v)
+		}
 	}
 }

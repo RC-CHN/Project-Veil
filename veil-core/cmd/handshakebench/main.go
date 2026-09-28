@@ -15,11 +15,12 @@ import (
 	"os"
 	"sort"
 	"time"
+	"veil/internal/mux"
 	"veil/internal/transport"
 	"veil/internal/wire"
 )
 
-func sample(server string, target, key []byte, handshake transport.Handshake, padding bool) (time.Duration, error) {
+func sample(server string, target, key []byte, handshake transport.Handshake, padding bool, profile mux.Profile) (time.Duration, error) {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -34,9 +35,6 @@ func sample(server string, target, key []byte, handshake transport.Handshake, pa
 		return 0, err
 	}
 	defer c.Close()
-	if err := transport.RecordPadding(c, padding); err != nil {
-		return 0, err
-	}
 	exporter, err := transport.Export(c)
 	if err != nil {
 		return 0, err
@@ -45,44 +43,46 @@ func sample(server string, target, key []byte, handshake transport.Handshake, pa
 	if err != nil {
 		return 0, err
 	}
-	if err := wire.WriteOpen(c, auth, target); err != nil {
+	var prefix bytes.Buffer
+	if err := wire.Write(&prefix, wire.Auth, auth); err != nil {
 		return 0, err
 	}
-	r := wire.Reader{R: c}
-	defer r.Release()
-	if err := wire.Expect(&r, wire.OpenOK); err != nil {
+	opts := mux.Options{Profile: profile, Prefix: prefix.Bytes(), WriteTimeout: 5 * time.Second}
+	if padding {
+		opts.Padding = func(limit, records, budget int) error { return transport.RecordBudget(c, limit, records, budget) }
+	}
+	m, err := mux.New(c, opts)
+	if err != nil {
 		return 0, err
 	}
+	defer func() { m.Close(); m.Wait() }()
+	stop := context.AfterFunc(ctx, func() { m.Close() })
+	defer stop()
+	stream, err := m.Open(ctx, target)
+	if err != nil {
+		return 0, err
+	}
+	defer stream.Close()
 	ready := time.Since(start)
 	payload := bytes.Repeat([]byte{73}, 64)
 	req := make([]byte, 9+len(payload))
 	req[0] = 'E'
 	binary.BigEndian.PutUint64(req[1:9], uint64(len(payload)))
 	copy(req[9:], payload)
-	if err := wire.Write(c, wire.Data, req); err != nil {
+	if _, err := stream.Write(req); err != nil {
 		return 0, err
 	}
-	if err := wire.Write(c, wire.Fin, nil); err != nil {
+	if err := stream.CloseWrite(); err != nil {
 		return 0, err
 	}
-	var got []byte
-	for {
-		typ, p, err := r.Read()
-		if err != nil {
-			return 0, err
-		}
-		if typ == wire.Fin {
-			break
-		}
-		if typ != wire.Data || len(got)+len(p) > len(payload) {
-			return 0, wire.ErrProtocol
-		}
-		got = append(got, p...)
+	got, err := io.ReadAll(io.LimitReader(stream, int64(len(payload)+1)))
+	if err != nil {
+		return 0, err
 	}
 	if !bytes.Equal(got, payload) {
 		return 0, fmt.Errorf("echo mismatch")
 	}
-	return ready, wire.Expect(&r, wire.Done)
+	return ready, stream.WaitDone(ctx)
 }
 
 func main() {
@@ -92,9 +92,10 @@ func main() {
 	warmup := flag.Int("warmup", 16, "unmeasured fresh tunnels")
 	flag.Parse()
 	var cfg struct {
-		Server string             `json:"server"`
-		Secret string             `json:"secret"`
-		TLS    transport.Settings `json:"tls"`
+		Server  string             `json:"server"`
+		Secret  string             `json:"secret"`
+		TLS     transport.Settings `json:"tls"`
+		Traffic *mux.Profile       `json:"traffic"`
 	}
 	b, err := os.ReadFile(*file)
 	if err != nil {
@@ -124,8 +125,15 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	profile := mux.DefaultProfile()
+	if cfg.Traffic != nil {
+		profile = *cfg.Traffic
+	}
+	if err := profile.Validate(); err != nil {
+		panic(err)
+	}
 	for range *warmup {
-		if _, err := sample(cfg.Server, address, key, handshake, cfg.TLS.RecordPadding); err != nil {
+		if _, err := sample(cfg.Server, address, key, handshake, cfg.TLS.RecordPadding, profile); err != nil {
 			panic(err)
 		}
 	}
@@ -136,7 +144,7 @@ func main() {
 	start := time.Now()
 	latencies := make([]int64, *rounds)
 	for i := range latencies {
-		ready, err := sample(cfg.Server, address, key, handshake, cfg.TLS.RecordPadding)
+		ready, err := sample(cfg.Server, address, key, handshake, cfg.TLS.RecordPadding, profile)
 		if err != nil {
 			panic(err)
 		}

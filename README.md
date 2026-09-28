@@ -9,7 +9,7 @@ veil-core/
   core/       公共 API：客户端、服务端、流、连接池
   inbound/    SOCKS5 和固定目标 TCP 入口
   service/    配置校验、应用组装和可嵌入运行生命周期
-  internal/   TLS、帧编码和 SOCKS 解析
+  internal/   TLS、并发复用、鉴权和 SOCKS 解析
   cmd/        Veil CLI 与测试程序的 main 包
   scripts/    构建、协议检查和性能测试
   patches/    固定版本的 TLS 补丁
@@ -37,6 +37,7 @@ make vet
 make service       # 构建 veild、veilctl
 make service-race  # 控制层测试、race 和 vet
 veil-core/.build/veil -keygen
+veil-core/.build/veil -profilegen
 veil-core/.build/veil -config /path/to/client.json
 ```
 

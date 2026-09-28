@@ -25,8 +25,11 @@ func run() error {
 	config := flag.String("config", "", "configuration path, or - for stdin (validate/save)")
 	expected := flag.String("if-revision", "", "optional saved revision guard")
 	flag.Parse()
+	if flag.NArg() == 1 && flag.Arg(0) == "profilegen" {
+		return json.NewEncoder(os.Stdout).Encode(service.GenerateTrafficProfile())
+	}
 	if *socket == "" || flag.NArg() != 1 {
-		return errors.New("use -socket PATH [-config FILE|-] [-if-revision HASH] status|validate|save|start|stop|restart")
+		return errors.New("use -socket PATH [-config FILE|-] [-if-revision HASH] status|validate|save|start|stop|restart, or profilegen without a socket")
 	}
 	q := control.Request{Version: control.Version, Action: flag.Arg(0)}
 	flag.Visit(func(f *flag.Flag) {

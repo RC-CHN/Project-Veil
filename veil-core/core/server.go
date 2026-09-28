@@ -5,18 +5,23 @@ import (
 	"errors"
 	"io"
 	"net"
+	"sync"
+	"sync/atomic"
 	"time"
+	"veil/internal/mux"
 	"veil/internal/transport"
 	"veil/internal/wire"
 )
 
-// Server handles authenticated Veil connections. It does not own a listener,
-// host routes or service management; the caller bounds concurrent Handle calls.
+// Server authenticates physical connections and handles independent streams.
+// The caller owns listeners, host routes and service management.
 type Server struct {
-	cfg       ServerConfig
-	key       []byte
-	handshake transport.Handshake
-	Stats     Stats
+	cfg           ServerConfig
+	key           []byte
+	handshake     transport.Handshake
+	Stats         Stats
+	OnStreamError func(error)
+	traffic       atomic.Pointer[TrafficProfile]
 }
 
 func NewServer(cfg ServerConfig) (*Server, error) {
@@ -32,12 +37,24 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Server{cfg: cfg, key: key, handshake: h}, nil
+	s := &Server{cfg: cfg, key: key, handshake: h}
+	s.traffic.Store(cfg.Traffic)
+	return s, nil
 }
 
-// Handle owns raw and closes it before returning. Cancellation closes raw and
-// active target connections. The destination dialer must honor its context.
+// SetTrafficProfile affects subsequent physical connections only.
+func (s *Server) SetTrafficProfile(p TrafficProfile) error {
+	if err := p.Validate(); err != nil {
+		return err
+	}
+	s.traffic.Store(&p)
+	return nil
+}
+
+// Handle owns raw. Cancellation joins all stream handlers before returning.
 func (s *Server) Handle(ctx context.Context, raw net.Conn) error {
+	cfg := s.cfg.Config
+	cfg.Traffic = s.traffic.Load()
 	defer raw.Close()
 	stop := context.AfterFunc(ctx, func() { raw.Close() })
 	defer stop()
@@ -64,50 +81,67 @@ func (s *Server) Handle(ctx context.Context, raw net.Conn) error {
 	}
 	s.Stats.Authenticated.Add(1)
 	cancel()
+	r.Release()
 	c.SetDeadline(time.Time{})
+	m, err := mux.New(c, muxOptions(c, cfg, true))
+	if err != nil {
+		return err
+	}
+	connCtx, cancelConn := context.WithCancel(ctx)
+	var workers sync.WaitGroup
+	slots := make(chan struct{}, mux.MaxStreams)
+	defer func() { cancelConn(); m.Close(); workers.Wait(); m.Wait() }()
 	for {
-		c.SetReadDeadline(time.Now().Add(2 * s.cfg.PoolTimeout))
-		typ, p, err = r.Read()
-		if errors.Is(err, io.EOF) {
+		select {
+		case slots <- struct{}{}:
+		case <-connCtx.Done():
 			return nil
 		}
+		stream, err := m.Accept(connCtx)
 		if err != nil {
+			<-slots
+			if errors.Is(err, io.EOF) || ctx.Err() != nil {
+				return nil
+			}
 			return err
 		}
-		if typ != wire.Open {
-			return wire.ErrProtocol
-		}
-		address, err := wire.DecodeAddress(p)
-		if err != nil {
-			return err
-		}
-		if err := transport.RecordPadding(c, s.cfg.TLS.RecordPadding); err != nil {
-			return err
-		}
-		c.SetReadDeadline(time.Time{})
-		target, err := s.cfg.DialContext(ctx, "tcp", address)
-		if err != nil {
-			c.SetWriteDeadline(time.Now().Add(s.cfg.HandshakeTimeout))
-			wire.Write(c, wire.OpenError, []byte{byte(targetFailure(err))})
-			return opError("target dial", err)
-		}
-		c.SetWriteDeadline(time.Now().Add(s.cfg.HandshakeTimeout))
-		if err = wire.Write(c, wire.OpenOK, nil); err != nil {
-			target.Close()
-			return err
-		}
-		c.SetWriteDeadline(time.Time{})
-		finPending, err := relay(ctx, target, c, &r, s.cfg.IdleTimeout, true)
-		target.Close()
-		if err != nil {
-			return err
-		}
-		c.SetWriteDeadline(time.Now().Add(s.cfg.HandshakeTimeout))
-		if err = wire.WriteDone(c, finPending); err != nil {
-			return err
-		}
-		c.SetWriteDeadline(time.Time{})
-		s.Stats.Completed.Add(1)
-		transport.ReleaseBuffers(c)
+		workers.Go(func() {
+			defer func() { <-slots }()
+			defer stream.Close()
+			streamCtx, cancelStream := context.WithCancel(connCtx)
+			defer cancelStream()
+			stop := context.AfterFunc(stream.Context(), cancelStream)
+			defer stop()
+			if err := s.serve(streamCtx, stream); err != nil && connCtx.Err() == nil {
+				s.Stats.Failed.Add(1)
+				if s.OnStreamError != nil {
+					s.OnStreamError(err)
+				}
+			}
+		})
 	}
+}
+func (s *Server) serve(ctx context.Context, stream *mux.Stream) error {
+	address, err := wire.DecodeAddress(stream.Metadata())
+	if err != nil {
+		stream.Respond(byte(wire.OpenFailed))
+		return err
+	}
+	target, err := s.cfg.DialContext(ctx, "tcp", address)
+	if err != nil {
+		stream.Respond(byte(targetFailure(err)))
+		return opError("target dial", err)
+	}
+	defer target.Close()
+	if err = stream.Respond(0); err != nil {
+		return err
+	}
+	if err = relay(ctx, target, stream, s.cfg.IdleTimeout); err != nil {
+		return err
+	}
+	if err = stream.Finish(); err != nil {
+		return err
+	}
+	s.Stats.Completed.Add(1)
+	return nil
 }
