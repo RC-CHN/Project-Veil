@@ -3,7 +3,6 @@ package control
 import (
 	"encoding/json"
 	"net"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -84,10 +83,7 @@ func TestConnectionIsolationPersistenceAndRedaction(t *testing.T) {
 	if reopened.catalog.entries[b.ID].run == nil || reopened.catalog.profiles[a.ID].Enabled {
 		t.Fatal("enabled state did not survive restart")
 	}
-	st, err := os.Stat(filepath.Join(dir, "connections.json"))
-	if err != nil || st.Mode().Perm()&0077 != 0 {
-		t.Fatal("connection credentials not private")
-	}
+	checkConfigPrivate(t, filepath.Join(dir, "connections.json"))
 }
 func TestConnectionProfileOwnership(t *testing.T) {
 	m, _ := manager(t)
