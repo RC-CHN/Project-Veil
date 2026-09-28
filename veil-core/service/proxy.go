@@ -46,6 +46,12 @@ func New(cfg Config) (*Service, error) {
 		}
 		s.client, s.Stats = client, &client.Stats
 		s.handle = inbound.SOCKS5(client, opts.HandshakeTimeout)
+		switch cfg.Inbound {
+		case "http":
+			s.handle = inbound.HTTP(client, opts.HandshakeTimeout)
+		case "mixed":
+			s.handle = inbound.Mixed(client, opts.HandshakeTimeout)
+		}
 		if cfg.Target != "" {
 			s.handle, err = inbound.Forward(client, cfg.Target)
 			if err != nil {

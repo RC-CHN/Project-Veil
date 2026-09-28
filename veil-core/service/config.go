@@ -13,6 +13,7 @@ type Config struct {
 	Listen           string               `json:"listen"`
 	Server           string               `json:"server"`
 	Target           string               `json:"target,omitempty"`
+	Inbound          string               `json:"inbound,omitempty"`
 	Secret           string               `json:"secret"`
 	TLS              transport.Settings   `json:"tls"`
 	Traffic          *core.TrafficProfile `json:"traffic,omitempty"`
@@ -77,6 +78,14 @@ func (c *Config) Defaults() error {
 		}
 		if _, err := wire.EncodeAddress(c.Target); err != nil {
 			return err
+		}
+	}
+	if c.Inbound != "" {
+		if c.Role != "client" || c.Target != "" {
+			return errors.New("inbound is only valid for a proxy client without target")
+		}
+		if c.Inbound != "socks" && c.Inbound != "http" && c.Inbound != "mixed" {
+			return errors.New("inbound must be socks, http or mixed")
 		}
 	}
 	_, err := transport.DecodeKey(c.Secret)

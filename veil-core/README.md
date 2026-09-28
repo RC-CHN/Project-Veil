@@ -1,6 +1,6 @@
 # Veil v0.3
 
-Go TCP 代理，提供可嵌入的核心、SOCKS5 CONNECT 与固定目标转发入口、TLS 1.3/REALITY 服务端、业务鉴权、连接复用与双向半关闭。支持有界连接池、背压、取消和超时。当前为实验原型，不提供 TUN、UDP 或移动端 UI；流量特征与回落行为尚未通过抗识别验收。
+Go TCP 代理，提供可嵌入的核心、SOCKS5 CONNECT、HTTP/HTTPS CONNECT 与固定目标转发入口、TLS 1.3/REALITY 服务端、业务鉴权、连接复用与双向半关闭。支持有界连接池、背压、取消和超时。当前为实验原型，不提供 TUN、UDP 或移动端 UI；流量特征与回落行为尚未通过抗识别验收。
 
 
 v0.3 修正 REALITY 的签名协商：使用客户端已提供的 ECDSA P-256/SHA-256，将连接绑定的 HMAC 放入证书 SubjectKeyIdentifier 扩展，保留正常的证书自签名和 TLS CertificateVerify。浏览器模板的签名算法列表不变。AUTH 版本及 exporter 域同步升级，两端需同时升级，不兼容 v0.1、v0.2 或上游 REALITY 证书认证。独立实现见[完整线协议规范](../PROTOCOL.md)及 [Rust 互通验证端](../interop/rust/README.md)。这项修正解决签名协商和第三方互通，不代表已通过抗识别验收；证书签名的握手成本需另行测量。
@@ -61,13 +61,13 @@ REALITY 客户端可用 `tls.fingerprint` 指定 `chrome120`、`chrome131`、`ch
 
 安全界限：调度份额 4096～32768 字节、启动写入 128～8192 字节 / 0～12 次、单记录填充 0～512 字节、激活预算 0～4096 字节、额度返还阈值 16～64 块、控制填充 0～128 字节；非法范围在创建或更新时拒绝。短流的相对开销可能较大。范围组合多不等于不可学习：分布、方向、往返依赖、复用寿命和 TCP 行为仍可能被分类。
 
-SOCKS5 入口仅支持无认证 CONNECT，默认监听回环地址。按需修改监听地址、连接数和超时配置；超时单位为秒。
+客户端 `inbound` 选择 `socks`、`http` 或 `mixed`；省略时默认 `socks`。`mixed` 在同一端口识别 SOCKS5 和 HTTP，共用 Veil 连接池，见 [client.mixed.json](examples/client.mixed.json)。HTTP 支持普通 HTTP 转发与 HTTPS CONNECT，正文流式传输；普通 HTTP 每个本地连接处理一个请求，CONNECT 保持长连接与双向半关闭。入口均无本地用户认证，默认监听回环地址；供局域网使用时绑定受信任的 LAN 地址。超时单位为秒。
 
-客户端增加 `"target": "example.com:443"` 后，监听端口接受原始 TCP 数据，经过 Veil 连接服务端，再由服务端连接该固定目标，见 `examples/client.forward.json`。省略 `target` 继续提供原有 SOCKS5 入口，已有配置无需修改。这里的转发入口不代替中转机上的裸 TCP 透传服务。
+客户端增加 `"target": "example.com:443"` 后，监听端口接受原始 TCP 数据，经过 Veil 连接服务端，再由服务端连接该固定目标，见 `examples/client.forward.json`。`target` 与 `inbound` 互斥；省略两者时提供 SOCKS5 入口。这里的转发入口不代替中转机上的裸 TCP 透传服务。
 
 ## 复用核心
 
-`core` 负责握手、鉴权、流生命周期和连接池；`inbound` 负责 SOCKS5、固定目标转发与有界监听循环；`service` 将现有 CLI JSON 配置组合成这些组件，并提供 `Parse`、`Validate`、`Runtime.Start/Stop/Restart/Close` 和状态快照。每条逻辑流有两个独立转发任务；物理连接由一个解码器和一个调度写入者管理，不引入进程间数据转发。
+`core` 负责握手、鉴权、流生命周期和连接池；`inbound` 负责 SOCKS5、HTTP、混合入口、固定目标转发与有界监听循环；`service` 将现有 CLI JSON 配置组合成这些组件，并提供 `Parse`、`Validate`、`Runtime.Start/Stop/Restart/Close` 和状态快照。每条逻辑流有两个独立转发任务；物理连接由一个解码器和一个调度写入者管理，不引入进程间数据转发。
 
 两个转发任务各自复用略小于 128 KiB 的工作缓冲，为单流满批保留四个 DATA 帧头的位置，避免满缓冲产生很小的尾部写入。解码器逐段发布通过 TLS 认证的 DATA，应用读取会合并已到达的块，但不会等待整帧或凑满缓冲。每流最多 256 个未消费 DATA 块，按需分配，单流载荷上限 8 MiB、满 8 流物理连接上限 64 MiB；控制队列最多 64 项，服务端每条物理连接最多 8 个目标处理任务。平台层应按设备内存设置连接数，不能把协议上限当作建议配置。
 
@@ -92,7 +92,7 @@ defer stream.Close()
 return stream.Relay(localConn)
 ```
 
-同一个 `*core.Client` 可同时传给 `inbound.SOCKS5(client, timeout)` 和 `inbound.Forward(client, target)`，各自用 `inbound.Serve` 监听。停止其中一个监听器只取消其连接；应用在全部入口退出后调用 `client.Close()`。服务端通过 `core.NewServer` 创建，用同一监听循环调用 `server.Handle`；直接调用 `Handle` 的应用自行限制并发。
+同一个 `*core.Client` 可同时传给 `inbound.SOCKS5(client, timeout)` 、`inbound.HTTP(client, timeout)`、`inbound.Mixed(client, timeout)` 和 `inbound.Forward(client, target)`，各自用 `inbound.Serve` 监听。停止其中一个监听器只取消其连接；应用在全部入口退出后调用 `client.Close()`。服务端通过 `core.NewServer` 创建，用同一监听循环调用 `server.Handle`；直接调用 `Handle` 的应用自行限制并发。
 
 `Open` 的 context 覆盖整条流，不能在 Open 返回后立即取消。`Stream.Relay` 接管并关闭本地连接，该连接须实现 `CloseWrite`；每条 Stream 只能 Relay 一次。双向 FIN/DONE 确认一条流正常完成；提前 Close、取消、目标拨号失败和目标 RST 只重置该逻辑流。外层 TLS/帧解析错误会关闭物理连接并通知所有流。旧 Stream 再次 Close 是安全的。`Client.Close` 中止拨号和流并停止池维护；调用方负责等待自己的处理任务退出。`PoolStats` 统计物理连接（含拨号预留）及空闲数。
 
