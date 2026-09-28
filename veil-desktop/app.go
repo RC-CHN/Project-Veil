@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"veil-service/control"
 	"veil-service/local"
@@ -100,14 +99,13 @@ func (a *App) ConfirmDiscard() (bool, error) {
 }
 
 func (a *App) confirm(title, message string) (bool, error) {
-	ok, cancel := a.text("Continue", "继续"), a.text("Cancel", "取消")
 	answer, err := wailsruntime.MessageDialog(a.ctx, wailsruntime.MessageDialogOptions{
 		Type: wailsruntime.QuestionDialog, Title: title, Message: message,
-		Buttons: []string{cancel, ok}, DefaultButton: cancel, CancelButton: cancel,
+		Buttons: []string{"No", "Yes"}, DefaultButton: "No", CancelButton: "No",
 	})
-	// Wails v2's GTK dialog uses system-localized Yes/No buttons and returns
-	// stable English identifiers, ignoring custom button labels.
-	return answer == ok || (runtime.GOOS == "linux" && answer == "Yes"), err
+	// Both supported Wails backends use system-localized Yes/No buttons and
+	// return stable English identifiers, ignoring custom button labels.
+	return answer == "Yes", err
 }
 
 func (a *App) beforeClose(context.Context) bool {

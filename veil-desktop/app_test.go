@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
 	"testing"
 	"veil-service/control"
+	"veil-service/local"
 	"veil/core"
 	"veil/service"
 )
@@ -23,6 +25,8 @@ func TestDesktopOwnsAndReleasesRuntime(t *testing.T) {
 	if second, err := openApp(dir); err == nil {
 		second.close()
 		t.Fatal("two desktop instances own the same profile")
+	} else if !errors.Is(err, local.ErrStateLocked) {
+		t.Fatalf("duplicate instance was not identified: %v", err)
 	}
 	b, err := json.Marshal(service.Config{Role: "client", Inbound: "mixed", Listen: "127.0.0.1:0", Server: "127.0.0.1:9",
 		Secret: base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{1}, 32)), TLS: core.TLSConfig{Mode: "tls", ServerName: "test.example"}})

@@ -62,6 +62,9 @@ func Lock(path string) (*os.File, error) {
 	h, err := windows.CreateFile(p, windows.GENERIC_READ|windows.GENERIC_WRITE, 0, nil,
 		windows.OPEN_ALWAYS, windows.FILE_ATTRIBUTE_NORMAL|windows.FILE_FLAG_OPEN_REPARSE_POINT, 0)
 	if err != nil {
+		if errors.Is(err, windows.ERROR_SHARING_VIOLATION) {
+			return nil, ErrStateLocked
+		}
 		return nil, err
 	}
 	f := os.NewFile(uintptr(h), path)

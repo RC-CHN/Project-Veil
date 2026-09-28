@@ -30,7 +30,10 @@ func Lock(path string) (*os.File, error) {
 	f := os.NewFile(uintptr(fd), path)
 	if err := unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB); err != nil {
 		f.Close()
-		return nil, errors.New("another daemon owns this state directory or socket")
+		if errors.Is(err, unix.EWOULDBLOCK) {
+			return nil, ErrStateLocked
+		}
+		return nil, err
 	}
 	return f, nil
 }

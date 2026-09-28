@@ -254,13 +254,14 @@ jobs:
       - name: Desktop state ownership and shutdown
         run: |
           python veil-desktop/scripts/check_frontend.py
+          python -m unittest discover -s veil-desktop/scripts -p 'test_*.py'
           if [[ "$RUNNER_OS" == Linux ]]; then
             python veil-desktop/scripts/build.py --check --race
           else
             python veil-desktop/scripts/build.py --check
           fi
-      - name: Build native desktop
-        run: python veil-desktop/scripts/build.py --version ci
+      - name: Package native desktop
+        run: python veil-desktop/scripts/package.py --version ci
 
   ci:
     name: CI

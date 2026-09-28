@@ -11,17 +11,22 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/linux"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 )
 
 //go:embed all:frontend
 var assets embed.FS
 
+//go:embed assets/veil.svg
+var icon []byte
+
 var version = "dev"
 
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
+		showStartupError(err)
 		os.Exit(1)
 	}
 }
@@ -41,6 +46,11 @@ func run() error {
 		}
 		*dir = filepath.Join(base, "Veil", "desktop")
 	}
+	absoluteDir, err := filepath.Abs(*dir)
+	if err != nil {
+		return err
+	}
+	*dir = absoluteDir
 	a, err := openApp(*dir)
 	if err != nil {
 		return err
@@ -55,6 +65,8 @@ func run() error {
 		AssetServer:      &assetserver.Options{Assets: assets}, Bind: []interface{}{a},
 		OnStartup:     func(ctx context.Context) { a.ctx = ctx },
 		OnBeforeClose: a.beforeClose,
-		Windows:       &windows.Options{WebviewUserDataPath: filepath.Join(*dir, "webview")},
+		Linux: &linux.Options{Icon: icon, ProgramName: "net.projectveil.Veil",
+			WebviewGpuPolicy: linux.WebviewGpuPolicyNever},
+		Windows: &windows.Options{WebviewUserDataPath: filepath.Join(*dir, "webview")},
 	})
 }

@@ -17,6 +17,9 @@ import (
 
 const maxRequest = service.MaxConfigSize + 1024
 
+// ErrStateLocked means another process already owns the instance directory.
+var ErrStateLocked = errors.New("another process owns this state directory or socket")
+
 // One bounded JSON line per connection. No HTTP server or background poller is
 // needed for this private, local command channel.
 func readMessage(r io.Reader, v any) error {
