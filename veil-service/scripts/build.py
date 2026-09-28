@@ -26,9 +26,12 @@ def prepare(mode):
     mod = (
         (ROOT / "go.mod")
         .read_text()
-        .replace("replace veil => ../veil-core", f"replace veil => {CORE}")
+        .replace(
+            "replace veil => ../veil-core",
+            f"replace veil => {json.dumps(CORE.as_posix())}",
+        )
     )
-    mod += f"\nreplace github.com/metacubex/utls => {CORE / '.build' / mode / 'utls'}\n"
+    mod += f"\nreplace github.com/metacubex/utls => {json.dumps((CORE / '.build' / mode / 'utls').as_posix())}\n"
     (out / "build.mod").write_text(mod)
     shutil.copyfile(ROOT / "go.sum", out / "build.sum")
     flags = [f for f in flags if not f.startswith("-modfile=")]
@@ -47,7 +50,9 @@ def main():
     p.add_argument("--generate-only", action="store_true")
     p.add_argument("--output-dir", type=Path, default=ROOT / ".build")
     p.add_argument("--version", default="dev")
-    p.add_argument("--program", action="append", choices=("veild", "veilctl", "veil-rpc"))
+    p.add_argument(
+        "--program", action="append", choices=("veild", "veilctl", "veil-rpc")
+    )
     a = p.parse_args()
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.+_-]{0,63}", a.version):
         p.error("version must be 1–64 ASCII letters, digits, dots, +, _ or -")
@@ -74,7 +79,10 @@ def main():
     else:
         a.output_dir.mkdir(parents=True, exist_ok=True)
         for name in a.program or ("veild", "veilctl"):
-            suffix = ".exe" if os.environ.get("GOOS") == "windows" else ""
+            goos = os.environ.get("GOOS", "")
+            suffix = (
+                ".exe" if goos == "windows" or (not goos and os.name == "nt") else ""
+            )
             run(
                 [
                     "go",

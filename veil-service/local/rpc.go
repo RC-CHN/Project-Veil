@@ -1,3 +1,4 @@
+// Package local carries the control protocol over a private local connection.
 package local
 
 import (
@@ -85,7 +86,7 @@ func Call(ctx context.Context, socket string, q control.Request) (control.Respon
 	var result control.Response
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	c, err := (&net.Dialer{}).DialContext(ctx, "unix", socket)
+	c, err := dial(ctx, socket)
 	if err != nil {
 		return result, err
 	}

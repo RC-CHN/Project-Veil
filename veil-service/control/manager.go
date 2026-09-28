@@ -106,24 +106,8 @@ func (m *Manager) Close() error {
 	return m.runtime.Close()
 }
 
-// PrivateDir refuses a shared or symlinked final directory instead of changing
-// permissions on a directory the caller may be using for something else.
-func PrivateDir(dir string) error {
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return err
-	}
-	s, err := os.Lstat(dir)
-	if err != nil {
-		return err
-	}
-	if !s.IsDir() || s.Mode().Perm()&0077 != 0 {
-		return errors.New("state and socket directories must be private (0700), not symlinks")
-	}
-	return nil
-}
-
 func writeConfig(path string, b []byte) (committed bool, err error) {
-	f, err := os.CreateTemp(filepath.Dir(path), ".config-*")
+	f, err := configTemp(filepath.Dir(path))
 	if err != nil {
 		return false, err
 	}
@@ -138,15 +122,5 @@ func writeConfig(path string, b []byte) (committed bool, err error) {
 	if err = f.Close(); err != nil {
 		return false, err
 	}
-	if err := os.Rename(f.Name(), path); err != nil {
-		return false, err
-	}
-	// Publish only after rename. Directory sync makes the rename durable on the
-	// supported local Unix filesystems; a failure means durability is uncertain.
-	d, err := os.Open(filepath.Dir(path))
-	if err != nil {
-		return true, err
-	}
-	defer d.Close()
-	return true, d.Sync()
+	return replaceConfig(f.Name(), path)
 }

@@ -22,7 +22,7 @@ func main() {
 }
 
 func run() error {
-	socket := flag.String("socket", "", "Unix control socket")
+	socket := flag.String("socket", "", "private control socket or Windows named pipe")
 	config := flag.String("config", "", "configuration path, or - for stdin (validate/save)")
 	expected := flag.String("if-revision", "", "optional saved revision guard")
 	version := flag.Bool("version", false, "print release version")

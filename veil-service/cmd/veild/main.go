@@ -1,4 +1,4 @@
-//go:build linux || freebsd
+//go:build linux || freebsd || windows
 
 package main
 
@@ -26,7 +26,7 @@ func main() {
 
 func run() error {
 	dir := flag.String("state-dir", "", "private directory containing the saved config")
-	socket := flag.String("socket", "", "private Unix control socket")
+	socket := flag.String("socket", "", "private control socket or Windows named pipe")
 	autostart := flag.Bool("autostart", false, "start saved profile when the daemon starts")
 	version := flag.Bool("version", false, "print release version")
 	flag.Parse()

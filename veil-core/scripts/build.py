@@ -242,7 +242,7 @@ def generate(mode):
         ]
     )
     mod = (ROOT / "go.mod").read_text()
-    mod += f"\nreplace github.com/metacubex/utls => {fork}\n"
+    mod += f"\nreplace github.com/metacubex/utls => {json.dumps(fork.as_posix())}\n"
     (out / "build.mod").write_text(mod)
     shutil.copyfile(ROOT / "go.sum", out / "build.sum")
     if mode == "native":

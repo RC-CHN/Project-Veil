@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile platform-neutral APIs and the Linux/FreeBSD local daemon adapters."""
+"""Compile platform-neutral APIs and supported local daemon adapters."""
 
 import argparse
 import json
@@ -14,8 +14,8 @@ targets = [
     ("linux", "mips", {"GOMIPS": "softfloat"}, ["./cmd/veild", "./cmd/veilctl", "./cmd/veil-rpc"]),
     ("linux", "mipsle", {"GOMIPS": "softfloat"}, ["./cmd/veild", "./cmd/veilctl", "./cmd/veil-rpc"]),
     ("freebsd", "amd64", {}, ["./cmd/veild", "./cmd/veilctl"]),
-    ("windows", "amd64", {}, ["veil/service", "./control"]),
-    ("windows", "arm64", {}, ["veil/service", "./control"]),
+    ("windows", "amd64", {}, ["./cmd/veild", "./cmd/veilctl"]),
+    ("windows", "arm64", {}, ["./cmd/veild", "./cmd/veilctl"]),
     ("android", "arm64", {}, ["veil/service", "./control"]),
 ]
 parser = argparse.ArgumentParser(description=__doc__)

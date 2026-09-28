@@ -25,10 +25,7 @@ func profile(t *testing.T, target string) []byte {
 
 func manager(t *testing.T) (*Manager, string) {
 	t.Helper()
-	dir := t.TempDir()
-	if err := os.Chmod(dir, 0700); err != nil {
-		t.Fatal(err)
-	}
+	dir := filepath.Join(t.TempDir(), "state")
 	m, err := Open(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -61,10 +58,7 @@ func TestSavedAndRunningAreSeparate(t *testing.T) {
 	if r.Status.State != "stopped" {
 		t.Fatal("save started the runtime")
 	}
-	s, err := os.Stat(filepath.Join(dir, "config.json"))
-	if err != nil || s.Mode().Perm() != 0600 {
-		t.Fatalf("config permissions: %v %v", s, err)
-	}
+	checkConfigPrivate(t, filepath.Join(dir, "config.json"))
 	perform(t, m, "start", nil)
 	addr := m.Status().Listen
 	b := profile(t, "example.test:443")
@@ -156,12 +150,7 @@ func TestConcurrentOperationsAndClose(t *testing.T) {
 	}
 }
 
-func TestPrivateDirectoryAndVersion(t *testing.T) {
-	dir := t.TempDir()
-	os.Chmod(dir, 0755)
-	if _, err := Open(dir); err == nil {
-		t.Fatal("shared directory accepted")
-	}
+func TestProtocolVersion(t *testing.T) {
 	m, _ := manager(t)
 	if r := m.Handle(Request{Version: 2, Action: "start"}); r.Error == nil || r.Error.Code != "unsupported_version" {
 		t.Fatal("unknown protocol accepted")

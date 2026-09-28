@@ -1,9 +1,9 @@
 //go:build linux || freebsd
 
-// Package local carries the control protocol over a private Unix socket.
 package local
 
 import (
+	"context"
 	"errors"
 	"net"
 	"os"
@@ -15,6 +15,10 @@ import (
 
 	"golang.org/x/sys/unix"
 )
+
+func dial(ctx context.Context, path string) (net.Conn, error) {
+	return (&net.Dialer{}).DialContext(ctx, "unix", path)
+}
 
 // Lock must be held until the managed runtime has completely stopped. Keep the
 // lock file on disk; removing it permits two processes to lock different inodes.

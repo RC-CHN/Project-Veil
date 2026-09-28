@@ -8,7 +8,7 @@ LuCI / 桌面 / CLI → 平台通信适配 → control.Manager → service.Runti
 systemd / procd / rc.d ───────────────→ 启动、停止 veild 进程
 ```
 
-控制请求不会承载代理数据。Linux、OpenWrt、FreeBSD 共用 Unix socket；Windows 的服务/命名管道、Android 的 VpnService/Go 绑定另行接入。公共 `service.Runtime` 没有 systemd、Unix socket、持久化路径或 HTTP 依赖。Android 需要 socket protect 时使用现有 `core.ClientConfig.DialContext`，TUN/UDP 及绑定仍待实现。
+控制请求不会承载代理数据。Linux、OpenWrt、FreeBSD 共用 Unix socket；Windows 使用按用户隔离的本机命名管道。公共 `service.Runtime` 没有 systemd、Unix socket、持久化路径或 HTTP 依赖。需要平台 socket protect 时可注入 `core.ClientConfig.DialContext`。
 
 ## 构建与试运行
 
@@ -61,9 +61,9 @@ python3 scripts/cross_check.py
 
 ## 本地控制协议 v1
 
-仅提供私有 Unix socket，不开放 TCP 管理端口。目录 0700、socket 0600，只允许 daemon 用户和 root 访问。状态目录进程锁阻止多 daemon 同时管理同一配置；socket 锁阻止覆盖正在运行的监听。仅在确认 connection refused 后清理崩溃遗留 socket，不覆盖普通文件。
+本地通信采用私有 Unix socket 或 Windows 命名管道。Windows 的 ACL、CLI 使用及测试入口见 [Windows CLI](platform/windows/README.md)。Unix 目录 0700、socket 0600，只允许 daemon 用户和 root 访问。状态目录进程锁阻止多 daemon 同时管理同一配置；socket 锁阻止覆盖正在运行的监听。仅在确认 connection refused 后清理崩溃遗留 socket，不覆盖普通文件。
 
-每条 Unix socket 连接发送一行 JSON，以换行结束；服务端返回一行 JSON 后关闭连接。请求示例：
+每条本地控制连接发送一行 JSON，以换行结束；服务端返回一行 JSON 后关闭连接。请求示例：
 
 ```json
 {"version":1,"action":"status"}
