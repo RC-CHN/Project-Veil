@@ -113,10 +113,11 @@ jobs:
         run: python3 veil-service/scripts/build.py batch
       - name: Real process lifecycle in a private network namespace
         run: |
+          parent_netns=$(readlink /proc/self/ns/net)
           sudo -n unshare -n sh -ec '
             ip link set lo up
-            exec runuser -u "$1" -- env VEIL_ISOLATED_NETNS=1 python3 veil-service/scripts/smoke.py
-          ' sh "$(id -un)"
+            exec runuser -u "$1" -- env VEIL_ISOLATED_NETNS=1 VEIL_PARENT_NETNS="$2" python3 veil-service/scripts/smoke.py
+          ' sh "$(id -un)" "$parent_netns"
 
   interop:
     needs: changes

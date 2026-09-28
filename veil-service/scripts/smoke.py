@@ -11,9 +11,12 @@ import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
-if os.environ.get("VEIL_ISOLATED_NETNS") != "1" or os.readlink(
-    "/proc/self/ns/net"
-) == os.readlink("/proc/1/ns/net"):
+if os.environ.get("VEIL_ISOLATED_NETNS") != "1":
+    raise SystemExit("requires a private network namespace with VEIL_ISOLATED_NETNS=1")
+# Hosted runners can hide root-owned /proc entries from their ordinary user.
+# The launcher can capture its own namespace before unshare and pass it in.
+parent_netns = os.environ.get("VEIL_PARENT_NETNS") or os.readlink("/proc/1/ns/net")
+if os.readlink("/proc/self/ns/net") == parent_netns:
     raise SystemExit("requires a private network namespace with VEIL_ISOLATED_NETNS=1")
 
 with tempfile.TemporaryDirectory(prefix="veil-smoke-") as temp:
