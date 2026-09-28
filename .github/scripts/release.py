@@ -26,6 +26,8 @@ def payload(version):
         f"veil-desktop-{version}-windows-amd64.zip",
         f"veil_{version}-1_x86_64.ipk",
         f"luci-app-veil_{version}-1_all.ipk",
+        f"veil-{version}-r1.apk",
+        f"luci-app-veil-{version}-r1.apk",
         f"veil-opnsense-build-{version}.tar.gz",
     ]
     return sorted(files)

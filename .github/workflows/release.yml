@@ -139,10 +139,24 @@ jobs:
           ref: 6cb23d364671d7d409f2e9e9a14987efcc8ccc7e # stable/26.7
           path: .build/tools/opnsense
           persist-credentials: false
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: alpinelinux/apk-tools
+          ref: b5a31c0d865342ad80be10d68f1bb3d3ad9b0866 # v3.0.5
+          path: .build/tools/apk-tools
+          persist-credentials: false
+      - name: Prepare APK build tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends fakeroot libssl-dev zlib1g-dev libzstd-dev
+          make -C .build/tools/apk-tools -j2 LUA=no docs=no
       - name: Package OpenWrt 24.10 x86_64 and bilingual LuCI
         run: |
           make -C .build/tools/luci/modules/luci-base/src po2lmo
           python3 veil-service/scripts/openwrt_package.py --sdk .build/tools/openwrt --po2lmo .build/tools/luci/modules/luci-base/src/po2lmo --architecture x86_64 --version "$VERSION-1" --output-dir "$PWD/.build/release"
+      - name: Package OpenWrt 25.12 x86_64 and bilingual LuCI
+        run: |
+          LD_LIBRARY_PATH="$PWD/.build/tools/apk-tools/src" fakeroot python3 veil-service/scripts/openwrt_package.py --format apk --apk-tool .build/tools/apk-tools/src/apk --po2lmo .build/tools/luci/modules/luci-base/src/po2lmo --architecture x86_64 --version "$VERSION-r1" --output-dir "$PWD/.build/release"
       - name: Bundle OPNsense native package inputs
         run: python3 veil-service/scripts/opnsense_bundle.py --plugins .build/tools/opnsense --version "$VERSION" --output-dir "$PWD/.build/release"
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6

@@ -17,9 +17,9 @@ class ReleaseTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             folder = Path(temp)
             manifest = json.dumps(
-                {"version": "0.3.1", "commit": "abc", "dirty": False}
+                {"version": "0.3.2", "commit": "abc", "dirty": False}
             ).encode()
-            for name in payload("0.3.1"):
+            for name in payload("0.3.2"):
                 path = folder / name
                 if name.endswith(".zip"):
                     with zipfile.ZipFile(path, "w") as archive:
@@ -33,30 +33,30 @@ class ReleaseTest(unittest.TestCase):
                     path.write_bytes(b"package fixture")
                 digest = hashlib.sha256(path.read_bytes()).hexdigest()
                 (folder / (name + ".sha256")).write_text(f"{digest}  {name}\n")
-            self.assertEqual(len(verify(folder, "0.3.1", "abc")), 21)
-            self.assertEqual(len((folder / "SHA256SUMS").read_text().splitlines()), 10)
+            self.assertEqual(len(verify(folder, "0.3.2", "abc")), 25)
+            self.assertEqual(len((folder / "SHA256SUMS").read_text().splitlines()), 12)
             (folder / "SHA256SUMS").unlink()
             (folder / "unexpected.exe").touch()
             with self.assertRaisesRegex(ValueError, "unexpected"):
-                verify(folder, "0.3.1", "abc")
+                verify(folder, "0.3.2", "abc")
 
     def test_manifest_identity(self):
-        good = {"version": "0.3.1", "commit": "abc", "dirty": False}
-        verify_manifest(json.dumps(good), "0.3.1", "abc")
+        good = {"version": "0.3.2", "commit": "abc", "dirty": False}
+        verify_manifest(json.dumps(good), "0.3.2", "abc")
         for field, value in (("version", "ci"), ("commit", "other"), ("dirty", True)):
             with self.subTest(field=field), self.assertRaises(ValueError):
-                verify_manifest(json.dumps(good | {field: value}), "0.3.1", "abc")
+                verify_manifest(json.dumps(good | {field: value}), "0.3.2", "abc")
 
     def test_missing_and_corrupted_payload(self):
         with tempfile.TemporaryDirectory() as temp:
             folder = Path(temp)
             with self.assertRaisesRegex(ValueError, "missing"):
-                verify(folder, "0.3.1", "abc")
-            for name in payload("0.3.1"):
+                verify(folder, "0.3.2", "abc")
+            for name in payload("0.3.2"):
                 (folder / name).write_bytes(b"broken")
                 (folder / (name + ".sha256")).write_text("wrong checksum\n")
             with self.assertRaisesRegex(ValueError, "checksum"):
-                verify(folder, "0.3.1", "abc")
+                verify(folder, "0.3.2", "abc")
 
 
 if __name__ == "__main__":
