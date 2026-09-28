@@ -318,6 +318,12 @@ $("proxy-clear").onclick = () =>
     feedback(t("proxyCleared"));
   });
 document.documentElement.dataset.theme = theme;
+// Let the window manager account for decorations and panels in small workspaces.
+if (
+  window.outerWidth + 32 > screen.availWidth ||
+  window.outerHeight + 80 > screen.availHeight
+)
+  window.runtime.WindowMaximise();
 $("quit").onclick = requestQuit;
 window.runtime.EventsOn("quit-requested", requestQuit);
 applyLanguage();
