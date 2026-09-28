@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'"
+    />
+    <title>Veil</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header>
+        <a class="brand" href="#" aria-label="Veil"
+          ><span class="mark" aria-hidden="true">V</span>Veil<span
+            class="edition"
+            >DESKTOP</span
+          ></a
+        >
+        <div class="preferences">
+          <button id="theme" class="quiet" data-i18n="theme">Appearance</button
+          ><select id="language" aria-label="Language">
+            <option value="en">English</option>
+            <option value="zh">简体中文</option>
+          </select>
+        </div>
+      </header>
+      <main>
+        <section class="hero" aria-labelledby="hero-title">
+          <div>
+            <div class="eyebrow" data-i18n="yourConnection">
+              YOUR CONNECTION
+            </div>
+            <h1 id="hero-title" data-i18n="title">A clear path forward.</h1>
+            <p data-i18n="subtitle">Your connection, ready when you are.</p>
+          </div>
+          <div class="status-pill" id="state">
+            <span class="dot"></span><span id="state-text">—</span>
+          </div>
+        </section>
+        <section class="overview" aria-label="Status">
+          <div>
+            <span data-i18n="localEndpoint">Local endpoint</span
+            ><strong id="endpoint">—</strong>
+          </div>
+          <div>
+            <span data-i18n="connections">Accepted connections</span
+            ><strong id="accepted">0</strong>
+          </div>
+          <div>
+            <span data-i18n="completed">Completed / failed</span
+            ><strong id="completed">0 / 0</strong>
+          </div>
+        </section>
+        <div id="feedback" role="status" aria-live="polite" hidden></div>
+        <section class="card">
+          <div class="card-header">
+            <div>
+              <h2 data-i18n="connection">Connection</h2>
+              <p id="profile-hint" data-i18n="importHint">
+                Import a JSON configuration to get started.
+              </p>
+            </div>
+            <button id="import" data-i18n="import">Import file</button>
+          </div>
+          <div id="empty" class="empty">
+            <span class="empty-icon" aria-hidden="true">↗</span>
+            <div>
+              <strong data-i18n="emptyTitle">Bring your connection.</strong>
+              <p data-i18n="emptyText">
+                Choose a configuration file from your server administrator, or
+                paste it below.
+              </p>
+            </div>
+          </div>
+          <div id="fields" class="fields" hidden>
+            <label
+              ><span data-i18n="protocol">Local proxy</span
+              ><select id="protocol">
+                <option value="mixed">SOCKS5 + HTTP</option>
+                <option value="socks">SOCKS5</option>
+                <option value="http">HTTP / HTTPS CONNECT</option>
+              </select></label
+            ><label
+              ><span data-i18n="listen">Listen address</span
+              ><input
+                id="listen"
+                type="text"
+                spellcheck="false"
+                autocomplete="off"
+                placeholder="127.0.0.1:1080"
+            /></label>
+          </div>
+          <details id="advanced">
+            <summary data-i18n="advanced">Configuration JSON</summary>
+            <p class="credential-note" data-i18n="credentials">
+              This configuration contains connection credentials.
+            </p>
+            <label for="config" class="sr-only" data-i18n="advanced"
+              >Configuration JSON</label
+            ><textarea
+              id="config"
+              spellcheck="false"
+              autocomplete="off"
+              rows="10"
+              placeholder="{ … }"
+            ></textarea>
+          </details>
+          <div class="editor-footer">
+            <span id="draft-state" data-i18n="noProfile"
+              >No saved connection</span
+            >
+            <div class="actions">
+              <button id="reload" class="quiet" data-i18n="reload">
+                Reload saved</button
+              ><button id="validate" data-i18n="validate">Validate</button
+              ><button id="save" data-i18n="save">Save</button>
+            </div>
+          </div>
+        </section>
+        <section class="connect-bar">
+          <div>
+            <strong id="connect-title" data-i18n="readyTitle"
+              >Ready when you are</strong
+            >
+            <p id="connect-hint" data-i18n="readyHint">
+              Save a connection, then start the local proxy.
+            </p>
+          </div>
+          <div class="actions">
+            <button id="apply" hidden data-i18n="apply">Apply changes</button
+            ><button id="toggle" class="primary" data-i18n="connect" disabled>
+              Connect
+            </button>
+          </div>
+        </section>
+        <details class="diagnostics" id="diagnostics">
+          <summary data-i18n="diagnostics">Diagnostics</summary>
+          <pre id="diagnostic-data"></pre>
+        </details>
+      </main>
+      <footer>
+        <span data-i18n="footer">SOCKS5 & HTTP · Local proxy</span
+        ><span data-i18n="closing">Quitting Veil stops this connection.</span>
+      </footer>
+    </div>
+    <script src="i18n.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

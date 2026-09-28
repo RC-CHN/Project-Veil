@@ -33,6 +33,8 @@ jobs:
       service: ${{ steps.changes.outputs.service }}
       interop: ${{ steps.changes.outputs.interop }}
       cross: ${{ steps.changes.outputs.cross }}
+      windows: ${{ steps.changes.outputs.windows }}
+      desktop: ${{ steps.changes.outputs.desktop }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -203,9 +205,66 @@ jobs:
           python3 veil-core/scripts/cross_check.py --target "$TARGET"
           python3 veil-service/scripts/cross_check.py --target "$TARGET"
 
+  windows:
+    needs: changes
+    if: needs.changes.outputs.windows == 'true'
+    name: Windows control
+    runs-on: windows-2025
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/go
+        with:
+          scope: windows-control
+      - name: Native pipe, ACL, persistence and lifecycle checks
+        run: python veil-service/scripts/build.py batch --check
+      - name: Build and exercise Windows CLI processes
+        run: |
+          python veil-service/scripts/build.py batch --version ci
+          python veil-service/scripts/windows_smoke.py --bin-dir veil-service/.build
+
+  desktop:
+    needs: changes
+    if: needs.changes.outputs.desktop == 'true'
+    name: Desktop / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-26.04, windows-2025]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/go
+        with:
+          scope: desktop
+      - name: Install Linux webview headers
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libgtk-3-dev libwebkit2gtk-4.1-dev
+      - name: Desktop state ownership and shutdown
+        run: |
+          python veil-desktop/scripts/check_frontend.py
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            python veil-desktop/scripts/build.py --check --race
+          else
+            python veil-desktop/scripts/build.py --check
+          fi
+      - name: Build native desktop
+        run: python veil-desktop/scripts/build.py --version ci
+
   ci:
     name: CI
-    needs: [changes, core, service, interop, cross]
+    needs: [changes, core, service, interop, cross, windows, desktop]
     if: always()
     runs-on: ubuntu-26.04
     timeout-minutes: 2

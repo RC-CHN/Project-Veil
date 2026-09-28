@@ -6,10 +6,12 @@ GitHub Actions 在 `main`、`ci/**` 分支 push、所有 PR 和手动运行时�
 | --- | --- |
 | Core × 3 | native、batch、OpenSSL 各自运行协议/回环网络测试和 race；batch 额外验证标准库 TLS overlay |
 | Control service | 公共控制层、持久保存、生命周期、race/vet、真实 veild/veilctl 进程、Linux 安装包、启动脚本语法及 LuCI 与 OPNsense 翻译/ACL/JS 检查、OPNsense PHP 语法 |
+| Windows control | Windows 原生命名管道、ACL、持久化与实际 CLI 生命周期 |
+| Desktop × 2 | Windows / Linux 原生构建、实例互斥、关闭释放与导入限制；界面操作另行实际验收 |
 | Rust interoperability | fmt/clippy、规范固定向量、Rust↔Go 双向 TLS/REALITY 互通，覆盖 batch 和 OpenSSL |
 | Compile × 8 | Linux ARM64/ARMv7/MIPS/MIPSLE、FreeBSD amd64、Windows amd64/ARM64、Android ARM64；核心及支持的控制组件 |
 
-Linux amd64 已由运行测试覆盖。Windows 检查 CLI 和公共控制包，Android 仅检查公共核心/控制包；交叉编译不代表对应设备运行、安装包或 UI 已完成。服务进程 smoke 在私有网络命名空间中运行，无需外部代理节点。
+Linux amd64 已由运行测试覆盖。Windows 包含原生控制测试与桌面构建，Android 仅检查公共核心/控制包；交叉编译不代表对应设备运行、安装包或 UI 已完成。服务进程 smoke 在私有网络命名空间中运行，无需外部代理节点。
 
 效率设计：
 

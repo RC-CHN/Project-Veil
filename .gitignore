@@ -1,6 +1,7 @@
 /.build/
 /veil-core/.build/
 /veil-service/.build/
+/veil-desktop/.build/
 /.rcoder/
 /.agents/
 /.codex/

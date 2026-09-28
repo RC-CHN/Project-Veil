@@ -16,7 +16,7 @@ runs:
         path: |
           veil-core/.build/mod
           veil-core/.build/cache
-        key: go-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.go-version') }}-${{ inputs.scope }}-${{ hashFiles('veil-core/go.sum', 'veil-service/go.sum') }}-${{ hashFiles('veil-core/**/*.go', 'veil-core/patches/**', 'veil-core/scripts/build.py', 'veil-service/**/*.go', 'veil-service/scripts/build.py') }}
+        key: go-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.go-version') }}-${{ inputs.scope }}-${{ hashFiles('veil-core/go.sum', 'veil-service/go.sum', 'veil-desktop/go.sum') }}-${{ hashFiles('veil-core/**/*.go', 'veil-core/patches/**', 'veil-core/scripts/build.py', 'veil-service/**/*.go', 'veil-service/scripts/build.py', 'veil-desktop/**') }}
         restore-keys: |
-          go-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.go-version') }}-${{ inputs.scope }}-${{ hashFiles('veil-core/go.sum', 'veil-service/go.sum') }}-
+          go-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.go-version') }}-${{ inputs.scope }}-${{ hashFiles('veil-core/go.sum', 'veil-service/go.sum', 'veil-desktop/go.sum') }}-
           go-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.go-version') }}-${{ inputs.scope }}-

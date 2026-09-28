@@ -7,7 +7,7 @@ import re
 import subprocess
 import sys
 
-SCOPES = ("core", "service", "interop", "cross")
+SCOPES = ("core", "service", "interop", "cross", "windows", "desktop")
 
 
 def scopes(paths):
@@ -20,7 +20,9 @@ def scopes(paths):
         elif path.startswith("veil-core/"):
             selected.update(SCOPES)
         elif path.startswith("veil-service/"):
-            selected.update(("service", "cross"))
+            selected.update(("service", "cross", "windows", "desktop"))
+        elif path.startswith("veil-desktop/"):
+            selected.add("desktop")
         elif path.startswith("interop/rust/"):
             selected.add("interop")
         else:
