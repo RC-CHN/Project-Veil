@@ -1,6 +1,16 @@
-# CI
+# CI 与发布
 
-GitHub Actions 在 `main`、`ci/**` 分支 push、所有 PR 和手动运行时执行。全部检查完成后的固定入口是 **CI**；分支保护应选这个汇总检查，避免依赖条件跳过或动态矩阵名称。工作流不修改分支保护，也不发布或部署软件。
+GitHub Actions 在 `main`、`ci/**` 分支 push、所有 PR 和手动运行时执行。全部检查完成后的固定入口是 **CI**；分支保护应选这个汇总检查，避免依赖条件跳过或动态矩阵名称。
+
+## 版本发布
+
+推送 `vMAJOR.MINOR.PATCH` tag 触发 `Release`：复用完整 CI，同时并行打包五种 CLI、Windows/Linux amd64 桌面、OpenWrt 24.10 x86_64 / LuCI 和 OPNsense amd64 构建材料。Linux 桌面使用 Ubuntu 24.04 构建，减少对更新 glibc 的依赖。Go 和平台打包工具均固定版本或提交。
+
+发布前校验完整文件清单、SHA-256，以及 CLI/桌面 manifest 中的版本、提交和干净工作树；全部检查及构建成功才将文件上传到 GitHub Release。只有发布任务具有 `contents: write` 权限；重跑不会覆盖已发布版本。
+
+准备 `.github/releases/v版本号.md`，提交后创建并推送对应 tag 即可。每个包附校验文件，另有汇总 `SHA256SUMS`。OPNsense 构建材料需在对应系统内运行 `build.sh` 生成匹配 ABI 的原生包。
+
+## 自动检查
 
 | 并行任务 | 验证内容 |
 | --- | --- |
