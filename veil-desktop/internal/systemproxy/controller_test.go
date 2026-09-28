@@ -2,6 +2,7 @@ package systemproxy
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -149,5 +150,40 @@ func TestFailedClearKeepsRecoveryRecord(t *testing.T) {
 	}
 	if !reflect.DeepEqual(b.current, original) {
 		t.Fatal("could not restore original settings after failed clear")
+	}
+}
+
+func TestClearJournalFailurePreservesSettings(t *testing.T) {
+	c, b, path := setup(t)
+	original := clone(b.current)
+	if err := c.SetMode("auto", "127.0.0.1:1080"); err != nil {
+		t.Fatal(err)
+	}
+	active := clone(b.current)
+	// Make replacing the journal fail without relying on filesystem permissions.
+	backup := path + ".saved"
+	if err := os.Rename(path, backup); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(path, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Clear(); err == nil {
+		t.Fatal("journal failure was hidden")
+	}
+	if !reflect.DeepEqual(b.current, active) || c.Status().Mode != "auto" || !c.Status().Managed {
+		t.Fatal("failed clear changed settings or lost the recovery record")
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(backup, path); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Restore(); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(b.current, original) {
+		t.Fatal("failed clear prevented restoring the original settings")
 	}
 }

@@ -234,9 +234,14 @@ func (c *Controller) Clear() error {
 	if err = c.backend.Write(c.backend.Direct(clone(current))); err != nil {
 		return errors.Join(err, c.backend.Write(current))
 	}
+	previous := c.state
 	c.state = record{Mode: "keep"}
+	if err = c.save(); err != nil {
+		c.state = previous
+		return errors.Join(err, c.backend.Write(current))
+	}
 	c.lastError = ""
-	return c.save()
+	return nil
 }
 
 func clone(value Snapshot) Snapshot {
