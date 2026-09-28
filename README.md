@@ -1,52 +1,64 @@
 # Project Veil
 
-Veil 是基于 TCP 与 TLS 1.3/REALITY 的实验代理。目前提供可复用 Go 核心、SOCKS5 CONNECT、固定目标 TCP 转发和 CLI。尚未提供 TUN、UDP 或平台界面，也尚未通过抗识别验收。
+Veil 是基于 TCP 与 TLS 1.3 的代理协议与工具集。它在加密连接中复用独立业务流，通过范围式随机调度和 TLS 记录填充组织流量，并提供可嵌入核心、命令行入口与公共控制服务。
 
-当前线协议为 v0.3，两端需同时升级。语言无关的字节格式、密码计算、状态机和固定向量见 [协议规范](PROTOCOL.md)；独立 Rust 实现及双向互通用法见 [互通验证端](interop/rust/README.md)。
+## 协议思路
 
-仓库按组件组织，核心与控制服务分别为独立 Go module：
+- **连接绑定认证**：使用 TLS exporter 将业务认证绑定到当前加密会话。传输支持标准 TLS 和 REALITY 式握手；后者将服务端认证证明放入证书扩展，使用客户端声明的签名算法。
+- **并发多路复用**：每条 TLS 连接承载多个业务流，每流独立处理目标拨号确认、接收额度、取消、双向半关闭和完成确认。
+- **范围式随机化**：外层生成和分发参数范围，核心在连接建立及发送时取样。上下行分别配置调度份额、启动分片与额度返还策略。
+- **记录层填充**：在 TLS 记录层执行有预算的随机填充，配合真实业务流交织；发送策略与业务帧的解析规则分离。
+- **握手外观**：创建连接时选择浏览器 ClientHello 模板，服务端为普通未认证连接提供网站回落。
 
-```text
-veil-core/
-  core/       公共 API：客户端、服务端、流、连接池
-  inbound/    SOCKS5 和固定目标 TCP 入口
-  service/    配置校验、应用组装和可嵌入运行生命周期
-  internal/   TLS、并发复用、鉴权和 SOCKS 解析
-  cmd/        Veil CLI 与测试程序的 main 包
-  scripts/    构建、协议检查和性能测试
-  patches/    固定版本的 TLS 补丁
-  examples/   配置示例
-veil-service/
-  control/    配置保存、revision 和运行控制
-  local/      私有 Unix socket 控制协议
-  cmd/        veild 常驻服务、veilctl 控制命令
-  platform/   systemd、OpenWrt/procd、FreeBSD/rc.d 模板
-```
+## 与常见协议的思路对比
 
-`internal` 使用 Go 的导入限制，封装不对外承诺稳定的实现；可嵌入接口从 `veil/core`、`veil/inbound` 和 `veil/service` 使用。核心不依赖界面，不操作系统路由、DNS、防火墙或服务管理。
+| 协议 / 组合 | 认证与加密 | 连接组织 | 流量外观与随机化思路 |
+| --- | --- | --- | --- |
+| **Veil** | TLS 1.3；业务认证绑定 TLS exporter；REALITY 式握手使用证书扩展证明 | 原生并发多流，每流独立额度、半关闭与完成确认 | 浏览器握手模板、网站回落；双向范围采样、真实流交织、TLS 记录层预算填充 |
+| [AnyTLS](https://github.com/anytls/anytls-go/blob/main/docs/protocol.md) | TLS 内使用密码摘要认证 | TLS 上的会话层和连接复用 | 按 PaddingScheme 拆分与填充首段写入，通过填充帧补足尺寸；服务器可下发更新策略 |
+| [NaiveProxy](https://github.com/klzgrad/naiveproxy#padding-protocol-an-informal-specification) | HTTPS 代理认证，使用 Chromium 的 TLS/QUIC 网络栈 | HTTP/2 或 HTTP/3 CONNECT 流复用 | 沿用浏览器网络栈，对 CONNECT 头、流起始数据和特定控制帧做填充 |
+| [Trojan](https://trojan-gfw.github.io/trojan/protocol.html) | TLS 证书认证，隧道内校验密码摘要 | 目标 TCP 连接与 TLS 隧道对应 | 使用 TLS 站点外观，首个请求携带业务数据；认证不匹配时回落到网站服务 |
+| [VLESS + REALITY](https://github.com/XTLS/REALITY#readme) | VLESS 用户身份配合 REALITY 握手认证 | VLESS 请求层与传输层组合，复用方式由具体组合决定 | 借用目标站点的握手外观并提供回落；可结合 [Vision](https://xtls.github.io/en/config/inbounds/vless.html) 的首段填充及内层 TLS 处理 |
+| [VMess AEAD](https://www.v2fly.org/developer/protocols/vmess.html) | 用户 ID 派生认证与会话密钥，协议头和数据分块受保护 | 分块数据流，可结合 [Mux.Cool](https://www.v2fly.org/developer/protocols/muxcool.html) 复用 | 长度掩码与随机填充，外层可组合 TLS、WebSocket 等传输 |
+| [Shadowsocks 2022](https://shadowsocks.org/doc/sip022.html) | 预共享密钥派生会话子密钥，使用分块 AEAD | 目标 TCP 连接与代理连接一一对应 | 原生密文流，请求首段包含随机长度填充 |
 
-后续 LuCI、Windows/Linux Tauri 桌面、Android 应用分别作为独立组件目录加入；OpenWrt/procd、Linux/systemd、OPNsense 和 Windows 的平台适配负责配置、权限、网络与服务生命周期。它们复用同一核心。公共控制服务和三个启动适配见 [服务组件说明](veil-service/README.md)；平台 UI、网络集成和安装包尚待完成。
+Veil 将握手外观、会话认证、流生命周期和发送策略分别处理：连接创建时确定握手模板，认证后由复用层管理业务流，发送端按本地参数范围组织数据和填充。参数由外层配置生成器提供，核心负责校验与执行。
 
-## 构建与检查
+## 组件
 
-GitHub Actions 的并行检查、缓存和平台覆盖见 [CI 说明](.github/README.md)。
+| 目录 | 职责 |
+| --- | --- |
+| [`veil-core/`](veil-core/README.md) | 公共 Go API、TLS 传输、并发复用、SOCKS5 CONNECT、固定目标 TCP 转发与 Veil CLI |
+| [`veil-service/`](veil-service/README.md) | `veild` / `veilctl`、配置保存与 revision、运行生命周期、私有 Unix socket 控制接口 |
+| [`veil-service/platform/`](veil-service/platform/) | systemd、OpenWrt procd、FreeBSD rc.d 启动适配 |
+| [`interop/rust/`](interop/rust/README.md) | 独立 Rust 互通验证端，覆盖客户端和服务端角色 |
 
-需要 Go 1.26.3、Python 3；集成测试另需 OpenSSL。仓库根目录可以执行：
+核心和控制服务分别为独立 Go module。应用通过 `veil/core`、`veil/inbound` 和 `veil/service` 使用核心；平台组件通过公共控制层管理配置与运行状态，代理数据由核心直接转发。
+
+## 构建与使用
+
+使用 Go 1.26.3 和 Python 3；集成测试使用 OpenSSL 3.5 与 curl。仓库构建器负责生成固定版本的 TLS 适配。
 
 ```sh
 make build
+make service       # 构建 veild、veilctl
 make test
 make race
-make vet
-make service       # 构建 veild、veilctl
-make service-race  # 控制层测试、race 和 vet
+make service-race
+
 veil-core/.build/veil -keygen
 veil-core/.build/veil -profilegen
 veil-core/.build/veil -config /path/to/client.json
 ```
 
-生成文件位于 `veil-core/.build/`。脚本和具体配置用法见 [核心说明](veil-core/README.md)，固定目标入口示例见 [client.forward.json](veil-core/examples/client.forward.json)。直接 `go build` 不包含必需的 uTLS 补丁，请使用构建器；独立的可发布 SDK 与移动端绑定仍待后续完成。
+核心构建输出位于 `veil-core/.build/`，控制服务输出位于 `veil-service/.build/`。配置示例见 [`veil-core/examples/`](veil-core/examples/)，固定目标入口见 [client.forward.json](veil-core/examples/client.forward.json)。
 
-源代码整理不会迁移或重启已有部署；部署目录与构建目录应各自管理。
+## 文档
 
-本项目使用 [GPL-3.0-or-later](LICENSE)，来源见 [第三方说明](THIRD_PARTY.md)。
+- [线协议规范](PROTOCOL.md)：字节格式、认证计算、流状态机和固定向量。
+- [核心使用说明](veil-core/README.md)：配置、嵌入 API 和传输策略。
+- [控制服务说明](veil-service/README.md)：配置保存、启停控制和平台适配。
+- [Rust 互通验证](interop/rust/README.md)：独立实现的构建与双向互通检查。
+- [CI 说明](.github/README.md)：并行任务、构建缓存和跨平台检查。
+
+本项目使用 [GPL-3.0-or-later](LICENSE)，代码来源见 [第三方说明](THIRD_PARTY.md)。
