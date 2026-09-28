@@ -38,6 +38,8 @@ def main():
         parser.error(
             "requires Windows and VEIL_TEST_SYSTEM_PROXY=1 on an isolated user"
         )
+    args.server = args.server.resolve(strict=True)
+    args.package = args.package.resolve(strict=True)
     import winreg
     import windows
 

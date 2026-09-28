@@ -45,6 +45,7 @@ function transfers() {
 try {
   await page.waitForSelector('#language'); await idle();
   await page.locator('#language').selectOption('zh');
+  if (await page.locator('html').getAttribute('data-theme') !== 'light') await click('theme');
   await page.locator('#advanced > summary').click();
   await page.locator('#config').fill(fs.readFileSync(fixture.config, 'utf8'));
   await click('validate'); await click('save');

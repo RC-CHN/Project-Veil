@@ -291,11 +291,11 @@ jobs:
           VEIL_TEST_SYSTEM_PROXY: '1'
         run: |
           npm ci --prefix veil-desktop/scripts/gui --ignore-scripts --no-audit --no-fund
-          python veil-core/scripts/build.py batch --output veil-desktop/.build/gui-server.exe
+          python veil-core/scripts/build.py batch --output "$GITHUB_WORKSPACE/veil-desktop/.build/gui-server.exe"
           python veil-desktop/scripts/gui/check.py --package veil-desktop/.build/releases/veil-desktop-ci-windows-amd64.zip --server veil-desktop/.build/gui-server.exe --artifacts veil-desktop/.build/gui-artifacts
       - name: Upload Windows GUI screenshots and diagnostics
         if: always() && runner.os == 'Windows'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: windows-desktop-gui
           path: veil-desktop/.build/gui-artifacts
