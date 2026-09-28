@@ -7,7 +7,6 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 	"veil/internal/mux"
 )
@@ -19,7 +18,7 @@ func closeWrite(c any) error {
 		err := cw.CloseWrite()
 		// The peer may already have closed after delivering its final bytes.
 		// This FIN is redundant; read/write errors still come from the pumps.
-		if errors.Is(err, syscall.ENOTCONN) {
+		if errors.Is(err, errNotConnected) {
 			return nil
 		}
 		return err

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"syscall"
 	"veil/internal/wire"
 )
 
@@ -28,7 +27,7 @@ func targetFailure(err error) TargetError {
 		return TargetTimeout
 	case errors.As(err, &dns):
 		return TargetDNS
-	case errors.Is(err, syscall.ECONNREFUSED):
+	case errors.Is(err, errConnectionRefused):
 		return TargetRefused
 	default:
 		return TargetFailed
