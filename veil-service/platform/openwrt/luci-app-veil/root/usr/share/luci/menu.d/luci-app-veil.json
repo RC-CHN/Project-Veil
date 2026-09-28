@@ -1,0 +1,8 @@
+{
+  "admin/services/veil": {
+    "title": "Veil",
+    "order": 60,
+    "action": {"type": "view", "path": "veil"},
+    "depends": {"acl": ["luci-app-veil"]}
+  }
+}

@@ -25,6 +25,8 @@ type Response struct {
 	Status   *Status  `json:"status,omitempty"`
 	Revision string   `json:"revision,omitempty"`
 	Error    *Failure `json:"error,omitempty"`
+	// Config contains credentials and is returned only by an explicit config request.
+	Config json.RawMessage `json:"config,omitempty"`
 }
 
 func Fail(code string, err error) Response {
@@ -49,8 +51,17 @@ func (m *Manager) Handle(q Request) Response {
 		return Fail("conflict", errors.New("saved configuration changed; refresh status"))
 	}
 	var revision string
+	var config json.RawMessage
 	switch q.Action {
 	case "status":
+	case "config":
+		if m.cfg != nil {
+			var err error
+			config, err = json.Marshal(m.cfg)
+			if err != nil {
+				return Fail("config_failed", err)
+			}
+		}
 	case "validate", "save":
 		cfg, b, rev, err := parse(q.Config, true)
 		if err != nil {
@@ -101,5 +112,5 @@ func (m *Manager) Handle(q Request) Response {
 		return Fail("unknown_action", errors.New("unknown control action"))
 	}
 	s := m.status()
-	return Response{Version: Version, Status: &s, Revision: revision}
+	return Response{Version: Version, Status: &s, Revision: revision, Config: config}
 }

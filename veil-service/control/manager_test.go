@@ -110,6 +110,32 @@ func TestSavedAndRunningAreSeparate(t *testing.T) {
 	}
 }
 
+func TestExplicitConfigurationRead(t *testing.T) {
+	m, _ := manager(t)
+	if r := perform(t, m, "config", nil); len(r.Config) != 0 || r.Status.SavedRevision != "" {
+		t.Fatal("empty manager exposed a configuration")
+	}
+	saved := perform(t, m, "save", profile(t, ""))
+	r := perform(t, m, "config", nil)
+	var cfg service.Config
+	if err := json.Unmarshal(r.Config, &cfg); err != nil || cfg.Secret == "" || r.Status.SavedRevision != saved.Revision {
+		t.Fatalf("configuration and revision must be returned together: %+v %v", r, err)
+	}
+	r.Config[0] = 'x'
+	if next := perform(t, m, "config", nil); !json.Valid(next.Config) {
+		t.Fatal("caller mutated manager configuration")
+	}
+	for _, action := range []string{"status", "start", "stop", "validate", "save"} {
+		var payload []byte
+		if action == "save" || action == "validate" {
+			payload = profile(t, "")
+		}
+		if next := perform(t, m, action, payload); len(next.Config) != 0 {
+			t.Fatalf("%s exposed credentials", action)
+		}
+	}
+}
+
 func TestConcurrentOperationsAndClose(t *testing.T) {
 	m, _ := manager(t)
 	perform(t, m, "save", profile(t, ""))

@@ -1,0 +1,150 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "A saved configuration is waiting to be applied. Applying it will disconnect current connections."
+msgstr ""
+
+msgid "Advanced: edit configuration JSON"
+msgstr ""
+
+msgid "Apply and restart"
+msgstr ""
+
+msgid "Apply saved configuration"
+msgstr ""
+
+msgid "Apply saved configuration?"
+msgstr ""
+
+msgid "Cancel"
+msgstr ""
+
+msgid "Choose configuration file"
+msgstr ""
+
+msgid "Client"
+msgstr ""
+
+msgid "Completed connections"
+msgstr ""
+
+msgid "Configuration"
+msgstr ""
+
+msgid "Configuration imported and validated. Save it when ready."
+msgstr ""
+
+msgid "Configuration is valid."
+msgstr ""
+
+msgid "Configuration must be smaller than 64 KiB."
+msgstr ""
+
+msgid "Configuration saved, but disk durability could not be confirmed. Check the storage device."
+msgstr ""
+
+msgid "Configuration saved."
+msgstr ""
+
+msgid "Configuration validation failed."
+msgstr ""
+
+msgid "Connection"
+msgstr ""
+
+msgid "Contains credentials. Share only with trusted administrators."
+msgstr ""
+
+msgid "Current connections will be disconnected. Unsaved edits in the editor are not applied."
+msgstr ""
+
+msgid "Discard unsaved edits and reload the saved configuration?"
+msgstr ""
+
+msgid "Import a configuration to get started."
+msgstr ""
+
+msgid "Import and save a configuration first."
+msgstr ""
+
+msgid "Import the JSON configuration provided by your server administrator. Saving keeps current connections running; apply saved changes separately."
+msgstr ""
+
+msgid "Invalid JSON. Check the configuration before saving."
+msgstr ""
+
+msgid "Listening address"
+msgstr ""
+
+msgid "Manage your proxy connection and configuration."
+msgstr ""
+
+msgid "Mode"
+msgstr ""
+
+msgid "Operation failed."
+msgstr ""
+
+msgid "Refresh"
+msgstr ""
+
+msgid "Reload saved configuration"
+msgstr ""
+
+msgid "Running"
+msgstr ""
+
+msgid "Save configuration"
+msgstr ""
+
+msgid "Server"
+msgstr ""
+
+msgid "Service unavailable"
+msgstr ""
+
+msgid "Start proxy"
+msgstr ""
+
+msgid "Stop proxy"
+msgstr ""
+
+msgid "Stopped"
+msgstr ""
+
+msgid "The configuration could not be saved. Check available storage and permissions."
+msgstr ""
+
+msgid "The configuration must be a JSON object."
+msgstr ""
+
+msgid "The control service is unavailable."
+msgstr ""
+
+msgid "The proxy could not start. Check the listening address and certificate paths."
+msgstr ""
+
+msgid "The saved configuration changed elsewhere. Reload it before saving again."
+msgstr ""
+
+msgid "Unable to reach Veil. Check that the service is started, then refresh."
+msgstr ""
+
+msgid "Validate"
+msgstr ""
+
+msgid "Import a proxy client configuration without a fixed forwarding target."
+msgstr ""
+
+msgid "Proxy protocol"
+msgstr ""
+
+msgid "Use 127.0.0.1 for this router only, or a LAN address for other devices. HTTP supports CONNECT for HTTPS."
+msgstr ""
+
+msgid "Choose file"
+msgstr ""
+
+msgid "No file selected"
+msgstr ""

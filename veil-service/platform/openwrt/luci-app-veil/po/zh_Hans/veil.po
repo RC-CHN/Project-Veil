@@ -1,0 +1,152 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: zh_Hans\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "A saved configuration is waiting to be applied. Applying it will disconnect current connections."
+msgstr "已保存的新配置尚未生效。应用配置将断开当前连接。"
+
+msgid "Advanced: edit configuration JSON"
+msgstr "高级设置：编辑 JSON 配置"
+
+msgid "Apply and restart"
+msgstr "应用并重启"
+
+msgid "Apply saved configuration"
+msgstr "应用已保存配置"
+
+msgid "Apply saved configuration?"
+msgstr "应用已保存的配置？"
+
+msgid "Cancel"
+msgstr "取消"
+
+msgid "Choose configuration file"
+msgstr "选择配置文件"
+
+msgid "Client"
+msgstr "客户端"
+
+msgid "Completed connections"
+msgstr "已完成连接"
+
+msgid "Configuration"
+msgstr "配置"
+
+msgid "Configuration imported and validated. Save it when ready."
+msgstr "配置已导入并通过校验，请确认后保存。"
+
+msgid "Configuration is valid."
+msgstr "配置校验通过。"
+
+msgid "Configuration must be smaller than 64 KiB."
+msgstr "配置文件大小不能超过 64 KiB。"
+
+msgid "Configuration saved, but disk durability could not be confirmed. Check the storage device."
+msgstr "配置已保存，但未能确认写入磁盘，请检查存储设备。"
+
+msgid "Configuration saved."
+msgstr "配置已保存。"
+
+msgid "Configuration validation failed."
+msgstr "配置校验失败。"
+
+msgid "Connection"
+msgstr "连接"
+
+msgid "Contains credentials. Share only with trusted administrators."
+msgstr "配置包含凭据，请仅与可信的管理员分享。"
+
+msgid "Current connections will be disconnected. Unsaved edits in the editor are not applied."
+msgstr "当前连接将被断开。编辑器中尚未保存的修改不会应用。"
+
+msgid "Discard unsaved edits and reload the saved configuration?"
+msgstr "放弃未保存的修改，重新载入已保存的配置？"
+
+msgid "Import a configuration to get started."
+msgstr "导入配置后即可开始使用。"
+
+msgid "Import and save a configuration first."
+msgstr "请先导入并保存配置。"
+
+msgid "Import the JSON configuration provided by your server administrator. Saving keeps current connections running; apply saved changes separately."
+msgstr "导入服务端管理员提供的 JSON 配置。保存不会中断当前连接，新配置需要单独应用。"
+
+msgid "Invalid JSON. Check the configuration before saving."
+msgstr "JSON 格式有误，请检查后再保存。"
+
+msgid "Listening address"
+msgstr "监听地址"
+
+msgid "Manage your proxy connection and configuration."
+msgstr "管理代理连接与配置。"
+
+msgid "Mode"
+msgstr "运行模式"
+
+msgid "Operation failed."
+msgstr "操作失败。"
+
+msgid "Refresh"
+msgstr "刷新"
+
+msgid "Reload saved configuration"
+msgstr "重新载入已保存配置"
+
+msgid "Running"
+msgstr "运行中"
+
+msgid "Save configuration"
+msgstr "保存配置"
+
+msgid "Server"
+msgstr "服务端"
+
+msgid "Service unavailable"
+msgstr "服务不可用"
+
+msgid "Start proxy"
+msgstr "启动代理"
+
+msgid "Stop proxy"
+msgstr "停止代理"
+
+msgid "Stopped"
+msgstr "已停止"
+
+msgid "The configuration could not be saved. Check available storage and permissions."
+msgstr "配置保存失败，请检查存储空间和文件权限。"
+
+msgid "The configuration must be a JSON object."
+msgstr "配置必须是 JSON 对象。"
+
+msgid "The control service is unavailable."
+msgstr "控制服务不可用。"
+
+msgid "The proxy could not start. Check the listening address and certificate paths."
+msgstr "代理启动失败，请检查监听地址和证书路径。"
+
+msgid "The saved configuration changed elsewhere. Reload it before saving again."
+msgstr "配置已被其他操作修改，请重新载入后再保存。"
+
+msgid "Unable to reach Veil. Check that the service is started, then refresh."
+msgstr "无法连接 Veil，请检查服务是否已启动，然后刷新。"
+
+msgid "Validate"
+msgstr "校验配置"
+
+msgid "Import a proxy client configuration without a fixed forwarding target."
+msgstr "请导入代理客户端配置，不要设置固定转发目标。"
+
+msgid "Proxy protocol"
+msgstr "代理协议"
+
+msgid "Use 127.0.0.1 for this router only, or a LAN address for other devices. HTTP supports CONNECT for HTTPS."
+msgstr "仅供本机使用时填写 127.0.0.1，供其他设备使用时填写局域网地址。HTTP 代理支持通过 CONNECT 访问 HTTPS。"
+
+msgid "Choose file"
+msgstr "选择文件"
+
+msgid "No file selected"
+msgstr "尚未选择文件"

@@ -8,11 +8,11 @@ import subprocess
 from build import ROOT, core_build, prepare
 
 targets = [
-    ("linux", "amd64", {}, ["./cmd/veild", "./cmd/veilctl"]),
-    ("linux", "arm64", {}, ["./cmd/veild", "./cmd/veilctl"]),
-    ("linux", "arm", {"GOARM": "7"}, ["./cmd/veild", "./cmd/veilctl"]),
-    ("linux", "mips", {"GOMIPS": "softfloat"}, ["./cmd/veild", "./cmd/veilctl"]),
-    ("linux", "mipsle", {"GOMIPS": "softfloat"}, ["./cmd/veild", "./cmd/veilctl"]),
+    ("linux", "amd64", {}, ["./cmd/veild", "./cmd/veilctl", "./cmd/veil-rpc"]),
+    ("linux", "arm64", {}, ["./cmd/veild", "./cmd/veilctl", "./cmd/veil-rpc"]),
+    ("linux", "arm", {"GOARM": "7"}, ["./cmd/veild", "./cmd/veilctl", "./cmd/veil-rpc"]),
+    ("linux", "mips", {"GOMIPS": "softfloat"}, ["./cmd/veild", "./cmd/veilctl", "./cmd/veil-rpc"]),
+    ("linux", "mipsle", {"GOMIPS": "softfloat"}, ["./cmd/veild", "./cmd/veilctl", "./cmd/veil-rpc"]),
     ("freebsd", "amd64", {}, ["./cmd/veild", "./cmd/veilctl"]),
     ("windows", "amd64", {}, ["veil/service", "./control"]),
     ("windows", "arm64", {}, ["veil/service", "./control"]),

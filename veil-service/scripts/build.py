@@ -47,6 +47,7 @@ def main():
     p.add_argument("--generate-only", action="store_true")
     p.add_argument("--output-dir", type=Path, default=ROOT / ".build")
     p.add_argument("--version", default="dev")
+    p.add_argument("--program", action="append", choices=("veild", "veilctl", "veil-rpc"))
     a = p.parse_args()
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.+_-]{0,63}", a.version):
         p.error("version must be 1–64 ASCII letters, digits, dots, +, _ or -")
@@ -72,7 +73,7 @@ def main():
         run(["go", "vet", *flags, "./..."])
     else:
         a.output_dir.mkdir(parents=True, exist_ok=True)
-        for name in ("veild", "veilctl"):
+        for name in a.program or ("veild", "veilctl"):
             suffix = ".exe" if os.environ.get("GOOS") == "windows" else ""
             run(
                 [

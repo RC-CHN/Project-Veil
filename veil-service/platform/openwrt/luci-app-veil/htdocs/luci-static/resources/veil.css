@@ -1,0 +1,35 @@
+.veil-page { max-width: 1000px; }
+.veil-head, .veil-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.veil-head { justify-content: space-between; margin-bottom: 20px; }
+.veil-head h2 { margin: 0; }
+.veil-badge { padding: 5px 13px; border-radius: 20px; background: #e9edf2; color: #354052; font-weight: 600; font-size: 13px; }
+.veil-running { background: #d9f3e6; color: #145b3b; }
+.veil-error { background: #fde4e2; color: #8c2820; }
+.veil-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 22px 0; }
+.veil-metric { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.veil-metric span { opacity: .7; font-size: 13px; }
+.veil-metric strong { overflow-wrap: anywhere; }
+.veil-panel { padding: 22px !important; margin-bottom: 20px !important; border: 1px solid rgba(128, 128, 128, .22); border-radius: 8px; }
+.veil-notice:empty, .veil-failure:empty, .veil-feedback:empty { display: none; }
+.veil-feedback { border-left: 3px solid var(--primary, #7184a0); padding: 8px 12px; }
+.veil-notice { padding: 12px; border-left: 3px solid #7184a0; background: rgba(113, 132, 160, .08); margin: 18px 0; }
+.veil-failure { overflow-wrap: anywhere; border-left: 3px solid var(--danger, #c34b40); padding: 8px 12px; }
+.veil-editor { box-sizing: border-box; width: 100% !important; font-family: monospace; margin-top: 12px; }
+.veil-file { display: flex; flex-direction: column; gap: 10px; margin: 18px 0; }
+.veil-file-row { display: flex; align-items: center; gap: 12px; }
+.veil-filename { overflow-wrap: anywhere; min-width: 0; }
+.veil-listener { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.veil-listener > div { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.veil-listener input, .veil-listener select { box-sizing: border-box; width: 100% !important; }
+.veil-page details { margin: 20px 0; }
+.veil-page summary { cursor: pointer; font-weight: 600; }
+.veil-help { opacity: .75; line-height: 1.6; }
+.veil-page button { min-height: 36px; }
+.veil-page button:disabled { opacity: .45; cursor: not-allowed; }
+.veil-page #veil-file[hidden] { display: none !important; }
+@media (max-width: 600px) {
+    .veil-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .veil-panel { padding: 16px !important; }
+    .veil-actions button { flex: 1; }
+    .veil-listener { grid-template-columns: 1fr; }
+}

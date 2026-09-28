@@ -1,0 +1,7 @@
+{
+  "luci-app-veil": {
+    "description": "View Veil status and manage its configuration",
+    "read": {"ubus": {"veil": ["status"]}},
+    "write": {"ubus": {"veil": ["config", "validate", "save", "start", "stop", "restart"]}}
+  }
+}

@@ -12,7 +12,7 @@ systemd / procd / rc.d ───────────────→ 启动�
 
 ## 构建与试运行
 
-systemd Linux 的发行包构建、安装、多实例管理和卸载见 [Linux 安装与管理](platform/systemd/README.md)。`veil-system` 提供实例管理、配置导入、状态和日志入口；公共 `veilctl` 保持独立于 systemd。
+systemd Linux 的发行包构建、安装、多实例管理和卸载见 [Linux 安装与管理](platform/systemd/README.md)。`veil-system` 提供实例管理、配置导入、状态和日志入口；公共 `veilctl` 保持独立于 systemd。OpenWrt 安装、双语 LuCI 和 SOCKS5/HTTP 入口见 [OpenWrt / LuCI](platform/openwrt/README.md)。
 
 Go 1.26.3、Python 3；沿用核心构建器的固定 TLS 补丁。以下在 `veil-service/` 执行：
 
@@ -50,6 +50,7 @@ python3 scripts/cross_check.py
 | `start` | 未运行时启动；已经运行时幂等，不应用待生效配置 |
 | `stop` | 关闭监听、取消现有连接并等待退出；保留已保存配置 |
 | `restart` | 明确中断旧连接，以保存配置启动；先校验，再停旧实例 |
+| `config` | 显式返回已保存配置和同一时刻的状态/revision；包含凭据，需配置管理权限 |
 | `status` | 返回运行状态、监听地址、计数和保存/运行 revision；不返回配置或密钥 |
 
 运行中保存不同配置后，`restart_required` 为 true。`restart` 后若新端口被占用，实例保持 stopped 并报告错误；不宣称端口切换无缝或自动回滚。`-autostart` 仅在 daemon 启动时启动已有配置；没有配置则等待导入，启动失败也保留控制入口以便修复。`stop` 只停止本次运行，重启带 `-autostart` 的 daemon 会再次启动保存配置。
@@ -70,14 +71,14 @@ python3 scripts/cross_check.py
 
 `save`/`validate` 用 `config` 携带原配置对象，最大 1 MiB。`expected_revision` 可作比较后更新保护，防止多个界面覆盖彼此的配置；`veilctl -if-revision HASH ...` 对应此字段。不支持的版本、未知字段、同一行的多余对象会被拒绝；每条连接只处理第一行。响应总含 `version`，成功含 `status`，失败含 `error.code` 与 `error.message`；生命周期和保存错误尽可能附带当前状态。收到超时后应先查 `status`，不要盲目重复 `restart`。此版本没有热重载、事件推送或跨重启请求去重。
 
-最多同时处理 16 个控制连接，每个连接有 15 秒截止时间；不在后台轮询核心。权限检查依靠私有目录和 socket。浏览器页面不能直接访问该 socket，未来 LuCI/Tauri 应通过固定的本地命令或平台 RPC 接入；不要转发成无鉴权 TCP 接口。
+最多同时处理 16 个控制连接，每个连接有 15 秒截止时间；不在后台轮询核心。权限检查依靠私有目录和 socket。浏览器页面不能直接访问该 socket，LuCI 通过固定方法的 rpcd 适配接入，其他界面也应使用本地命令或平台 RPC；不要转发成无鉴权 TCP 接口。
 
 ## 平台适配
 
 | 平台 | 本轮内容 | 尚待完成 |
 | --- | --- | --- |
 | systemd Linux | 静态发行包、安装/卸载、`veil-system` 实例管理；Ubuntu 22.04 systemd 容器验收 | 其他发行版及 ARM 设备实测 |
-| OpenWrt | `platform/openwrt/veil` procd 启动脚本；Linux ARM/MIPS 编译检查 | UCI、ubus、LuCI、软件包和设备实测 |
+| OpenWrt | procd、rpcd/ubus、双语 LuCI、SOCKS5/HTTP 软件包；OpenWrt 24.10.8 x86_64 虚拟机实际验收，含 Argon | ARM/MIPS 实机及 apk 包适配 |
 | OPNsense / FreeBSD | `platform/freebsd/veil` rc.d 脚本；FreeBSD amd64 编译检查 | OPNsense configd/config.xml、GUI、插件包和设备实测 |
 | Windows | 公共 service/control 包编译检查 | 服务、命名管道、权限与桌面界面 |
 | Android | 公共 service/control 包编译检查 | VpnService、socket protect 绑定、TUN/DNS、应用 |
