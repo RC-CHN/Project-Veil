@@ -7,6 +7,7 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 	"veil/internal/mux"
 )
@@ -15,7 +16,13 @@ var relayBuffers = sync.Pool{New: func() any { return new([mux.PayloadSize]byte)
 
 func closeWrite(c any) error {
 	if cw, ok := c.(interface{ CloseWrite() error }); ok {
-		return cw.CloseWrite()
+		err := cw.CloseWrite()
+		// The peer may already have closed after delivering its final bytes.
+		// This FIN is redundant; read/write errors still come from the pumps.
+		if errors.Is(err, syscall.ENOTCONN) {
+			return nil
+		}
+		return err
 	}
 	return errors.New("TCP half-close unavailable")
 }

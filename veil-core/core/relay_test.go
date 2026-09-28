@@ -60,29 +60,36 @@ func TestRelayStreamsPartialData(t *testing.T) {
 	}
 }
 func TestRelayResetAndIdleDiagnostics(t *testing.T) {
-	for _, rst := range []bool{false, true} {
-		t.Run(map[bool]string{false: "blackhole", true: "reset"}[rst], func(t *testing.T) {
+	for _, failure := range []string{"blackhole", "tunnel read", "local read"} {
+		t.Run(failure, func(t *testing.T) {
 			local, backend := tcpPair(t)
 			remote, peer := tcpPair(t)
 			done := make(chan error, 1)
 			go func() { done <- relay(context.Background(), local, remote, 150*time.Millisecond) }()
-			if rst {
+			if failure == "tunnel read" {
 				peer.SetLinger(0)
 				peer.Close()
+			} else if failure == "local read" {
+				backend.SetLinger(0)
+				backend.Close()
 			}
 			e := <-done
 			var op *OpError
 			if !errors.As(e, &op) {
 				t.Fatal("missing operation", e)
 			}
-			if rst {
-				if op.Op != "tunnel read" {
+			if failure != "blackhole" {
+				if op.Op != failure {
 					t.Fatal(e)
 				}
 			} else if !errors.Is(e, ErrIdleTimeout) || op.Send != "local read" || op.Receive != "tunnel read" {
 				t.Fatal(e)
 			}
-			if _, e = io.ReadAll(backend); e != nil {
+			remaining := backend
+			if failure == "local read" {
+				remaining = peer
+			}
+			if _, e = io.ReadAll(remaining); e != nil {
 				t.Fatal("local connection left waiting", e)
 			}
 		})
