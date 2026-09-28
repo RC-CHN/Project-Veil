@@ -102,7 +102,10 @@ with tempfile.TemporaryDirectory(prefix="veil-smoke-") as temp:
             stderr=subprocess.PIPE,
             timeout=5,
         )
-        assert duplicate.returncode != 0 and "another daemon owns" in duplicate.stderr
+        assert (
+            duplicate.returncode != 0
+            and "owns this state directory" in duplicate.stderr
+        ), duplicate.stderr
         assert ctl("status")["state"] == "running"
         process.kill()
         process.wait(timeout=5)
