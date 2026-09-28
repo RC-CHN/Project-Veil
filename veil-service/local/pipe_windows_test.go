@@ -3,11 +3,16 @@ package local
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 	"veil-service/control"
+	"veil-service/internal/winsec"
+
+	"github.com/Microsoft/go-winio"
 )
 
 func TestPipeLifecycleAndLock(t *testing.T) {
@@ -80,5 +85,44 @@ func TestOnlyLocalPipes(t *testing.T) {
 		if _, err := dial(context.Background(), path); err == nil {
 			t.Fatalf("invalid endpoint dialed: %q", path)
 		}
+	}
+}
+
+func TestSharedPipeRejectedBeforeRequest(t *testing.T) {
+	sddl, err := winsec.Descriptor(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := fmt.Sprintf(`\\.\pipe\veil-untrusted-%d-%d`, os.Getpid(), time.Now().UnixNano())
+	// A pipe with our name but a shared ACL must not receive configuration.
+	ln, err := winio.ListenPipe(path, &winio.PipeConfig{SecurityDescriptor: sddl + "(A;;FA;;;WD)"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	received := make(chan int, 1)
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			received <- 0
+			return
+		}
+		defer conn.Close()
+		conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+		b, _ := io.ReadAll(conn)
+		received <- len(b)
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if _, err := Call(ctx, path, control.Request{Version: 1, Action: "status"}); err == nil || !strings.Contains(err.Error(), "grants access") {
+		t.Fatal("shared pipe was not rejected by the ACL check:", err)
+	}
+	select {
+	case n := <-received:
+		if n != 0 {
+			t.Fatal("request was sent before authenticating the pipe")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("rejected pipe connection was left open")
 	}
 }
