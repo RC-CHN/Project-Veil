@@ -234,10 +234,10 @@ jobs:
           flags = json.loads((ROOT / ".build/batch/flags.json").read_text())
           subprocess.run(["go", "test", *flags, "-count=1", "-timeout=120s", "./core"], cwd=ROOT, env=ENV, check=True)
           PY
-      - name: Build and exercise Windows CLI processes
+      - name: Package and exercise Windows CLI programs
         run: |
-          python veil-service/scripts/build.py batch --version ci
-          python veil-service/scripts/windows_smoke.py --bin-dir veil-service/.build
+          python veil-service/scripts/package.py --version ci --target windows --arch amd64
+          python veil-service/scripts/windows_package_check.py veil-service/.build/releases/veil-ci-windows-amd64.zip --run
 
   desktop:
     needs: changes

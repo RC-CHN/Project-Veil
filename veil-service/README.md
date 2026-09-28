@@ -80,10 +80,10 @@ python3 scripts/cross_check.py
 | systemd Linux | 静态发行包、安装/卸载、`veil-system` 实例管理；Ubuntu 22.04 systemd 容器验收 | 其他发行版及 ARM 设备实测 |
 | OpenWrt | procd、rpcd/ubus、双语 LuCI、SOCKS5/HTTP 软件包；OpenWrt 24.10.8 x86_64 虚拟机实际验收，含 Argon | ARM/MIPS 实机及 apk 包适配 |
 | OPNsense / FreeBSD | 原生插件、config.xml/configd、双语 GUI、权限分离、FreeBSD rc.d；26.7 amd64 虚拟机验收 | 其他 OPNsense 版本验收 |
-| Windows | 公共 service/control 包编译检查 | 服务、命名管道、权限与桌面界面 |
+| Windows | 私有命名管道、用户 ACL、原生 CLI 生命周期测试、amd64/ARM64 便携包；Wails 桌面与系统代理控制 | 稳定 Windows 环境中的完整桌面托盘交互验收 |
 | Android | 公共 service/control 包编译检查 | VpnService、socket protect 绑定、TUN/DNS、应用 |
 
-启动脚本只管理进程，不创建路由、DNS、防火墙或系统代理规则。OpenWrt 不依赖 systemd；OPNsense 不应靠修改 systemd 代码接入。Windows 文件权限与原子持久化需要专门适配，公共包编译通过不表示 Unix 的 0700/0600 存储约定可直接照搬。
+启动脚本只管理进程，不创建路由、DNS、防火墙或系统代理规则。OpenWrt 使用 procd，OPNsense 使用 configd 与 rc.d；Windows 使用用户私有 ACL、本机命名管道及原子替换后端，复用同一公共控制层。
 
 systemd 模板预期 `/usr/local/bin/veild`，使用专用 `veil` 用户；`veil.conf` 是供 `systemd-sysusers` 使用的声明。模板提供实例私有的 `/var/lib/veil-NAME` 和 `/run/veil-NAME`，管理员通过 `sudo veilctl -socket /run/veil-NAME/control.sock ...` 管理，配置可用 `-config -` 从 stdin 导入。模板允许绑定低端口，不授予路由管理权限。源码构建和检查不会安装或启动这些模板。
 

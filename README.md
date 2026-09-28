@@ -63,6 +63,7 @@ veil-core/.build/veil -config /path/to/client.json
 - [OpenWrt / LuCI](veil-service/platform/openwrt/README.md)：SOCKS5 与 HTTP 入口、软件包、配置导入与双语界面。
 - [OPNsense 插件](veil-service/platform/opnsense/README.md)：config.xml 配置、configd 控制、原生双语界面与安装包。
 - [桌面安装与使用](veil-desktop/README.md)：Windows / Linux 发行包、配置导入、托盘和系统代理管理。
+- [Windows CLI](veil-service/platform/windows/README.md)：amd64 / ARM64 便携包、私有命名管道与实例管理。
 - [Rust 互通验证](interop/rust/README.md)：独立实现的构建与双向互通检查。
 - [CI 说明](.github/README.md)：并行任务、构建缓存和跨平台检查。
 
