@@ -15,6 +15,18 @@ const browser = await chromium.connectOverCDP(`http://127.0.0.1:${fixture.cdp}`)
 const context = browser.contexts()[0];
 const page = context.pages()[0] || await context.waitForEvent('page');
 page.setDefaultTimeout(10000);
+const cdp = await context.newCDPSession(page);
+const frames = [];
+const frameDir = path.join(fixture.artifacts, 'frames');
+fs.mkdirSync(frameDir, {recursive: true});
+cdp.on('Page.screencastFrame', ({data, metadata, sessionId}) => {
+  if (frames.length < 180) {
+    const file = `frame-${String(frames.length).padStart(3, '0')}.jpg`;
+    fs.writeFileSync(path.join(frameDir, file), Buffer.from(data, 'base64'));
+    frames.push({file, timestamp: metadata.timestamp});
+  }
+  cdp.send('Page.screencastFrameAck', {sessionId}).catch(() => {});
+});
 async function idle() {
   await page.waitForFunction(() => !document.querySelector('#quit').disabled);
   assert.equal(await page.locator('#feedback.error:visible').count(), 0, await page.locator('#feedback').textContent());
@@ -55,7 +67,10 @@ try {
   assert.deepEqual(native('proxy'), fixture.baseline); transfers();
   await mode('auto'); assert.equal(native('proxy').flags, 3);
   assert(native('proxy').server.includes(`127.0.0.1:${fixture.proxy}`)); transfers();
+  await page.waitForFunction(() => Number(document.querySelector('#accepted').textContent) >= 8);
   await page.evaluate(() => window.scrollTo(0, 0)); await screenshot('connected-zh');
+  // Record only after the credential editor is closed.
+  await cdp.send('Page.startScreencast', {format: 'jpeg', quality: 80, everyNthFrame: 2});
   native('close');
   await page.waitForTimeout(300);
   assert.equal(native('window').visible, false, 'native window close must hide, not exit');
@@ -81,8 +96,12 @@ try {
   await page.locator('#quit').click();
   await page.locator('#confirmation-accept').click();
 } catch (error) {
+  if (await page.locator('#advanced').getAttribute('open').catch(() => null) !== null) {
+    await page.locator('#advanced > summary').click().catch(() => {});
+  }
   await screenshot('failure').catch(() => {});
   throw error;
 } finally {
+  fs.writeFileSync(path.join(frameDir, 'frames.json'), JSON.stringify(frames));
   await browser.close();
 }
