@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 
@@ -44,7 +45,11 @@ def main():
     p.add_argument("--check", action="store_true")
     p.add_argument("--race", action="store_true")
     p.add_argument("--generate-only", action="store_true")
+    p.add_argument("--output-dir", type=Path, default=ROOT / ".build")
+    p.add_argument("--version", default="dev")
     a = p.parse_args()
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.+_-]{0,63}", a.version):
+        p.error("version must be 1–64 ASCII letters, digits, dots, +, _ or -")
     flags = prepare(a.mode)
     if a.generate_only:
         return
@@ -66,6 +71,7 @@ def main():
         )
         run(["go", "vet", *flags, "./..."])
     else:
+        a.output_dir.mkdir(parents=True, exist_ok=True)
         for name in ("veild", "veilctl"):
             suffix = ".exe" if os.environ.get("GOOS") == "windows" else ""
             run(
@@ -74,8 +80,9 @@ def main():
                     "build",
                     *flags,
                     "-trimpath",
+                    "-ldflags=-X veil-service/internal/buildinfo.Version=" + a.version,
                     "-o",
-                    str(ROOT / ".build" / (name + suffix)),
+                    str(a.output_dir.resolve() / (name + suffix)),
                     "./cmd/" + name,
                 ]
             )

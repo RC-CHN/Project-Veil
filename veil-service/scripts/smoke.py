@@ -2,6 +2,7 @@
 """Exercise real veild/veilctl processes without installing a service."""
 
 import base64
+import argparse
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,9 @@ import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--bin-dir", type=Path, default=ROOT / ".build")
+BIN = parser.parse_args().bin_dir.resolve()
 if os.environ.get("VEIL_ISOLATED_NETNS") != "1":
     raise SystemExit("requires a private network namespace with VEIL_ISOLATED_NETNS=1")
 # Hosted runners can hide root-owned /proc entries from their ordinary user.
@@ -23,7 +27,7 @@ with tempfile.TemporaryDirectory(prefix="veil-smoke-") as temp:
     folder = Path(temp)
     state, control = folder / "state", folder / "run/control.sock"
     command = [
-        str(ROOT / ".build/veild"),
+        str(BIN / "veild"),
         "-state-dir",
         str(state),
         "-socket",
@@ -48,7 +52,7 @@ with tempfile.TemporaryDirectory(prefix="veil-smoke-") as temp:
         raise TimeoutError("daemon did not start")
 
     def ctl(action, config=None):
-        args = [str(ROOT / ".build/veilctl"), "-socket", str(control)]
+        args = [str(BIN / "veilctl"), "-socket", str(control)]
         if config is not None:
             args += ["-config", "-"]
         r = subprocess.run(

@@ -107,16 +107,20 @@ jobs:
           fi
           sh -n veil-service/platform/openwrt/veil
           sh -n veil-service/platform/freebsd/veil
+          shellcheck veil-service/platform/systemd/install.sh veil-service/platform/systemd/veil-system
       - name: Control API, persistence, lifecycle, race and vet
         run: python3 veil-service/scripts/build.py batch --check --race
-      - name: Build daemon and CLI
-        run: python3 veil-service/scripts/build.py batch
+      - name: Build and verify installable Linux release
+        run: |
+          python3 veil-service/scripts/package.py --version ci --arch amd64
+          python3 veil-service/scripts/package_check.py veil-service/.build/releases/veil-ci-linux-amd64.tar.gz
+          tar -xzf veil-service/.build/releases/veil-ci-linux-amd64.tar.gz -C veil-service/.build/releases
       - name: Real process lifecycle in a private network namespace
         run: |
           parent_netns=$(readlink /proc/self/ns/net)
           sudo -n unshare -n sh -ec '
             ip link set lo up
-            exec runuser -u "$1" -- env VEIL_ISOLATED_NETNS=1 VEIL_PARENT_NETNS="$2" python3 veil-service/scripts/smoke.py
+            exec runuser -u "$1" -- env VEIL_ISOLATED_NETNS=1 VEIL_PARENT_NETNS="$2" python3 veil-service/scripts/smoke.py --bin-dir veil-service/.build/releases/veil-ci-linux-amd64/bin
           ' sh "$(id -un)" "$parent_netns"
 
   interop:

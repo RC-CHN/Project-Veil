@@ -58,6 +58,7 @@ veil-core/.build/veil -config /path/to/client.json
 - [线协议规范](PROTOCOL.md)：字节格式、认证计算、流状态机和固定向量。
 - [核心使用说明](veil-core/README.md)：配置、嵌入 API 和传输策略。
 - [控制服务说明](veil-service/README.md)：配置保存、启停控制和平台适配。
+- [Linux 安装与管理](veil-service/platform/systemd/README.md)：发行包、安装卸载、实例管理与日志。
 - [Rust 互通验证](interop/rust/README.md)：独立实现的构建与双向互通检查。
 - [CI 说明](.github/README.md)：并行任务、构建缓存和跨平台检查。
 

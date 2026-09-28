@@ -6,12 +6,14 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
 	"veil-service/control"
+	"veil-service/internal/buildinfo"
 	"veil-service/local"
 )
 
@@ -26,7 +28,12 @@ func run() error {
 	dir := flag.String("state-dir", "", "private directory containing the saved config")
 	socket := flag.String("socket", "", "private Unix control socket")
 	autostart := flag.Bool("autostart", false, "start saved profile when the daemon starts")
+	version := flag.Bool("version", false, "print release version")
 	flag.Parse()
+	if *version {
+		fmt.Println(buildinfo.String())
+		return nil
+	}
 	if *dir == "" || *socket == "" || flag.NArg() != 0 {
 		return errors.New("use -state-dir DIR -socket PATH [-autostart]")
 	}

@@ -1,0 +1,35 @@
+#!/bin/sh
+# Platform commands stay outside veilctl and the shared control protocol.
+set -eu
+
+usage() {
+    echo 'usage: veil-system INSTANCE enable|disable|start|stop|restart|status|daemon-status|daemon-restart|logs [--follow]|import FILE|-|validate FILE|-' >&2
+    exit 2
+}
+
+[ "$#" -ge 2 ] || usage
+instance=$1
+action=$2
+shift 2
+case "$instance" in
+    ''|*[!a-zA-Z0-9_-]*) echo 'invalid instance: use 1–48 ASCII letters, digits, _ or -' >&2; exit 2 ;;
+esac
+[ "${#instance}" -le 48 ] || usage
+case "$action" in
+    import|validate) [ "$#" -eq 1 ] || usage ;;
+    logs) [ "$#" -eq 0 ] || { [ "$#" -eq 1 ] && [ "$1" = --follow ]; } || usage ;;
+    enable|disable|start|stop|restart|status|daemon-status|daemon-restart) [ "$#" -eq 0 ] || usage ;;
+    *) usage ;;
+esac
+unit="veil@$instance.service"
+socket="/run/veil-$instance/control.sock"
+bindir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+case "$action" in
+    enable|disable) exec systemctl "$action" --now "$unit" ;;
+    daemon-status) exec systemctl --no-pager status "$unit" ;;
+    daemon-restart) exec systemctl restart "$unit" ;;
+    logs) exec journalctl --unit "$unit" --lines 100 --no-pager "$@" ;;
+    import) exec "$bindir/veilctl" -socket "$socket" -config "$1" save ;;
+    validate) exec "$bindir/veilctl" -socket "$socket" -config "$1" validate ;;
+    *) exec "$bindir/veilctl" -socket "$socket" "$action" ;;
+esac

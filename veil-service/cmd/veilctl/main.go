@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"veil-service/control"
+	"veil-service/internal/buildinfo"
 	"veil-service/local"
 	"veil/service"
 )
@@ -24,7 +25,12 @@ func run() error {
 	socket := flag.String("socket", "", "Unix control socket")
 	config := flag.String("config", "", "configuration path, or - for stdin (validate/save)")
 	expected := flag.String("if-revision", "", "optional saved revision guard")
+	version := flag.Bool("version", false, "print release version")
 	flag.Parse()
+	if *version {
+		fmt.Println(buildinfo.String())
+		return nil
+	}
 	if flag.NArg() == 1 && flag.Arg(0) == "profilegen" {
 		return json.NewEncoder(os.Stdout).Encode(service.GenerateTrafficProfile())
 	}

@@ -12,6 +12,8 @@ systemd / procd / rc.d ───────────────→ 启动�
 
 ## 构建与试运行
 
+systemd Linux 的发行包构建、安装、多实例管理和卸载见 [Linux 安装与管理](platform/systemd/README.md)。`veil-system` 提供实例管理、配置导入、状态和日志入口；公共 `veilctl` 保持独立于 systemd。
+
 Go 1.26.3、Python 3；沿用核心构建器的固定 TLS 补丁。以下在 `veil-service/` 执行：
 
 ```sh
@@ -74,7 +76,7 @@ python3 scripts/cross_check.py
 
 | 平台 | 本轮内容 | 尚待完成 |
 | --- | --- | --- |
-| systemd Linux | `platform/systemd/veil@.service`、专用用户声明、多实例状态/运行目录 | 发行包与真实安装验收 |
+| systemd Linux | 静态发行包、安装/卸载、`veil-system` 实例管理；Ubuntu 22.04 systemd 容器验收 | 其他发行版及 ARM 设备实测 |
 | OpenWrt | `platform/openwrt/veil` procd 启动脚本；Linux ARM/MIPS 编译检查 | UCI、ubus、LuCI、软件包和设备实测 |
 | OPNsense / FreeBSD | `platform/freebsd/veil` rc.d 脚本；FreeBSD amd64 编译检查 | OPNsense configd/config.xml、GUI、插件包和设备实测 |
 | Windows | 公共 service/control 包编译检查 | 服务、命名管道、权限与桌面界面 |
