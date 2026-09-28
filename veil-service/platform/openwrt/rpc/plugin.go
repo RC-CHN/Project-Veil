@@ -3,6 +3,7 @@
 package rpc
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -15,7 +16,15 @@ import (
 const Socket = "/var/run/veil/control.sock"
 
 var methods = map[string]map[string]any{
-	"status": {}, "config": {}, "stop": {},
+	"connections":       {},
+	"connection_get":    {"id": ""},
+	"connection_export": {"id": ""},
+	"connection_test":   {"id": ""},
+	"connection_save":   {"profile": map[string]any{}, "relay": map[string]any{}, "expected_revision": "", "apply": true},
+	"connection_start":  {"id": "", "expected_revision": ""},
+	"connection_stop":   {"id": "", "expected_revision": ""},
+	"connection_delete": {"id": "", "expected_revision": ""},
+	"status":            {}, "config": {}, "stop": {},
 	"validate": {"config": map[string]any{}},
 	"save":     {"config": map[string]any{}, "expected_revision": ""},
 	"start":    {"expected_revision": ""},
@@ -58,6 +67,30 @@ func Run(ctx context.Context, args []string, input io.Reader, output io.Writer, 
 		}
 	}
 	q := control.Request{Version: control.Version, Action: args[1], Config: params["config"]}
+	if b, exists := params["id"]; exists {
+		if err := json.Unmarshal(b, &q.ID); err != nil || string(b) == "null" {
+			return encoder.Encode(control.Fail("invalid_request", errors.New("id must be a string")))
+		}
+	}
+	if b, exists := params["profile"]; exists {
+		d := json.NewDecoder(bytes.NewReader(b))
+		d.DisallowUnknownFields()
+		if err := d.Decode(&q.Profile); err != nil || q.Profile == nil {
+			return encoder.Encode(control.Fail("invalid_request", errors.New("invalid profile")))
+		}
+	}
+	if b, exists := params["relay"]; exists && string(b) != "null" {
+		d := json.NewDecoder(bytes.NewReader(b))
+		d.DisallowUnknownFields()
+		if err := d.Decode(&q.Relay); err != nil || q.Relay == nil {
+			return encoder.Encode(control.Fail("invalid_request", errors.New("invalid relay")))
+		}
+	}
+	if b, exists := params["apply"]; exists {
+		if err := json.Unmarshal(b, &q.Apply); err != nil || string(b) == "null" {
+			return encoder.Encode(control.Fail("invalid_request", errors.New("apply must be a boolean")))
+		}
+	}
 	if b, exists := params["expected_revision"]; exists {
 		var revision string
 		if err := json.Unmarshal(b, &revision); err != nil || string(b) == "null" {

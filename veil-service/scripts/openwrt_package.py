@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build Veil and its bilingual LuCI package using OpenWrt's ipkg-build tool."""
+"""Build Veil and LuCI packages with ipkg-build or apk-tools 3 mkpkg."""
 
 import argparse
 import hashlib
@@ -46,7 +46,9 @@ def write(root, relative, text, executable=False):
 def main():
     os.umask(0o022)
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--sdk", type=Path, required=True)
+    parser.add_argument("--sdk", type=Path)
+    parser.add_argument("--format", choices=("ipk", "apk"), default="ipk")
+    parser.add_argument("--apk-tool", type=Path)
     parser.add_argument("--po2lmo", type=Path, required=True)
     parser.add_argument("--architecture", required=True)
     parser.add_argument("--version", required=True)
@@ -62,10 +64,16 @@ def main():
         platform_env = target(args.architecture)
     except ValueError as error:
         parser.error(str(error))
-    ipkg = args.sdk.resolve() / "scripts/ipkg-build"
+    ipkg = args.sdk.resolve() / "scripts/ipkg-build" if args.sdk else None
     compiler = args.po2lmo.resolve()
-    if not ipkg.is_file() or not compiler.is_file():
-        parser.error("SDK scripts/ipkg-build and the compiled po2lmo tool are required")
+    if not compiler.is_file():
+        parser.error("the compiled po2lmo tool is required")
+    if args.format == "ipk" and (ipkg is None or not ipkg.is_file()):
+        parser.error("IPK builds require SDK scripts/ipkg-build")
+    if args.format == "apk" and (args.apk_tool is None or not args.apk_tool.is_file()):
+        parser.error("APK builds require --apk-tool with mkpkg support")
+    if args.format == "apk" and os.geteuid() != 0:
+        parser.error("run APK builds under fakeroot to encode root file ownership")
     output = args.output_dir.resolve()
     output.mkdir(parents=True, exist_ok=True)
     env = os.environ | {"GOOS": "linux", "CGO_ENABLED": "0"} | platform_env
@@ -155,10 +163,35 @@ def main():
                 "CONTROL/control",
                 f"Package: {name}\nVersion: {args.version}\nArchitecture: {arch}\nMaintainer: Project Veil\nSection: net\nLicense: GPL-3.0-or-later\nInstalled-Size: 0\nDepends: {depends}\nDescription: {description}\n",
             )
-            subprocess.run(
-                ["sh", str(ipkg), str(root), str(output)], env=package_env, check=True
-            )
-            artifact = output / f"{name}_{args.version}_{arch}.ipk"
+            if args.format == "ipk":
+                subprocess.run(
+                    ["sh", str(ipkg), str(root), str(output)], env=package_env, check=True
+                )
+                artifact = output / f"{name}_{args.version}_{arch}.ipk"
+            else:
+                artifact = output / f"{name}-{args.version}.apk"
+                hooks = folder / (name + "-hooks")
+                (root / "CONTROL").rename(hooks)
+                if name == "veil":
+                    write(hooks, "pre-upgrade", '#!/bin/sh\n/etc/init.d/veil stop\n', True)
+                    write(hooks, "pre-deinstall", '#!/bin/sh\n/etc/init.d/veil stop\n/etc/init.d/veil disable\n', True)
+                    scripts = [(k, hooks / k) for k in ("pre-upgrade", "pre-deinstall")]
+                else:
+                    scripts = [(k, hooks / "postinst") for k in ("post-install", "post-upgrade")]
+                for entry in [root, *root.rglob("*")]:
+                    os.chown(entry, 0, 0)
+                    if entry.is_dir():
+                        entry.chmod(0o755)
+                command = [str(args.apk_tool.resolve()), "mkpkg", "--files", str(root), "--output", str(artifact)]
+                for key, value in {
+                    "name": name, "version": args.version, "arch": "noarch" if arch == "all" else arch,
+                    "depends": depends.replace(",", ""), "description": description,
+                    "license": "GPL-3.0-or-later", "url": "https://github.com/RC-CHN/Project-Veil",
+                }.items():
+                    command += ["--info", f"{key}:{value}"]
+                for kind, path in scripts:
+                    command += ["--script", f"{kind}:{path}"]
+                subprocess.run(command, env=package_env, check=True)
             digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
             artifact.with_name(artifact.name + ".sha256").write_text(
                 f"{digest}  {artifact.name}\n"

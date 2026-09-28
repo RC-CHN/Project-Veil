@@ -15,6 +15,13 @@ func TestRPCBoundary(t *testing.T) {
 		wantCall     bool
 	}{
 		{"status", `{}`, true},
+		{"connections", `{}`, true},
+		{"connection_get", `{"id":"la"}`, true},
+		{"connection_get", `{"id":null}`, false},
+		{"connection_save", `{"profile":null}`, false},
+		{"connection_save", `{"profile":{"unknown":true}}`, false},
+		{"connection_test", `{"id":"la","target":"http://other"}`, false},
+		{"connection_save", `{"apply":null}`, false},
 		{"config", `{"ubus_rpc_session":"session"}`, true},
 		{"save", `{"config":{"role":"client"},"expected_revision":""}`, true},
 		{"status", `{"socket":"/other.sock"}`, false},

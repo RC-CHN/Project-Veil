@@ -3,6 +3,7 @@ package control
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 )
 
 const Version = 1
@@ -10,6 +11,10 @@ const Version = 1
 type Request struct {
 	Version int             `json:"version"`
 	Action  string          `json:"action"`
+	ID      string          `json:"id,omitempty"`
+	Profile *Profile        `json:"profile,omitempty"`
+	Relay   *Profile        `json:"relay,omitempty"`
+	Apply   bool            `json:"apply,omitempty"`
 	Config  json.RawMessage `json:"config,omitempty"`
 	// Optional compare-and-swap guard for save/start/restart from multiple UIs.
 	ExpectedRevision *string `json:"expected_revision,omitempty"`
@@ -21,10 +26,14 @@ type Failure struct {
 }
 
 type Response struct {
-	Version  int      `json:"version"`
-	Status   *Status  `json:"status,omitempty"`
-	Revision string   `json:"revision,omitempty"`
-	Error    *Failure `json:"error,omitempty"`
+	Version     int                `json:"version"`
+	Connections []ConnectionStatus `json:"connections,omitempty"`
+	Profile     *Profile           `json:"profile,omitempty"`
+	Relay       *Profile           `json:"relay,omitempty"`
+	Probe       *ProbeResult       `json:"probe,omitempty"`
+	Status      *Status            `json:"status,omitempty"`
+	Revision    string             `json:"revision,omitempty"`
+	Error       *Failure           `json:"error,omitempty"`
 	// Config contains credentials and is returned only by an explicit config request.
 	Config json.RawMessage `json:"config,omitempty"`
 }
@@ -36,6 +45,9 @@ func Fail(code string, err error) Response {
 // Handle serializes changes, including the status returned with each change.
 // Saving never restarts a running instance. Start never applies pending changes.
 func (m *Manager) Handle(q Request) Response {
+	if q.Action == "connections" || strings.HasPrefix(q.Action, "connection_") {
+		return m.catalog.Handle(q)
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if q.Version != Version {

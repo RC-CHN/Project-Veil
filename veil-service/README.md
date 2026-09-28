@@ -78,7 +78,7 @@ python3 scripts/cross_check.py
 | 平台 | 本轮内容 | 尚待完成 |
 | --- | --- | --- |
 | systemd Linux | 静态发行包、安装/卸载、`veil-system` 实例管理；Ubuntu 22.04 systemd 容器验收 | 其他发行版及 ARM 设备实测 |
-| OpenWrt | procd、rpcd/ubus、双语 LuCI、SOCKS5/HTTP 软件包；OpenWrt 24.10.8 x86_64 虚拟机实际验收，含 Argon | ARM/MIPS 实机及 apk 包适配 |
+| OpenWrt | procd、rpcd/ubus、双语 LuCI、SOCKS5/HTTP 软件包；OpenWrt 24.10.8 x86_64 虚拟机实际验收，含 Argon | ARM/MIPS 实机验收 |
 | OPNsense / FreeBSD | 原生插件、config.xml/configd、双语 GUI、权限分离、FreeBSD rc.d；26.7 amd64 虚拟机验收 | 其他 OPNsense 版本验收 |
 | Windows | 私有命名管道、用户 ACL、原生 CLI 生命周期测试、amd64/ARM64 便携包；Wails 桌面与系统代理控制 | 稳定 Windows 环境中的完整桌面托盘交互验收 |
 | Android | 公共 service/control 包编译检查 | VpnService、socket protect 绑定、TUN/DNS、应用 |
@@ -105,3 +105,35 @@ VEIL_ISOLATED_NETNS=1 python3 scripts/smoke.py
 `scripts/regression.py` 复用核心性能夹具，对同一 TLS 后端的原 CLI 与 veild 做随机相邻 A/B，并检查两个方向互通。需要先构建核心 `veil-native`、`veil-batch`、`benchpeer` 和 batch 版 veild；必须在独立网络命名空间设 `VEIL_ISOLATED_NETNS=1`，例如调用 `python3 scripts/regression.py --out .build/perf-run`。原始样本、汇总和二进制摘要都写入指定目录。结果仅代表本机回环和测试工作负载，不代表 WAN、ARM 或抗识别验收。
 
 `veilctl profilegen` 不需要控制 socket，在本机生成范围式 `traffic` 配置，供外层随连接信息分发；客户端与服务端各自设置本地发送策略。字段、预算及生效时机见[核心说明](../veil-core/README.md)。保存包含新策略的配置后仍需显式 restart，现有连接不会在保存配置时改变策略。
+
+## 多连接控制
+
+`veild -connections -autostart` 使用同一私有控制 socket 管理多个具名连接，自动迁移已有单客户端配置。公共控制层不依赖 procd 或 systemd。连接集合保存在状态目录的 `connections.json`，格式为 `{"version":1,"profiles":[...]}`。
+
+每份 profile 包含 `id`、`name`、`kind`（`connection` 或 `relay`）、`enabled`、`config`（核心客户端配置）、`inlets`（`protocol` 和 `listen` 列表），以及可选的 `relay_id`。relay 是公共配置，不自行开放入口，随引用它的连接使用。最多 64 份配置、每连接 8 个入口。
+
+| 动作 | 参数及行为 |
+| --- | --- |
+| `connections` | 返回不含认证信息的连接列表、对端、中转、入口、状态和测试结果 |
+| `connection_get` | `id`；返回包含凭据的 `profile` |
+| `connection_save` | `profile`、`expected_revision`、`apply`；创建时 revision 为空字符串；只保存或立即应用 |
+| `connection_start` / `connection_stop` | `id`、`expected_revision`；持久化启用状态并应用 |
+| `connection_delete` | `id`、`expected_revision`；删除配置并停止入口，拒绝删除被引用的中转 |
+| `connection_test` | `id`；对固定 Google HTTPS 地址进行最多 8 秒的完整链路请求，返回 `probe` |
+
+所有写操作要求 revision。名称修改保留运行实例；同一对端下入口变动复用池并保留未移除入口的流。改变对端或中转会重建受影响的连接。多连接响应使用 `connections` / `profile` / `probe`，原单实例 API 保持不变。
+
+运行中配置尚待应用时，测试使用保存的配置临时建立链路，随后关闭；配置已生效时复用现有连接池。停止的连接也可测试，测试不会启用其 LAN 监听端口。Google 耗时是 HTTPS 请求时间，包含需要新建的隧道和 TLS 握手。
+
+CLI 用 `-id` 指定连接，`-config FILE` 提供 profile，`-apply` 要求立即应用；`-if-revision HASH` 提供并发修改保护。配置文件与导出文件含凭据，应保存在私有目录。
+
+### 自包含连接包
+
+`connection_export`（`id`）返回 `{ "version": 1, "profile": { ... }, "relay": { ... } }`，直连省略 `relay`。导出将 CA 文件转换为 `tls.ca_pem`，只携带证书 PEM 块。`connection_save` 可额外接受 `relay`：它的 ID 必须等于 `profile.relay_id`，两者一起验证和持久保存；已有同 ID 中转必须与导入配置相同，禁止静默覆盖。`expected_revision` 仍约束主连接。LuCI 导入为两者生成新 ID，CLI 导入保持文件中的 ID。
+
+```sh
+veilctl -socket /var/run/veil/control.sock -id office connection_export > office.json
+veilctl -socket /var/run/veil/control.sock -config office.json -if-revision '' connection_save
+```
+
+连接包包含认证信息；只向有配置写入权限的调用方开放导出。`connection_test` 仅接受完整连接，不接受独立中转配置。

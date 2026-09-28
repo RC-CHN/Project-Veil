@@ -1,229 +1,802 @@
 'use strict';
 'require view';
+'require dom';
 'require rpc';
 'require ui';
 'require poll';
 
-var status = rpc.declare({ object: 'veil', method: 'status' });
-var configuration = rpc.declare({ object: 'veil', method: 'config' });
-var validate = rpc.declare({ object: 'veil', method: 'validate', params: ['config'] });
-var save = rpc.declare({ object: 'veil', method: 'save', params: ['config', 'expected_revision'] });
-var start = rpc.declare({ object: 'veil', method: 'start', params: ['expected_revision'] });
-var stop = rpc.declare({ object: 'veil', method: 'stop' });
-var restart = rpc.declare({ object: 'veil', method: 'restart', params: ['expected_revision'] });
+var list = rpc.declare({ object: 'veil', method: 'connections' });
+var exportConnection = rpc.declare({ object: 'veil', method: 'connection_export', params: ['id'] });
+var get = rpc.declare({ object: 'veil', method: 'connection_get', params: ['id'] });
+var save = rpc.declare({
+	object: 'veil',
+	method: 'connection_save',
+	params: ['profile', 'expected_revision', 'apply', 'relay'],
+});
+var start = rpc.declare({
+	object: 'veil',
+	method: 'connection_start',
+	params: ['id', 'expected_revision'],
+});
+var stop = rpc.declare({
+	object: 'veil',
+	method: 'connection_stop',
+	params: ['id', 'expected_revision'],
+});
+var remove = rpc.declare({
+	object: 'veil',
+	method: 'connection_delete',
+	params: ['id', 'expected_revision'],
+});
+var probe = rpc.declare({ object: 'veil', method: 'connection_test', params: ['id'] });
 
-function checked(result) {
-	if (result.error) {
-		var messages = {
-			invalid_config: _('Configuration validation failed.'),
-			conflict: _('The saved configuration changed elsewhere. Reload it before saving again.'),
-			no_config: _('Import and save a configuration first.'),
-			start_failed: _('The proxy could not start. Check the listening address and certificate paths.'),
-			save_failed: _('The configuration could not be saved. Check available storage and permissions.'),
-			unavailable: _('The control service is unavailable.'),
-			durability_uncertain: _('Configuration saved, but disk durability could not be confirmed. Check the storage device.')
-		};
-		throw new Error((messages[result.error.code] || _('Operation failed.')) + ' ' + result.error.message);
-	}
-	return result;
+function checked(r) {
+	if (r.error) throw new Error(r.error.message);
+	return r;
+}
+function button(label, action, primary) {
+	return E(
+		'button',
+		{
+			type: 'button',
+			class: 'cbi-button ' + (primary ? 'cbi-button-positive' : 'cbi-button-neutral'),
+			click: action,
+		},
+		label,
+	);
+}
+function field(label, input, help) {
+	return E('label', { class: 'veil-field' }, [
+		E('span', {}, label),
+		input,
+		help ? E('small', {}, help) : '',
+	]);
+}
+function input(value, type) {
+	return E('input', {
+		class: 'cbi-input-text',
+		type: type || 'text',
+		value: value || '',
+		autocomplete: 'off',
+	});
+}
+function select(options, value) {
+	var s = E(
+		'select',
+		{ class: 'cbi-input-select' },
+		options.map(function (o) {
+			return E('option', { value: o[0] }, o[1]);
+		}),
+	);
+	s.value = value;
+	return s;
+}
+function splitAddress(address) {
+	var m = /^(?:\[([^\]]+)\]|([^:]+)):(\d+)$/.exec(address || '');
+	return m ? [m[1] || m[2], m[3]] : ['', '443'];
+}
+function address(host, port) {
+	return (host.indexOf(':') >= 0 ? '[' + host + ']' : host) + ':' + port;
 }
 
 return view.extend({
-	load: function() {
+	load: function () {
 		this.writable = L.hasViewPermission();
-		return (this.writable ? configuration() : status()).then(checked).catch(function(error) {
-			return { unavailable: error.message };
-		});
+		return list().then(checked);
 	},
-
-	parse: function() {
-		var text = this.editor.value;
-		if (new Blob([text]).size > 65536) throw new Error(_('Configuration must be smaller than 64 KiB.'));
-		var cfg;
-		try { cfg = JSON.parse(text); }
-		catch (_) { throw new Error(_('Invalid JSON. Check the configuration before saving.')); }
-		if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) throw new Error(_('The configuration must be a JSON object.'));
-		if (cfg.role !== 'client' || cfg.target) throw new Error(_('Import a proxy client configuration without a fixed forwarding target.'));
-		return cfg;
+	refresh: function () {
+		return list()
+			.then(checked)
+			.then(
+				L.bind(function (r) {
+					this.rows = r.connections || [];
+					this.draw();
+				}, this),
+			)
+			.catch(
+				L.bind(function (e) {
+					this.notice.textContent = e.message;
+				}, this),
+			);
 	},
-
-	syncFields: function() {
-		try {
-			var cfg = JSON.parse(this.editor.value);
-			this.protocol.value = cfg.inbound || 'socks';
-			this.address.value = cfg.listen || '127.0.0.1:1080';
-		} catch (_) { /* Keep the draft visible while JSON is being edited. */ }
+	action: function (operation) {
+		return Promise.resolve()
+			.then(operation)
+			.then(checked)
+			.catch(function (e) {
+				ui.addNotification(null, E('p', {}, e.message), 'error');
+			})
+			.finally(L.bind(this.refresh, this));
 	},
-
-	update: function(result) {
-		this.current = result.status || {};
-		var s = this.current;
-		this.unavailable = result.unavailable || '';
-		this.badge.textContent = this.unavailable ? _('Service unavailable') : s.state === 'running' ? _('Running') : _('Stopped');
-		this.badge.className = 'veil-badge ' + (this.unavailable ? 'veil-error' : s.state === 'running' ? 'veil-running' : '');
-		this.listen.textContent = s.listen || '—';
-		this.role.textContent = s.role === 'client' ? _('Client') : s.role === 'server' ? _('Server') : '—';
-		this.count.textContent = String((s.stats || {}).completed || 0);
-		this.notice.textContent = this.unavailable ? _('Unable to reach Veil. Check that the service is started, then refresh.') :
-			s.restart_required ? _('A saved configuration is waiting to be applied. Applying it will disconnect current connections.') :
-			!s.saved_revision ? _('Import a configuration to get started.') : '';
-		this.failure.textContent = s.error || s.last_connection_error || '';
-		this.buttons.start.disabled = this.busy || !this.writable || !!this.unavailable || s.state === 'running' || !s.saved_revision;
-		this.buttons.stop.disabled = this.busy || !this.writable || !!this.unavailable || s.state !== 'running';
-		this.buttons.apply.disabled = this.busy || !this.writable || !!this.unavailable || !s.restart_required;
-		this.buttons.save.disabled = this.busy || !this.writable || !!this.unavailable || this.editor.value === this.savedText;
-		this.buttons.validate.disabled = this.busy || !this.writable || !!this.unavailable || !this.editor.value.trim();
-		this.buttons.reload.disabled = this.busy || !this.writable;
-		this.file.disabled = this.busy || !this.writable;
-		this.buttons.choose.disabled = this.file.disabled;
-		this.editor.disabled = this.busy || !this.writable;
-		this.protocol.disabled = this.address.disabled = this.busy || !this.writable || !this.editor.value.trim();
-	},
-
-	run: function(operation) {
-		this.busy = true;
-		this.feedback.textContent = '';
-		this.update({ status: this.current, unavailable: this.unavailable });
-		return Promise.resolve().then(operation).catch(function(error) {
-			ui.addNotification(null, E('p', {}, error.message), 'error');
-		}).finally(L.bind(function() {
-			this.busy = false;
-			return this.refresh();
-		}, this));
-	},
-
-	refresh: function() {
-		return status().then(checked).then(L.bind(this.update, this)).catch(L.bind(function(error) {
-			this.update({ unavailable: error.message });
-		}, this));
-	},
-
-	confirmApply: function() {
-		var revision = this.current.saved_revision;
-		ui.showModal(_('Apply saved configuration?'), [
-			E('p', {}, _('Current connections will be disconnected. Unsaved edits in the editor are not applied.')),
-			E('div', { 'class': 'right' }, [
-				E('button', { 'class': 'cbi-button', click: ui.hideModal }, _('Cancel')),
-				E('button', { 'class': 'cbi-button cbi-button-positive', click: L.bind(function() {
-					ui.hideModal();
-					return this.run(L.bind(function() { return restart(revision).then(checked); }, this));
-				}, this) }, _('Apply and restart'))
-			])
-		]);
-	},
-
-	render: function(initial) {
-		this.current = initial.status || {};
-		this.revision = this.current.saved_revision || '';
-		this.savedText = initial.config ? JSON.stringify(initial.config, null, 2) : '';
-		this.buttons = {};
-		var button = L.bind(function(name, label, action, primary) {
-			var b = E('button', { 'type': 'button', 'class': 'cbi-button ' + (primary ? 'cbi-button-positive' : 'cbi-button-neutral'), click: action }, label);
-			this.buttons[name] = b;
-			return b;
-		}, this);
-		this.badge = E('span', { 'class': 'veil-badge', 'role': 'status', 'aria-live': 'polite' });
-		this.listen = E('strong');
-		this.role = E('strong');
-		this.count = E('strong');
-		this.notice = E('p', { 'class': 'veil-notice', 'role': 'status' });
-		this.failure = E('p', { 'class': 'veil-failure' });
-		this.feedback = E('p', { 'class': 'veil-feedback', 'role': 'status', 'aria-live': 'polite' });
-		this.editor = E('textarea', {
-			'id': 'veil-json', 'class': 'cbi-input-textarea veil-editor', 'rows': 15,
-			'spellcheck': 'false', 'autocomplete': 'off',
-			input: L.bind(function() { this.syncFields(); this.update({ status: this.current, unavailable: this.unavailable }); }, this)
-		}, this.savedText);
-		var editListener = L.bind(function() {
-			try {
-				var cfg = this.parse();
-				cfg.inbound = this.protocol.value;
-				cfg.listen = this.address.value;
-				this.editor.value = JSON.stringify(cfg, null, 2);
-				this.update({ status: this.current, unavailable: this.unavailable });
-			} catch (error) { ui.addNotification(null, E('p', {}, error.message), 'error'); }
-		}, this);
-		this.protocol = E('select', { id: 'veil-protocol', 'class': 'cbi-input-select', change: editListener }, [
-			E('option', { value: 'mixed' }, 'SOCKS5 + HTTP'), E('option', { value: 'socks' }, 'SOCKS5'), E('option', { value: 'http' }, 'HTTP')
-		]);
-		this.address = E('input', { id: 'veil-address', 'class': 'cbi-input-text', type: 'text', placeholder: '127.0.0.1:1080', change: editListener });
-		this.syncFields();
-		this.fileName = E('span', { 'class': 'veil-filename' }, _('No file selected'));
-		this.file = E('input', { 'id': 'veil-file', 'type': 'file', 'hidden': true, 'accept': '.json,application/json', change: L.bind(function(ev) {
-			var file = ev.target.files[0];
-			if (!file) return;
-			this.fileName.textContent = file.name;
-			this.run(L.bind(function() {
-				if (file.size > 65536) throw new Error(_('Configuration must be smaller than 64 KiB.'));
-				return file.text().then(L.bind(function(text) {
-					this.editor.value = text;
-					this.parse();
-					this.syncFields();
-					return validate(this.parse()).then(checked);
-				}, this)).then(L.bind(function() { this.feedback.textContent = _('Configuration imported and validated. Save it when ready.'); }, this));
-			}, this));
-		}, this) });
-		var reload = L.bind(function() {
-			if (this.editor.value !== this.savedText && !window.confirm(_('Discard unsaved edits and reload the saved configuration?'))) return;
-			return this.run(L.bind(function() {
-				return configuration().then(checked).then(L.bind(function(r) {
-					this.revision = r.status.saved_revision || '';
-					this.savedText = r.config ? JSON.stringify(r.config, null, 2) : '';
-					this.editor.value = this.savedText;
-					this.syncFields();
-				}, this));
-			}, this));
-		}, this);
-		var root = E('div', { 'class': 'veil-page' }, [
-			E('link', { rel: 'stylesheet', href: L.resource('veil.css') }),
-			E('div', { 'class': 'veil-head' }, [E('div', {}, [E('h2', {}, 'Veil'), E('p', { 'class': 'veil-help' }, _('Manage your proxy connection and configuration.'))]), this.badge]),
-			E('section', { 'class': 'cbi-section veil-panel' }, [
-				E('h3', {}, _('Connection')),
-				E('div', { 'class': 'veil-metrics' }, [
-					E('div', { 'class': 'veil-metric' }, [E('span', {}, _('Mode')), this.role]),
-					E('div', { 'class': 'veil-metric' }, [E('span', {}, _('Listening address')), this.listen]),
-					E('div', { 'class': 'veil-metric' }, [E('span', {}, _('Completed connections')), this.count])
-				]), this.notice, this.failure,
-				E('div', { 'class': 'veil-actions' }, [
-					button('start', _('Start proxy'), L.bind(function() { return this.run(L.bind(function() { return start(this.current.saved_revision).then(checked); }, this)); }, this), true),
-					button('stop', _('Stop proxy'), L.bind(function() { return this.run(function() { return stop().then(checked); }); }, this)),
-					button('apply', _('Apply saved configuration'), L.bind(this.confirmApply, this)),
-					button('refresh', _('Refresh'), L.bind(this.refresh, this))
-				])
+	confirm: function (title, message, label, action) {
+		ui.showModal(title, [
+			E('p', {}, message),
+			E('div', { class: 'veil-actions veil-right' }, [
+				button(_('Cancel'), ui.hideModal),
+				button(
+					label,
+					function () {
+						ui.hideModal();
+						action();
+					},
+					true,
+				),
 			]),
-			E('section', { 'class': 'cbi-section veil-panel' }, [
-				E('h3', {}, _('Configuration')),
-				E('p', { 'class': 'veil-help' }, _('Import the JSON configuration provided by your server administrator. Saving keeps current connections running; apply saved changes separately.')),
-				E('div', { 'class': 'veil-file' }, [E('span', {}, _('Choose configuration file')),
-					E('div', { 'class': 'veil-file-row' }, [button('choose', _('Choose file'), L.bind(function() { this.file.click(); }, this)), this.fileName]), this.file]),
-				E('div', { 'class': 'veil-listener' }, [
-					E('div', {}, [E('label', { 'for': 'veil-protocol' }, _('Proxy protocol')), this.protocol]),
-					E('div', {}, [E('label', { 'for': 'veil-address' }, _('Listening address')), this.address])
-				]),
-				E('p', { 'class': 'veil-help' }, _('Use 127.0.0.1 for this router only, or a LAN address for other devices. HTTP supports CONNECT for HTTPS.')),
-				this.feedback,
-				E('details', {}, [E('summary', {}, _('Advanced: edit configuration JSON')), E('label', { 'for': 'veil-json', 'class': 'veil-help' }, _('Contains credentials. Share only with trusted administrators.')), this.editor]),
-				E('div', { 'class': 'veil-actions' }, [
-					button('save', _('Save configuration'), L.bind(function() {
-						return this.run(L.bind(function() {
-							return save(this.parse(), this.revision).then(checked).then(L.bind(function(r) {
-								this.revision = r.revision;
-								this.savedText = this.editor.value;
-								this.feedback.textContent = _('Configuration saved.');
-							}, this));
-						}, this));
-					}, this), true),
-					button('validate', _('Validate'), L.bind(function() { return this.run(L.bind(function() { return validate(this.parse()).then(checked).then(L.bind(function() { this.feedback.textContent = _('Configuration is valid.'); }, this)); }, this)); }, this)),
-					button('reload', _('Reload saved configuration'), reload)
-				])
-			])
 		]);
-		this.buttons.reload.disabled = !this.writable;
-		this.update(initial);
+	},
+	draw: function () {
+		this.notice.textContent = '';
+		var connections = this.rows.filter(function (r) {
+			return r.kind === 'connection';
+		});
+		var relays = this.rows.filter(function (r) {
+			return r.kind === 'relay';
+		});
+		var node = L.bind(function (r) {
+			var enabled = E('input', { type: 'checkbox', class: 'veil-switch' });
+			enabled.checked = r.enabled;
+			enabled.disabled = !this.writable;
+			enabled.addEventListener(
+				'change',
+				L.bind(function () {
+					enabled.checked = r.enabled;
+					var run = L.bind(function () {
+						return this.action(function () {
+							return (r.enabled ? stop : start)(r.id, r.revision);
+						});
+					}, this);
+					if (r.enabled)
+						this.confirm(
+							_('Stop connection?'),
+							_('Only this connection and its proxy listeners will stop.'),
+							_('Stop'),
+							run,
+						);
+					else run();
+				}, this),
+			);
+			var status =
+				r.kind === 'relay'
+					? _('Relay profile')
+					: r.state === 'running'
+						? _('Proxy started')
+						: r.enabled
+							? _('Start failed')
+							: _('Connection disabled');
+			var testing = this.testing && this.testing[r.id];
+			var testText = testing
+				? _('Testing…')
+				: r.probe
+					? r.probe.ok
+						? r.probe.milliseconds + ' ms'
+						: _('Failed')
+					: _('Not tested');
+			var test = button(
+				_('Test Google'),
+				L.bind(function () {
+					this.testing = this.testing || {};
+					this.testing[r.id] = true;
+					this.draw();
+					test.disabled = true;
+					test.textContent = _('Testing…');
+					this.action(function () {
+						return probe(r.id);
+					}).finally(
+						L.bind(function () {
+							delete this.testing[r.id];
+							this.draw();
+						}, this),
+					);
+				}, this),
+			);
+			test.disabled = !this.writable || testing;
+			var edit = button(
+				_('Edit'),
+				L.bind(function () {
+					this.action(
+						L.bind(function () {
+							return get(r.id)
+								.then(checked)
+								.then(
+									L.bind(function (v) {
+										this.edit(v.profile, r.revision);
+										return v;
+									}, this),
+								);
+						}, this),
+					);
+				}, this),
+			);
+			edit.disabled = !this.writable;
+			var menu = E('details', { class: 'veil-more' }, [E('summary', {}, _('More'))]);
+			var exportButton = button(_('Export'), function () {
+				exportConnection(r.id)
+					.then(checked)
+					.then(function (v) {
+						var url = URL.createObjectURL(
+							new Blob(
+								[JSON.stringify({ version: 1, profile: v.profile, relay: v.relay }, null, 2)],
+								{ type: 'application/json' },
+							),
+						);
+						var a = E('a', { href: url, download: r.id + '.json' });
+						a.click();
+						setTimeout(function () {
+							URL.revokeObjectURL(url);
+						}, 1000);
+					})
+					.catch(function (e) {
+						ui.addNotification(null, E('p', {}, e.message), 'error');
+					});
+			});
+			exportButton.disabled = !this.writable;
+			var duplicate = button(
+				_('Duplicate'),
+				L.bind(function () {
+					this.action(
+						L.bind(function () {
+							return get(r.id)
+								.then(checked)
+								.then(
+									L.bind(function (v) {
+										v.profile.id =
+											'node-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+										v.profile.name += ' (' + _('Copy') + ')';
+										v.profile.enabled = false;
+										v.profile.inlets = [];
+										this.edit(v.profile, '');
+										return v;
+									}, this),
+								);
+						}, this),
+					);
+				}, this),
+			);
+			duplicate.disabled = !this.writable;
+			var del = button(
+				_('Delete'),
+				L.bind(function () {
+					this.confirm(
+						_('Delete connection?'),
+						_('Delete this profile and stop its listeners? Relays in use cannot be deleted.'),
+						_('Delete'),
+						L.bind(function () {
+							this.action(function () {
+								return remove(r.id, r.revision);
+							});
+						}, this),
+					);
+				}, this),
+			);
+			del.disabled = !this.writable;
+			menu.appendChild(E('div', { class: 'veil-actions' }, [exportButton, duplicate, del]));
+			var route = r.relay_id
+				? E('div', { class: 'veil-route' }, [
+						E('span', {}, _('Via') + ' ' + r.relay_name),
+						E('code', {}, r.relay_server),
+						E('span', {}, '→ ' + r.server),
+					])
+				: E('span', { class: 'veil-muted' }, _('Direct connection'));
+			var endpoints = (r.inlets || []).map(function (i) {
+				return E('div', { class: 'veil-endpoint' }, [
+					E(
+						'span',
+						{},
+						i.protocol === 'mixed' ? 'SOCKS5 + HTTP' : i.protocol === 'socks' ? 'SOCKS5' : 'HTTP',
+					),
+					E('code', {}, i.listen),
+				]);
+			});
+			return E(
+				'article',
+				{
+					class: 'veil-card',
+					'data-id': r.id,
+					'data-state': r.state,
+					'data-enabled': String(r.enabled),
+				},
+				[
+					E('div', { class: 'veil-card-head' }, [
+						E('div', {}, [E('h3', {}, r.name), E('code', { class: 'veil-server' }, r.server)]),
+						E(
+							'span',
+							{ class: 'veil-badge ' + (r.state === 'running' ? 'veil-running' : '') },
+							status,
+						),
+					]),
+					r.kind === 'connection' ? route : '',
+					r.kind === 'connection'
+						? E(
+								'div',
+								{ class: 'veil-endpoints' },
+								endpoints.length ? endpoints : [E('span', {}, _('No proxy listeners'))],
+							)
+						: E(
+								'p',
+								{ class: 'veil-muted' },
+								_(
+									'Shared relay settings. Test Google on a complete connection that uses this relay.',
+								),
+							),
+					r.pending
+						? E('p', { class: 'veil-notice' }, _('Saved changes are waiting to be applied.'))
+						: '',
+					r.error || r.last_connection_error
+						? E('p', { class: 'veil-error' }, r.error || r.last_connection_error)
+						: '',
+					r.kind === 'connection'
+						? E('div', { class: 'veil-test-result' }, [
+								E('span', {}, _('Google HTTPS') + ': '),
+								E('strong', {}, testText),
+								r.probe ? E('small', {}, new Date(r.probe.at).toLocaleTimeString()) : '',
+								r.probe && r.probe.error ? E('p', { class: 'veil-error' }, r.probe.error) : '',
+							])
+						: '',
+					E('div', { class: 'veil-actions' }, [
+						r.kind === 'connection'
+							? E('label', { class: 'veil-enable' }, [
+									enabled,
+									E('span', {}, _('Enable connection')),
+								])
+							: '',
+						edit,
+						r.kind === 'connection' ? test : '',
+						menu,
+					]),
+				],
+			);
+		}, this);
+		dom.content(
+			this.connections,
+			connections.length
+				? connections.map(node)
+				: E('div', { class: 'veil-empty' }, [
+						_('Add a connection to choose a server and open local proxy listeners.'),
+					]),
+		);
+		dom.content(
+			this.relays,
+			relays.length
+				? relays.map(node)
+				: E(
+						'p',
+						{ class: 'veil-muted' },
+						_('No relays configured. Direct connections do not need one.'),
+					),
+		);
+	},
+	edit: function (profile, revision, embeddedRelay) {
+		var p = JSON.parse(JSON.stringify(profile));
+		var cfg = p.config;
+		var tls = cfg.tls || {};
+		cfg.tls = tls;
+		var hostPort = splitAddress(cfg.server);
+		var name = input(p.name);
+		name.id = 'veil-name';
+		var host = input(hostPort[0]);
+		var port = input(hostPort[1], 'number');
+		port.min = 1;
+		port.max = 65535;
+		var secret = input(cfg.secret, 'password');
+		var mode = select(
+			[
+				['reality', 'REALITY'],
+				['tls', 'TLS 1.3'],
+			],
+			tls.mode || 'reality',
+		);
+		var sni = input(tls.server_name);
+		var key = input(tls.reality_public_key);
+		var shortID = input(tls.short_id);
+		var ca = input(tls.ca_file);
+		var enabled = E('input', { type: 'checkbox', id: 'veil-enabled' });
+		enabled.checked = p.enabled;
+		var relay = select(
+			[['', _('Direct connection')]].concat(
+				this.rows
+					.concat(
+						embeddedRelay
+							? [
+									{
+										id: embeddedRelay.id,
+										kind: 'relay',
+										name: embeddedRelay.name,
+										server: embeddedRelay.config.server,
+									},
+								]
+							: [],
+					)
+					.filter(function (r) {
+						return r.kind === 'relay';
+					})
+					.map(function (r) {
+						return [r.id, r.name + ' · ' + r.server];
+					}),
+			),
+			p.relay_id || '',
+		);
+		var feedback = E('p', { class: 'veil-error', role: 'alert' });
+		var fieldMap = { name: name, server: host, secret: secret, sni: sni, key: key };
+		var listeners = E('div', { class: 'veil-inlets' });
+		var items = [];
+		var addInlet = function (value) {
+			var hp = splitAddress(value.listen || '127.0.0.1:1080');
+			var kind = select(
+				[
+					['mixed', 'SOCKS5 + HTTP'],
+					['socks', 'SOCKS5'],
+					['http', 'HTTP'],
+				],
+				value.protocol || 'mixed',
+			);
+			var scope = select(
+				[
+					['local', _('This router only')],
+					['lan', _('LAN')],
+					['custom', _('Custom address')],
+				],
+				hp[0] === '127.0.0.1' ? 'local' : hp[0] === window.location.hostname ? 'lan' : 'custom',
+			);
+			var bind = input(hp[0]);
+			var number = input(hp[1], 'number');
+			number.min = 1;
+			number.max = 65535;
+			scope.addEventListener('change', function () {
+				if (scope.value === 'local') bind.value = '127.0.0.1';
+				if (scope.value === 'lan') bind.value = window.location.hostname;
+				bind.disabled = scope.value === 'local';
+			});
+			bind.disabled = scope.value === 'local';
+			var entry = { kind: kind, bind: bind, port: number };
+			items.push(entry);
+			var row = E('div', { class: 'veil-inlet-row' }, [
+				field(_('Protocol'), kind),
+				field(_('Access'), scope),
+				field(_('Listening IP'), bind),
+				field(_('Port'), number),
+				button(_('Remove'), function () {
+					items.splice(items.indexOf(entry), 1);
+					row.remove();
+				}),
+			]);
+			listeners.appendChild(row);
+		};
+		(p.inlets || []).forEach(addInlet);
+		var realityFields = E('div', { class: 'veil-form-grid' }, [
+			field(_('REALITY public key'), key),
+			field(_('Short ID'), shortID),
+		]);
+		var caField = field(
+			_('CA certificate path'),
+			ca,
+			_('Leave empty to use system certificate authorities.'),
+		);
+		var transportUpdate = function () {
+			realityFields.hidden = mode.value !== 'reality';
+			caField.hidden = mode.value !== 'tls';
+		};
+		mode.addEventListener('change', transportUpdate);
+		transportUpdate();
+		var advanced = E(
+			'textarea',
+			{ class: 'cbi-input-textarea veil-editor', rows: 8, spellcheck: 'false' },
+			JSON.stringify(cfg, null, 2),
+		);
+		var reveal = E('input', { type: 'checkbox' });
+		reveal.addEventListener('change', function () {
+			secret.type = reveal.checked ? 'text' : 'password';
+		});
+		var advancedNotice = E(
+			'p',
+			{ class: 'veil-muted' },
+			_('Advanced settings contain credentials. Form fields override matching JSON values.'),
+		);
+		var form = E('div', { class: 'veil-editor-form' }, [
+			feedback,
+			E('div', { class: 'veil-form-grid' }, [
+				field(_('Name'), name),
+				field(_('Server address'), host),
+				field(_('Server port'), port),
+				field(_('Transport'), mode),
+				field(_('Server name (SNI)'), sni),
+				field(_('Authentication secret'), secret),
+			]),
+			E('label', { class: 'veil-enable' }, [reveal, _('Show secret')]),
+			realityFields,
+			caField,
+			p.kind === 'connection'
+				? E('div', {}, [
+						E('h4', {}, _('Connection path')),
+						field(_('Connect through'), relay),
+						E('h4', {}, _('Local proxy listeners')),
+						E(
+							'p',
+							{ class: 'veil-muted' },
+							_('SOCKS5 and HTTP may share a port or use separate listeners.'),
+						),
+						listeners,
+						button(_('Add listener'), function () {
+							addInlet({});
+						}),
+						E('p', {}, [
+							E('label', { class: 'veil-enable' }, [enabled, _('Enable this connection')]),
+						]),
+					])
+				: '',
+			E('details', {}, [E('summary', {}, _('Advanced JSON')), advancedNotice, advanced]),
+		]);
+		var submit = L.bind(function (apply) {
+			feedback.textContent = '';
+			Object.keys(fieldMap).forEach(function (k) {
+				fieldMap[k].removeAttribute('aria-invalid');
+			});
+			try {
+				Object.keys(fieldMap).forEach(function (k) {
+					if ((k !== 'key' || mode.value === 'reality') && !fieldMap[k].value.trim()) {
+						fieldMap[k].setAttribute('aria-invalid', 'true');
+						throw new Error(_('Fill in the highlighted field.'));
+					}
+				});
+				var config = JSON.parse(advanced.value);
+				if (!config || typeof config !== 'object' || Array.isArray(config))
+					throw new Error(_('Invalid JSON.'));
+				config.role = 'client';
+				config.server = address(host.value.trim(), port.value);
+				config.secret = secret.value.trim();
+				config.tls = Object.assign({}, config.tls, {
+					mode: mode.value,
+					server_name: sni.value.trim(),
+					reality_public_key: key.value.trim(),
+					short_id: shortID.value.trim(),
+					ca_file: ca.value.trim(),
+				});
+				delete config.target;
+				p.config = config;
+				p.name = name.value.trim();
+				p.relay_id = p.kind === 'connection' ? relay.value : '';
+				p.enabled = p.kind === 'connection' && enabled.checked;
+				p.inlets =
+					p.kind === 'connection'
+						? items.map(function (i) {
+								return {
+									protocol: i.kind.value,
+									listen: address(i.bind.value.trim(), i.port.value),
+								};
+							})
+						: [];
+				var perform = L.bind(function () {
+					saveButton.disabled = onlyButton.disabled = true;
+					return save(
+						p,
+						revision,
+						apply,
+						embeddedRelay && p.relay_id === embeddedRelay.id ? embeddedRelay : null,
+					)
+						.then(function (r) {
+							if (r.revision) revision = r.revision;
+							return checked(r);
+						})
+						.then(
+							L.bind(function () {
+								ui.hideModal();
+								return this.refresh();
+							}, this),
+						)
+						.catch(function (e) {
+							feedback.textContent = e.message;
+							feedback.scrollIntoView({ block: 'nearest' });
+						})
+						.finally(function () {
+							saveButton.disabled = onlyButton.disabled = false;
+						});
+				}, this);
+				// Keep the editor mounted so a failed apply can display its error.
+				var disconnects =
+					JSON.stringify(p.config) !== JSON.stringify(profile.config) ||
+					p.relay_id !== (profile.relay_id || '') ||
+					(profile.enabled && !p.enabled) ||
+					(profile.inlets || []).some(function (old) {
+						return !p.inlets.some(function (entry) {
+							return entry.listen === old.listen;
+						});
+					});
+				if (apply && revision && disconnects) {
+					var current = this.rows.find(function (r) {
+						return r.id === p.id;
+					});
+					if (current && (current.state === 'running' || p.kind === 'relay')) {
+						confirmation.hidden = false;
+						pending = perform;
+						return;
+					}
+				}
+				perform();
+			} catch (e) {
+				feedback.textContent = e.message;
+			}
+		}, this);
+		var pending;
+		var confirmation = E('div', { class: 'veil-confirm', hidden: true }, [
+			E(
+				'p',
+				{},
+				p.kind === 'relay'
+					? _('Applying relay changes may reconnect connections using it.')
+					: _(
+							'Applying connection changes may interrupt its active streams. Other connections keep running.',
+						),
+			),
+			button(_('Cancel'), function () {
+				confirmation.hidden = true;
+			}),
+			button(
+				_('Apply changes'),
+				function () {
+					confirmation.hidden = true;
+					if (pending) pending();
+				},
+				true,
+			),
+		]);
+		var onlyButton = button(_('Save only'), function () {
+			submit(false);
+		});
+		var saveButton = button(
+			_('Save and apply'),
+			function () {
+				submit(true);
+			},
+			true,
+		);
+		ui.showModal(revision ? _('Edit connection') : _('Add connection'), [
+			form,
+			confirmation,
+			E('div', { class: 'veil-actions veil-right' }, [
+				button(_('Cancel'), ui.hideModal),
+				onlyButton,
+				saveButton,
+			]),
+		]);
+	},
+	add: function (kind) {
+		this.edit(
+			{
+				id: 'node-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+				name: '',
+				kind: kind,
+				enabled: kind === 'connection',
+				config: { role: 'client', tls: { mode: 'reality', record_padding: true } },
+				inlets: kind === 'connection' ? [{ protocol: 'mixed', listen: '127.0.0.1:1080' }] : [],
+			},
+			'',
+		);
+	},
+	importFile: function (file) {
+		if (!file) return;
+		if (file.size > 65536) {
+			ui.addNotification(
+				null,
+				E('p', {}, _('Configuration must be smaller than 64 KiB.')),
+				'error',
+			);
+			return;
+		}
+		file
+			.text()
+			.then(
+				L.bind(function (text) {
+					var value = JSON.parse(text);
+					var embeddedRelay;
+					if (value.profile) {
+						if (value.version !== 1) throw new Error(_('Unsupported connection bundle version.'));
+						embeddedRelay = value.relay;
+						value = value.profile;
+						if (embeddedRelay) {
+							if (embeddedRelay.kind !== 'relay' || value.relay_id !== embeddedRelay.id)
+								throw new Error(_('Invalid embedded relay.'));
+							embeddedRelay.id =
+								'relay-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+							value.relay_id = embeddedRelay.id;
+						}
+					}
+					var p;
+					if (value.config && value.kind) {
+						p = value;
+						p.id = 'node-' + Date.now().toString(36);
+						p.enabled = false;
+						if (
+							p.relay_id &&
+							!embeddedRelay &&
+							!this.rows.some(function (r) {
+								return r.id === p.relay_id && r.kind === 'relay';
+							})
+						)
+							throw new Error(
+								_('Import the relay first, or choose a direct client configuration.'),
+							);
+					} else {
+						if (value.role !== 'client' || value.target)
+							throw new Error(_('Import a proxy client configuration.'));
+						p = {
+							id: 'node-' + Date.now().toString(36),
+							name: value.server || '',
+							kind: 'connection',
+							enabled: false,
+							config: value,
+							inlets: [
+								{ protocol: value.inbound || 'socks', listen: value.listen || '127.0.0.1:1080' },
+							],
+						};
+					}
+					this.edit(p, '', embeddedRelay);
+				}, this),
+			)
+			.catch(function (e) {
+				ui.addNotification(null, E('p', {}, e.message), 'error');
+			});
+	},
+	render: function (data) {
+		this.rows = data.connections || [];
+		this.notice = E('p', { class: 'veil-error', role: 'alert' });
+		this.connections = E('div', { class: 'veil-cards' });
+		this.relays = E('div', { class: 'veil-cards' });
+		var file = E('input', {
+			type: 'file',
+			accept: '.json,application/json',
+			hidden: true,
+			id: 'veil-import',
+			change: L.bind(function (e) {
+				this.importFile(e.target.files[0]);
+				file.value = '';
+			}, this),
+		});
+		var add = button(
+			_('Add connection'),
+			L.bind(function () {
+				this.add('connection');
+			}, this),
+			true,
+		);
+		var relay = button(
+			_('Add relay'),
+			L.bind(function () {
+				this.add('relay');
+			}, this),
+		);
+		var imp = button(_('Import'), function () {
+			file.click();
+		});
+		add.disabled = relay.disabled = imp.disabled = !this.writable;
+		var root = E('div', { class: 'veil-page' }, [
+			E('link', { rel: 'stylesheet', href: L.resource('veil.css') }),
+			E('div', { class: 'veil-head' }, [
+				E('div', {}, [
+					E('h2', {}, 'Veil'),
+					E(
+						'p',
+						{ class: 'veil-muted' },
+						_('Servers, connection paths and local proxy listeners.'),
+					),
+				]),
+				E('div', { class: 'veil-actions' }, [imp, add, file]),
+			]),
+			this.notice,
+			this.connections,
+			E('div', { class: 'veil-head veil-relay-heading' }, [E('h3', {}, _('Relays')), relay]),
+			this.relays,
+			E(
+				'p',
+				{ class: 'veil-muted veil-footnote' },
+				_(
+					'Test Google sends an HTTPS request through the selected connection. Time includes any required tunnel setup and TLS handshake; it is not ping RTT.',
+				),
+			),
+		]);
+		this.draw();
 		poll.add(L.bind(this.refresh, this), 5);
 		return root;
 	},
 	handleSave: null,
 	handleSaveApply: null,
-	handleReset: null
+	handleReset: null,
 });

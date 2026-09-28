@@ -1,35 +1,232 @@
-.veil-page { max-width: 1000px; }
-.veil-head, .veil-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.veil-head { justify-content: space-between; margin-bottom: 20px; }
-.veil-head h2 { margin: 0; }
-.veil-badge { padding: 5px 13px; border-radius: 20px; background: #e9edf2; color: #354052; font-weight: 600; font-size: 13px; }
-.veil-running { background: #d9f3e6; color: #145b3b; }
-.veil-error { background: #fde4e2; color: #8c2820; }
-.veil-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 22px 0; }
-.veil-metric { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.veil-metric span { opacity: .7; font-size: 13px; }
-.veil-metric strong { overflow-wrap: anywhere; }
-.veil-panel { padding: 22px !important; margin-bottom: 20px !important; border: 1px solid rgba(128, 128, 128, .22); border-radius: 8px; }
-.veil-notice:empty, .veil-failure:empty, .veil-feedback:empty { display: none; }
-.veil-feedback { border-left: 3px solid var(--primary, #7184a0); padding: 8px 12px; }
-.veil-notice { padding: 12px; border-left: 3px solid #7184a0; background: rgba(113, 132, 160, .08); margin: 18px 0; }
-.veil-failure { overflow-wrap: anywhere; border-left: 3px solid var(--danger, #c34b40); padding: 8px 12px; }
-.veil-editor { box-sizing: border-box; width: 100% !important; font-family: monospace; margin-top: 12px; }
-.veil-file { display: flex; flex-direction: column; gap: 10px; margin: 18px 0; }
-.veil-file-row { display: flex; align-items: center; gap: 12px; }
-.veil-filename { overflow-wrap: anywhere; min-width: 0; }
-.veil-listener { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.veil-listener > div { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.veil-listener input, .veil-listener select { box-sizing: border-box; width: 100% !important; }
-.veil-page details { margin: 20px 0; }
-.veil-page summary { cursor: pointer; font-weight: 600; }
-.veil-help { opacity: .75; line-height: 1.6; }
-.veil-page button { min-height: 36px; }
-.veil-page button:disabled { opacity: .45; cursor: not-allowed; }
-.veil-page #veil-file[hidden] { display: none !important; }
+.veil-page {
+	max-width: 1200px;
+}
+.veil-head,
+.veil-card-head,
+.veil-actions {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	flex-wrap: wrap;
+}
+.veil-head,
+.veil-card-head {
+	justify-content: space-between;
+	margin-bottom: 18px;
+}
+.veil-head h2,
+.veil-card h3 {
+	margin: 0 !important;
+}
+.veil-cards {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+	gap: 20px;
+}
+.veil-card {
+	min-width: 0;
+	padding: 22px;
+	border: 1px solid rgba(128, 128, 128, 0.2);
+	border-radius: 12px;
+	background: var(--cbi-section-bg, #fff);
+	box-shadow: 0 3px 12px rgba(0, 0, 0, 0.035);
+}
+.veil-card code {
+	background: transparent;
+	color: inherit;
+	padding: 0;
+	overflow-wrap: anywhere;
+}
+.veil-server {
+	display: block;
+	margin-top: 8px;
+}
+.veil-badge {
+	padding: 5px 12px;
+	border-radius: 20px;
+	background: #e9edf2;
+	color: #354052;
+	font-size: 12px;
+	white-space: nowrap;
+}
+.veil-running {
+	background: #d9f3e6;
+	color: #145b3b;
+}
+.veil-muted {
+	opacity: 0.72;
+	line-height: 1.7;
+}
+.veil-route {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 12px;
+	margin-bottom: 16px;
+	overflow-wrap: anywhere;
+}
+.veil-endpoints {
+	margin: 18px 0;
+	display: grid;
+	gap: 8px;
+}
+.veil-endpoint {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 10px 12px;
+	background: rgba(113, 132, 160, 0.08);
+	border-radius: 6px;
+}
+.veil-test-result {
+	margin: 16px 0;
+}
+.veil-test-result small {
+	margin-left: 12px;
+	opacity: 0.65;
+}
+.veil-error {
+	color: var(--danger, #b53c46);
+	overflow-wrap: anywhere;
+}
+.veil-error:empty {
+	display: none;
+}
+.veil-notice,
+.veil-confirm {
+	border-left: 3px solid #7184a0;
+	padding: 12px;
+	background: rgba(113, 132, 160, 0.08);
+}
+.veil-relay-heading {
+	margin-top: 32px;
+}
+.veil-footnote {
+	margin-top: 24px;
+	font-size: 13px;
+}
+.veil-enable {
+	display: inline-flex !important;
+	align-items: center;
+	gap: 8px;
+	cursor: pointer;
+}
+.veil-switch {
+	width: 18px !important;
+	height: 18px !important;
+}
+.veil-more summary {
+	cursor: pointer;
+	padding: 8px;
+}
+.veil-more[open] {
+	flex-basis: 100%;
+}
+.veil-right {
+	justify-content: flex-end;
+	margin-top: 20px;
+}
+.veil-form-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 16px;
+}
+.veil-field {
+	display: flex !important;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+	margin-bottom: 14px;
+}
+.veil-field input,
+.veil-field select,
+.veil-editor {
+	width: 100% !important;
+	box-sizing: border-box;
+}
+.veil-field small {
+	opacity: 0.7;
+}
+.veil-field [aria-invalid='true'] {
+	border-color: var(--danger, #b53c46) !important;
+}
+.veil-editor-form {
+	max-width: 860px;
+}
+.veil-editor-form h4 {
+	margin: 24px 0 14px;
+}
+.veil-inlet-row {
+	display: grid;
+	grid-template-columns: 1fr 1fr 1.5fr 0.7fr auto;
+	gap: 10px;
+	align-items: center;
+	border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+	margin-bottom: 12px;
+}
+.veil-editor {
+	font-family: monospace;
+	margin-top: 12px;
+}
+.veil-editor-form details {
+	margin-top: 20px;
+}
+.veil-page button,
+.veil-editor-form button {
+	min-height: 36px;
+}
+.veil-page button:disabled {
+	opacity: 0.45;
+}
+.veil-page [hidden],
+.veil-editor-form [hidden],
+.veil-confirm[hidden] {
+	display: none !important;
+}
+.veil-empty {
+	padding: 32px;
+	border: 1px dashed #a7afba;
+	border-radius: 12px;
+}
 @media (max-width: 600px) {
-    .veil-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .veil-panel { padding: 16px !important; }
-    .veil-actions button { flex: 1; }
-    .veil-listener { grid-template-columns: 1fr; }
+	.veil-card {
+		padding: 16px;
+	}
+	.veil-form-grid {
+		grid-template-columns: 1fr;
+	}
+	.veil-inlet-row {
+		grid-template-columns: 1fr 1fr;
+	}
+	.veil-actions {
+		gap: 8px;
+	}
+	.veil-head .veil-actions {
+		width: 100%;
+	}
+	.veil-head .veil-actions button {
+		flex: 1;
+	}
+	.veil-right button {
+		flex: 1;
+	}
+}
+@media (prefers-color-scheme: dark) {
+	body:not([data-darkmode='false']) .veil-card {
+		background: var(--cbi-section-bg, rgba(128, 128, 128, 0.06));
+	}
+}
+
+.veil-card h3,
+.veil-relay-heading h3 {
+	background: transparent !important;
+	box-shadow: none !important;
+	padding: 0 !important;
+	width: auto !important;
+}
+.veil-relay-heading h3 {
+	margin: 0 !important;
+}
+.veil-card-head > div {
+	min-width: 0;
 }

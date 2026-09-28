@@ -27,6 +27,7 @@ func main() {
 func run() error {
 	dir := flag.String("state-dir", "", "private directory containing the saved config")
 	socket := flag.String("socket", "", "private control socket or Windows named pipe")
+	connections := flag.Bool("connections", false, "manage multiple named proxy connections")
 	autostart := flag.Bool("autostart", false, "start saved profile when the daemon starts")
 	version := flag.Bool("version", false, "print release version")
 	flag.Parse()
@@ -49,6 +50,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	if *connections {
+		if err := m.MigrateConnection(); err != nil {
+			return err
+		}
+	}
 	defer func() {
 		m.Close()
 		s := m.Status().Stats
@@ -59,7 +65,10 @@ func run() error {
 		return err
 	}
 	defer ln.Close()
-	if *autostart && m.Status().SavedRevision != "" {
+	if *autostart {
+		m.StartConnections()
+	}
+	if *autostart && !*connections && m.Status().SavedRevision != "" {
 		r := m.Handle(control.Request{Version: control.Version, Action: "start"})
 		if r.Error != nil {
 			// Keep the control socket available so a failed autostart can be

@@ -24,6 +24,7 @@ type Status struct {
 }
 
 type Manager struct {
+	catalog       *Catalog
 	mu            sync.Mutex
 	runtime       service.Runtime
 	path          string
@@ -39,7 +40,11 @@ func Open(dir string) (*Manager, error) {
 	if err := PrivateDir(dir); err != nil {
 		return nil, err
 	}
-	m := &Manager{path: filepath.Join(dir, "config.json")}
+	catalog, err := openCatalog(dir)
+	if err != nil {
+		return nil, err
+	}
+	m := &Manager{path: filepath.Join(dir, "config.json"), catalog: catalog}
 	f, err := os.Open(m.path)
 	if errors.Is(err, os.ErrNotExist) {
 		return m, nil
@@ -103,6 +108,7 @@ func (m *Manager) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.closed = true
+	m.catalog.Close()
 	return m.runtime.Close()
 }
 
@@ -124,3 +130,6 @@ func writeConfig(path string, b []byte) (committed bool, err error) {
 	}
 	return replaceConfig(f.Name(), path)
 }
+
+// StartConnections restores independently enabled connection profiles.
+func (m *Manager) StartConnections() { m.catalog.Autostart() }

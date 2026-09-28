@@ -2,151 +2,228 @@ msgid ""
 msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language: zh_Hans\n"
-"Plural-Forms: nplurals=1; plural=0;\n"
 
-msgid "A saved configuration is waiting to be applied. Applying it will disconnect current connections."
-msgstr "已保存的新配置尚未生效。应用配置将断开当前连接。"
+msgid "Access"
+msgstr "访问范围"
 
-msgid "Advanced: edit configuration JSON"
-msgstr "高级设置：编辑 JSON 配置"
+msgid "Add a connection to choose a server and open local proxy listeners."
+msgstr "添加连接，选择服务器并开启本地代理入口。"
 
-msgid "Apply and restart"
-msgstr "应用并重启"
+msgid "Add connection"
+msgstr "添加连接"
 
-msgid "Apply saved configuration"
-msgstr "应用已保存配置"
+msgid "Add listener"
+msgstr "添加入口"
 
-msgid "Apply saved configuration?"
-msgstr "应用已保存的配置？"
+msgid "Add relay"
+msgstr "添加中转"
+
+msgid "Advanced JSON"
+msgstr "高级 JSON 设置"
+
+msgid "Advanced settings contain credentials. Form fields override matching JSON values."
+msgstr "高级设置包含认证信息，表单字段会覆盖 JSON 中对应的值。"
+
+msgid "Apply changes"
+msgstr "应用更改"
+
+msgid "Applying connection changes may interrupt its active streams. Other connections keep running."
+msgstr "应用更改可能中断此连接的现有流量，其他连接继续运行。"
+
+msgid "Applying relay changes may reconnect connections using it."
+msgstr "应用中转更改可能使使用它的连接重新连接。"
+
+msgid "Authentication secret"
+msgstr "认证密钥"
+
+msgid "CA certificate path"
+msgstr "CA 证书路径"
 
 msgid "Cancel"
 msgstr "取消"
 
-msgid "Choose configuration file"
-msgstr "选择配置文件"
-
-msgid "Client"
-msgstr "客户端"
-
-msgid "Completed connections"
-msgstr "已完成连接"
-
-msgid "Configuration"
-msgstr "配置"
-
-msgid "Configuration imported and validated. Save it when ready."
-msgstr "配置已导入并通过校验，请确认后保存。"
-
-msgid "Configuration is valid."
-msgstr "配置校验通过。"
-
 msgid "Configuration must be smaller than 64 KiB."
-msgstr "配置文件大小不能超过 64 KiB。"
+msgstr "配置必须小于 64 KiB。"
 
-msgid "Configuration saved, but disk durability could not be confirmed. Check the storage device."
-msgstr "配置已保存，但未能确认写入磁盘，请检查存储设备。"
+msgid "Connect through"
+msgstr "连接方式"
 
-msgid "Configuration saved."
-msgstr "配置已保存。"
+msgid "Connection path"
+msgstr "连接路径"
 
-msgid "Configuration validation failed."
-msgstr "配置校验失败。"
+msgid "Copy"
+msgstr "副本"
 
-msgid "Connection"
-msgstr "连接"
+msgid "Custom address"
+msgstr "自定义地址"
 
-msgid "Contains credentials. Share only with trusted administrators."
-msgstr "配置包含凭据，请仅与可信的管理员分享。"
+msgid "Delete"
+msgstr "删除"
 
-msgid "Current connections will be disconnected. Unsaved edits in the editor are not applied."
-msgstr "当前连接将被断开。编辑器中尚未保存的修改不会应用。"
+msgid "Delete connection?"
+msgstr "删除此连接？"
 
-msgid "Discard unsaved edits and reload the saved configuration?"
-msgstr "放弃未保存的修改，重新载入已保存的配置？"
+msgid "Delete this profile and stop its listeners? Relays in use cannot be deleted."
+msgstr "删除此配置并停止其代理入口？正在被使用的中转节点不能删除。"
 
-msgid "Import a configuration to get started."
-msgstr "导入配置后即可开始使用。"
+msgid "Direct connection"
+msgstr "直连"
 
-msgid "Import and save a configuration first."
-msgstr "请先导入并保存配置。"
+msgid "Connection disabled"
+msgstr "连接已停用"
 
-msgid "Import the JSON configuration provided by your server administrator. Saving keeps current connections running; apply saved changes separately."
-msgstr "导入服务端管理员提供的 JSON 配置。保存不会中断当前连接，新配置需要单独应用。"
+msgid "Duplicate"
+msgstr "复制连接"
 
-msgid "Invalid JSON. Check the configuration before saving."
-msgstr "JSON 格式有误，请检查后再保存。"
+msgid "Edit"
+msgstr "编辑"
 
-msgid "Listening address"
-msgstr "监听地址"
+msgid "Edit connection"
+msgstr "编辑连接"
 
-msgid "Manage your proxy connection and configuration."
-msgstr "管理代理连接与配置。"
+msgid "Enable this connection"
+msgstr "启用此连接"
 
-msgid "Mode"
-msgstr "运行模式"
+msgid "Enable connection"
+msgstr "启用连接"
 
-msgid "Operation failed."
-msgstr "操作失败。"
+msgid "Export"
+msgstr "导出"
 
-msgid "Refresh"
-msgstr "刷新"
+msgid "Failed"
+msgstr "失败"
 
-msgid "Reload saved configuration"
-msgstr "重新载入已保存配置"
+msgid "Fill in the highlighted field."
+msgstr "请填写标记的字段。"
 
-msgid "Running"
-msgstr "运行中"
+msgid "Google HTTPS"
+msgstr "Google HTTPS"
 
-msgid "Save configuration"
-msgstr "保存配置"
+msgid "Import"
+msgstr "导入"
 
-msgid "Server"
-msgstr "服务端"
+msgid "Import a proxy client configuration."
+msgstr "请导入代理客户端配置。"
 
-msgid "Service unavailable"
-msgstr "服务不可用"
+msgid "Import the relay first, or choose a direct client configuration."
+msgstr "请先导入关联的中转配置，或选择直连客户端配置。"
 
-msgid "Start proxy"
-msgstr "启动代理"
+msgid "Invalid JSON."
+msgstr "JSON 格式错误。"
 
-msgid "Stop proxy"
-msgstr "停止代理"
+msgid "LAN"
+msgstr "局域网"
 
-msgid "Stopped"
-msgstr "已停止"
+msgid "Leave empty to use system certificate authorities."
+msgstr "留空则使用系统信任的证书。"
 
-msgid "The configuration could not be saved. Check available storage and permissions."
-msgstr "配置保存失败，请检查存储空间和文件权限。"
+msgid "Listening IP"
+msgstr "监听 IP"
 
-msgid "The configuration must be a JSON object."
-msgstr "配置必须是 JSON 对象。"
+msgid "Local proxy listeners"
+msgstr "本地代理入口"
 
-msgid "The control service is unavailable."
-msgstr "控制服务不可用。"
+msgid "More"
+msgstr "更多"
 
-msgid "The proxy could not start. Check the listening address and certificate paths."
-msgstr "代理启动失败，请检查监听地址和证书路径。"
+msgid "Name"
+msgstr "名称"
 
-msgid "The saved configuration changed elsewhere. Reload it before saving again."
-msgstr "配置已被其他操作修改，请重新载入后再保存。"
+msgid "No proxy listeners"
+msgstr "未开启代理入口"
 
-msgid "Unable to reach Veil. Check that the service is started, then refresh."
-msgstr "无法连接 Veil，请检查服务是否已启动，然后刷新。"
+msgid "No relays configured. Direct connections do not need one."
+msgstr "尚未配置中转节点，直连无需中转。"
 
-msgid "Validate"
-msgstr "校验配置"
+msgid "Not tested"
+msgstr "未测试"
 
-msgid "Import a proxy client configuration without a fixed forwarding target."
-msgstr "请导入代理客户端配置，不要设置固定转发目标。"
+msgid "Only this connection and its proxy listeners will stop."
+msgstr "仅停止此连接及其代理入口。"
 
-msgid "Proxy protocol"
-msgstr "代理协议"
+msgid "Port"
+msgstr "端口"
 
-msgid "Use 127.0.0.1 for this router only, or a LAN address for other devices. HTTP supports CONNECT for HTTPS."
-msgstr "仅供本机使用时填写 127.0.0.1，供其他设备使用时填写局域网地址。HTTP 代理支持通过 CONNECT 访问 HTTPS。"
+msgid "Protocol"
+msgstr "协议"
 
-msgid "Choose file"
-msgstr "选择文件"
+msgid "Proxy started"
+msgstr "代理已启动"
 
-msgid "No file selected"
-msgstr "尚未选择文件"
+msgid "REALITY public key"
+msgstr "REALITY 公钥"
+
+msgid "Relay profile"
+msgstr "中转配置"
+
+msgid "Relays"
+msgstr "中转节点"
+
+msgid "Remove"
+msgstr "移除"
+
+msgid "SOCKS5 and HTTP may share a port or use separate listeners."
+msgstr "SOCKS5 和 HTTP 可以共用端口，也可以分别开启。"
+
+msgid "Save and apply"
+msgstr "保存并应用"
+
+msgid "Save only"
+msgstr "仅保存"
+
+msgid "Saved changes are waiting to be applied."
+msgstr "已保存的更改尚未应用。"
+
+msgid "Server address"
+msgstr "服务器地址"
+
+msgid "Server name (SNI)"
+msgstr "服务器名称（SNI）"
+
+msgid "Server port"
+msgstr "服务器端口"
+
+msgid "Servers, connection paths and local proxy listeners."
+msgstr "管理对端服务器、连接路径和本地代理入口。"
+
+msgid "Shared relay settings. Test Google on a complete connection that uses this relay."
+msgstr "公共中转配置。请在使用它的完整连接上测试 Google。"
+
+msgid "Short ID"
+msgstr "短 ID"
+
+msgid "Show secret"
+msgstr "显示密钥"
+
+msgid "Start failed"
+msgstr "启动失败"
+
+msgid "Stop"
+msgstr "停止"
+
+msgid "Stop connection?"
+msgstr "停止此连接？"
+
+msgid "Test Google"
+msgstr "测试 Google"
+
+msgid "Test Google sends an HTTPS request through the selected connection. Time includes any required tunnel setup and TLS handshake; it is not ping RTT."
+msgstr "测试 Google 会通过所选连接发送 HTTPS 请求。耗时包含必要的隧道建立和 TLS 握手，不是 ping 往返延迟。"
+
+msgid "Testing…"
+msgstr "测试中…"
+
+msgid "This router only"
+msgstr "仅路由器本机"
+
+msgid "Transport"
+msgstr "传输方式"
+
+msgid "Via"
+msgstr "经过"
+
+msgid "Unsupported connection bundle version."
+msgstr "不支持此连接包版本。"
+
+msgid "Invalid embedded relay."
+msgstr "内嵌中转配置无效。"

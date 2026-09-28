@@ -21,6 +21,7 @@ type Settings struct {
 	Certificate       string   `json:"certificate"`
 	PrivateKeyFile    string   `json:"private_key_file"`
 	CAFile            string   `json:"ca_file"`
+	CAPEM             string   `json:"ca_pem,omitempty"`
 	RealityPrivateKey string   `json:"reality_private_key"`
 	RealityPublicKey  string   `json:"reality_public_key"`
 	ShortID           string   `json:"short_id"`
@@ -97,6 +98,9 @@ func Client(s Settings) (Handshake, error) {
 			roots = x509.NewCertPool()
 		}
 		if s.CAFile != "" {
+			if s.CAPEM != "" {
+				return nil, errors.New("transport: choose ca_file or ca_pem")
+			}
 			pem, err := os.ReadFile(s.CAFile)
 			if err != nil {
 				return nil, err
@@ -104,6 +108,9 @@ func Client(s Settings) (Handshake, error) {
 			if !roots.AppendCertsFromPEM(pem) {
 				return nil, errors.New("transport: CA file contains no certificates")
 			}
+		}
+		if s.CAPEM != "" && !roots.AppendCertsFromPEM([]byte(s.CAPEM)) {
+			return nil, errors.New("transport: ca_pem contains no certificates")
 		}
 		cfg := &utls.Config{MinVersion: utls.VersionTLS13, MaxVersion: utls.VersionTLS13, ServerName: s.ServerName, RootCAs: roots, NextProtos: []string{"http/1.1"}, SessionTicketsDisabled: true, DynamicRecordSizingDisabled: true}
 		return func(ctx context.Context, raw net.Conn) (net.Conn, error) {

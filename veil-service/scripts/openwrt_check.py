@@ -43,7 +43,7 @@ def main():
     subprocess.run(["node", "--check", str(ROOT / "scripts/luci_smoke.cjs")], check=True)
     labels = {
         ast.literal_eval(match)
-        for match in re.findall(r"_\(('(?:[^'\\]|\\.)*')\)", source.read_text())
+        for match in re.findall(r"_\(\s*('(?:[^'\\]|\\.)*')\s*,?\s*\)", source.read_text())
     }
     for relative in ("po/templates/veil.pot", "po/zh_Hans/veil.po"):
         entries = catalog(APP / relative)
@@ -54,7 +54,7 @@ def main():
             raise ValueError("Chinese translations must not be empty")
     acl = json.loads((APP / "root/usr/share/rpcd/acl.d/luci-app-veil.json").read_text())
     read = acl["luci-app-veil"]["read"]
-    if read != {"ubus": {"veil": ["status"]}}:
+    if read != {"ubus": {"veil": ["status", "connections"]}}:
         raise ValueError("read-only LuCI must not expose credentials or mutations")
     for source in (APP / "root").rglob("*.json"):
         json.loads(source.read_text())
