@@ -15,7 +15,7 @@ import (
 const (
 	HeaderSize       = 4
 	AuthSize         = 49
-	authVersion      = 2
+	authVersion      = 3
 	Auth        byte = 1
 )
 
@@ -100,7 +100,7 @@ func Write(w io.Writer, t byte, p []byte) error {
 // on another connection fails, including across TLS session resumption.
 func proof(key, exporter, body []byte) []byte {
 	m := hmac.New(sha256.New, key)
-	m.Write([]byte("Veil-v0.2 client authentication\x00"))
+	m.Write([]byte("Veil-v0.3 client authentication\x00"))
 	m.Write(exporter)
 	m.Write(body)
 	return m.Sum(nil)

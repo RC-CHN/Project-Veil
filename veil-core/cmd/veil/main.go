@@ -73,7 +73,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	log.Printf("Veil v0.2 %s listening on %s (%s)", cfg.Role, ln.Addr(), cfg.TLS.Mode)
+	log.Printf("Veil v0.3 %s listening on %s (%s)", cfg.Role, ln.Addr(), cfg.TLS.Mode)
 	err = svc.Serve(ctx, ln)
 	log.Printf("stopped accepted=%d rejected=%d completed=%d failed=%d", svc.Stats.Accepted.Load(), svc.Stats.Rejected.Load(), svc.Stats.Completed.Load(), svc.Stats.Failed.Load())
 	return err

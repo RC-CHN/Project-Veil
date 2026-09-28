@@ -110,6 +110,34 @@ func TestVeilPaddingSkipsAlerts(t *testing.T) {
 	}
 }
 
+// ECDSA DER lengths can exceed a cover's CertificateVerify record by a byte.
+// Keep the authenticated handshake intact; pad only when the cover is larger.
+func TestVeilPaddingRealityCoverSize(t *testing.T) {
+	payload := make([]byte, 80)
+	payload[0], payload[3] = typeCertificateVerify, 76
+	minimum := len(payload) + 5 + 1 + 16
+	for _, cover := range []int{minimum - 1, minimum, minimum + 32} {
+		raw := new(veilPaddingMemory)
+		c := veilPaddingConn(raw)
+		defer c.Close()
+		c.out.handshakeLen[1], c.out.handshakeLen[4] = 1, uint16(cover)
+		if _, err := c.writeRecordLocked(recordTypeHandshake, payload); err != nil {
+			t.Fatal("cover rejected a valid TLS record", err)
+		}
+		want := minimum
+		if cover > want {
+			want = cover
+		}
+		if raw.Len() != want {
+			t.Fatal("unexpected padded record length", raw.Len(), cover)
+		}
+		plain, typ, err := c.in.decrypt(raw.Bytes())
+		if err != nil || typ != recordTypeHandshake || !bytes.Equal(plain, payload) {
+			t.Fatal("cover sizing changed authenticated handshake", err)
+		}
+	}
+}
+
 // The portable backend must drain the same complete records as batch/OpenSSL.
 func TestVeilPaddingReaderDrain(t *testing.T) {
 	raw := new(veilPaddingMemory)

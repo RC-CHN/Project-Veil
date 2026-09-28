@@ -1,7 +1,9 @@
-# Veil v0.2
+# Veil v0.3
 
 Go TCP 代理，提供可嵌入的核心、SOCKS5 CONNECT 与固定目标转发入口、TLS 1.3/REALITY 服务端、业务鉴权、连接复用与双向半关闭。支持有界连接池、背压、取消和超时。当前为实验原型，不提供 TUN、UDP 或移动端 UI；流量特征与回落行为尚未通过抗识别验收。
 
+
+v0.3 修正 REALITY 的签名协商：使用客户端已提供的 ECDSA P-256/SHA-256，将连接绑定的 HMAC 放入证书 SubjectKeyIdentifier 扩展，保留正常的证书自签名和 TLS CertificateVerify。浏览器模板的签名算法列表不变。AUTH 版本及 exporter 域同步升级，两端需同时升级，不兼容 v0.1、v0.2 或上游 REALITY 证书认证。独立实现见[完整线协议规范](../PROTOCOL.md)及 [Rust 互通验证端](../interop/rust/README.md)。这项修正解决签名协商和第三方互通，不代表已通过抗识别验收；证书签名的握手成本需另行测量。
 
 v0.2 引入真正的并发多路复用：每条物理 TLS 连接最多承载 8 条独立逻辑流。每流有目标拨号结果、接收额度、FIN、RST 和完成确认；一条流的取消、目标失败或慢读不会占住其他流的应用层接收循环。认证版本及 TLS exporter 域已升级，两端需同时升级，不兼容 v0.1。
 
@@ -171,7 +173,7 @@ python3 scripts/probe.py --out .build/probes-local
 
 上述工具仅连接自有回环端点。基准依赖 Linux `perf`、`taskset` 和本机 `sudo -n perf` 权限；服务端固定 CPU 14，参考站点/目标 16–17，负载 18–21，客户端 22–25，其他机器需调整亲和性。AnyTLS 对照使用固定版本 sing-box，其优化组应用同一 TLS 补丁。
 
-`core_regression.py` 比较重构前后的实际二进制：默认先验证同一协议版本的新旧两端交叉互通，再随机交替测 U/D 吞吐、E 热流回显和 S 短流复用。比较 v0.1 与 v0.2 时加 `--skip-interop`，因为线协议有意不兼容。两端各一个 CPU、同一 Chrome 149 模板和填充开关，用 perf 分别记录 CPU 时间、周期和指令数。旧目录需提供 `veil-client`（batch）、`veil-server`（openssl）和固定版本的 `benchpeer`；候选目录提供 `veil-batch`、`veil-openssl`、`veil-native`（生成临时密钥）。
+`core_regression.py` 比较重构前后的实际二进制：默认先验证同一协议版本的新旧两端交叉互通，再随机交替测 U/D 吞吐、E 热流回显和 S 短流复用。比较不同线协议版本时加 `--skip-interop`，因为线协议有意不兼容。两端各一个 CPU、同一 Chrome 149 模板和填充开关，用 perf 分别记录 CPU 时间、周期和指令数。旧目录需提供 `veil-client`（batch）、`veil-server`（openssl）和固定版本的 `benchpeer`；候选目录提供 `veil-batch`、`veil-openssl`、`veil-native`（生成临时密钥）。
 
 ```sh
 sudo unshare -n -- sh -c 'ip link set lo up && exec runuser -u USER -- env VEIL_ISOLATED_NETNS=1 python3 scripts/core_regression.py --before .build/baseline --peer .build/baseline/benchpeer --out .build/core-regression --cores 14,22,17,18'
@@ -191,7 +193,7 @@ sudo unshare -n -- sh -c 'ip link set lo up && exec runuser -u USER -- env VEIL_
 
 两组二进制目录均须含 `veil-batch` 与 `veil-openssl`，构建目录另需 `veil-native` 生成测试密钥。输出 `samples.json`、`summary.json`、二进制及工具摘要；记录全部物理连接、TLS 长度、方向、关闭结果与浏览器连接复用信息，不保存 TLS 密文或正文。浏览器临时配置自动删除，测试证书及 Veil 临时配置在结果目录的 `fixture/` 中。可指定 `--delay-ms 5` 在每次转发前增加延迟；它是用户态敏感性检查，不是固定 RTT 或丢包仿真。浏览器退出可能重置连接，代理计数中的失败还包含监听就绪探测，因此不将这些计数等同于页面下载失败。
 
-以下是 v0.1 的历史测量，不代表 v0.2 性能。2026-09-27 使用 Chrome 149.0.7827.55、Node 24.16.0，与 `adab5bd` 对照：最终 96 组中，旧版 23/24 出现相邻记录增加 1186 字节的阶梯，新版、直连及未认证回落均为 0/24；补充 5 ms 转发延迟的 24 组中，旧版、新版、直连分别为 8/8、0/8、0/8。24 组真实浏览器回落共完成 168 个页面/资源请求，含 HTTP/2 和 HTTP/1.1。此计数只针对已定位的 Go TLS 递增模式，不是通用分类器准确率。三种后端的真实密文记录回归与 race 检查通过；新测试对旧配置失败。五轮 batch 客户端/OpenSSL 服务端配对 CPU 效率中位数变化：上传 +3.53%、下载 −0.73%、热流回显 −0.37%、短流复用 +7.78%；新旧两端交叉互通通过。性能数据为本机回环结果。
+以下是 v0.1 的历史测量，不代表当前版本性能。2026-09-27 使用 Chrome 149.0.7827.55、Node 24.16.0，与 `adab5bd` 对照：最终 96 组中，旧版 23/24 出现相邻记录增加 1186 字节的阶梯，新版、直连及未认证回落均为 0/24；补充 5 ms 转发延迟的 24 组中，旧版、新版、直连分别为 8/8、0/8、0/8。24 组真实浏览器回落共完成 168 个页面/资源请求，含 HTTP/2 和 HTTP/1.1。此计数只针对已定位的 Go TLS 递增模式，不是通用分类器准确率。三种后端的真实密文记录回归与 race 检查通过；新测试对旧配置失败。五轮 batch 客户端/OpenSSL 服务端配对 CPU 效率中位数变化：上传 +3.53%、下载 −0.73%、热流回显 −0.37%、短流复用 +7.78%；新旧两端交叉互通通过。性能数据为本机回环结果。
 
 该轮没有消除嵌套 TLS：当时 HTTP/2 串行负载的方向突发中位数仍为直连 20、旧版 28、新版 28；并行为 10、18、18。AUTH/OPEN、内层握手、控制帧、连接寿命与复用行为仍可能提供判别信息。保持远端连接成功后才报告 SOCKS 成功，不用提前报成功来掩盖额外往返；也不强制流量比例或加入周期性假包。
 

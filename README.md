@@ -2,6 +2,8 @@
 
 Veil 是基于 TCP 与 TLS 1.3/REALITY 的实验代理。目前提供可复用 Go 核心、SOCKS5 CONNECT、固定目标 TCP 转发和 CLI。尚未提供 TUN、UDP 或平台界面，也尚未通过抗识别验收。
 
+当前线协议为 v0.3，两端需同时升级。语言无关的字节格式、密码计算、状态机和固定向量见 [协议规范](PROTOCOL.md)；独立 Rust 实现及双向互通用法见 [互通验证端](interop/rust/README.md)。
+
 仓库按组件组织，核心与控制服务分别为独立 Go module：
 
 ```text

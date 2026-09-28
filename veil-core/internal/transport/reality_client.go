@@ -10,10 +10,11 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/ecdh"
-	"crypto/ed25519"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/hmac"
 	"crypto/sha256"
-	"crypto/sha512"
+	"crypto/x509"
 	"encoding/binary"
 	"errors"
 	"io"
@@ -54,13 +55,7 @@ func realityClient(s Settings) (Handshake, error) {
 				return errors.New("REALITY authentication failed")
 			}
 			cert := state.PeerCertificates[0]
-			pub, ok := cert.PublicKey.(ed25519.PublicKey)
-			if !ok {
-				return errors.New("REALITY authentication failed")
-			}
-			h := hmac.New(sha512.New, authKey)
-			h.Write(pub)
-			if !hmac.Equal(h.Sum(nil), cert.Signature) {
+			if !verifyRealityCertificate(cert, authKey) {
 				return errors.New("REALITY authentication failed")
 			}
 			verified = true
@@ -126,4 +121,22 @@ func realityClient(s Settings) (Handshake, error) {
 		}
 		return c, nil
 	}, nil
+}
+
+func verifyRealityCertificate(cert *x509.Certificate, authKey []byte) bool {
+	pub, ok := cert.PublicKey.(*ecdsa.PublicKey)
+	if !ok || pub.Curve != elliptic.P256() || len(authKey) != 32 || len(cert.SubjectKeyId) != 32 {
+		return false
+	}
+	for _, ext := range cert.Extensions {
+		if ext.Id.Equal([]int{2, 5, 29, 14}) && ext.Critical {
+			return false
+		}
+	}
+	h := hmac.New(sha256.New, authKey)
+	h.Write([]byte("Veil-v0.3 server authentication\x00"))
+	h.Write(cert.RawSubjectPublicKeyInfo)
+	return hmac.Equal(h.Sum(nil), cert.SubjectKeyId) &&
+		cert.SignatureAlgorithm == x509.ECDSAWithSHA256 &&
+		cert.CheckSignature(cert.SignatureAlgorithm, cert.RawTBSCertificate, cert.Signature) == nil
 }

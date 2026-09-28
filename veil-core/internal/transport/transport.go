@@ -148,7 +148,7 @@ func Export(c net.Conn) ([]byte, error) {
 	if !st.HandshakeComplete || st.Version != utls.VersionTLS13 {
 		return nil, errors.New("transport: completed TLS 1.3 handshake required")
 	}
-	return st.ExportKeyingMaterial("EXPORTER-Veil-v0.2", nil, 32)
+	return st.ExportKeyingMaterial("EXPORTER-Veil-v0.3", nil, 32)
 }
 
 // ReleaseBuffers is a no-op with the original TLS library. The patched method

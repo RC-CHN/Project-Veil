@@ -122,8 +122,27 @@ def padding_patch(s):
 
 
 def reality_patch(s):
-    # Keep the upstream entry point unchanged for differential probes. Veil's
-    # hook owns only the forwarding pumps, not authentication or TLS parsing.
+    # Veil v0.3 keeps browser signature lists and selects an offered scheme.
+    for name in (
+        '"crypto/ed25519"',
+        '"crypto/rand"',
+        '"crypto/hmac"',
+        '"crypto/sha512"',
+        '"crypto/x509"',
+        '"math/big"',
+    ):
+        s = replace(s, "\t" + name + "\n", "")
+    start = s.index("var realityServerCert = onceValues(")
+    end = s.index("\ntype realityServerHandshakeStateTLS13", start)
+    s = s[:start] + s[end:]
+    start = s.index("\t\ted25519Priv, signedCert := realityServerCert()")
+    end = s.index("\n\t}\n\tc.buffering = true", start)
+    s = s[:start] + """        certificate, err := veilRealityCertificate(hs.AuthKey)
+        if err != nil { return err }
+        hs.sigAlg, err = selectSignatureScheme(c.vers, certificate, hs.clientHello.supportedSignatureAlgorithms)
+        if err != nil { return err }
+        hs.cert = certificate""" + s[end:]
+
     signature = "func RealityServer(ctx context.Context, conn net.Conn, config *RealityConfig) (*Conn, error) {"
     s = replace(
         s,
@@ -187,13 +206,19 @@ def generate(mode):
         if not path.is_symlink():
             path.chmod(path.stat().st_mode | 0o200)
     shutil.copyfile(patched_reality, fork / "reality.go")
+    shutil.copyfile(ROOT / "patches/reality_proof.go.in", fork / "veil_reality_proof.go")
     conn = module / "conn.go"
     if (
         hashlib.sha256(conn.read_bytes()).hexdigest()
         != "e8027769d42706f263ef78d76ebd6e8a592299407a1f86b88b9ba5217bfe7dba"
     ):
         raise RuntimeError("unsupported source version: " + str(conn))
-    patched_conn = reader_patch(padding_patch(conn.read_text()))
+    connection_source = replace(
+        conn.read_text(),
+        'return nil, fmt.Errorf("payload[0]: %v, padding: %v", payload[0], padding)',
+        'padding = 0 // A cover length is a hint, not a limit on valid ECDSA/DER.',
+    )
+    patched_conn = reader_patch(padding_patch(connection_source))
     if mode != "native":
         patched_conn = conn_patch(patched_conn)
     (fork / "conn.go").write_text(patched_conn)

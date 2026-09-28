@@ -7,3 +7,5 @@ REALITY server, TLS and browser ClientHello support are provided by `github.com/
 The `veil-service` component reuses the core and `golang.org/x/sys/unix` for Unix socket ownership locks. Its module requirements and integrity sums are retained in `veil-service/go.mod` and `veil-service/go.sum`.
 
 OpenSSL is an optional system dependency (tested with 3.5.5, Apache-2.0). Go dependency source caches and generated code are excluded from version control; the build script recreates them.
+
+The independent Rust interoperability peer uses the OpenSSL Rust bindings and the crates pinned in `interop/rust/Cargo.lock`. It does not link or import the Veil Go implementation. Cargo downloads dependency sources with their upstream licenses; they are not vendored into this repository.
