@@ -273,6 +273,34 @@ jobs:
           fi
       - name: Package native desktop
         run: python veil-desktop/scripts/package.py --version ci
+      - name: Ensure Windows WebView2 runtime
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $runtime = "${env:ProgramFiles(x86)}\Microsoft\EdgeWebView\Application\*\msedgewebview2.exe"
+          if (-not (Test-Path $runtime)) {
+            $installer = Join-Path $env:RUNNER_TEMP 'WebView2Setup.exe'
+            Invoke-WebRequest 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $installer
+            if ((Get-AuthenticodeSignature $installer).Status -ne 'Valid') { throw 'Invalid WebView2 installer signature' }
+            $process = Start-Process $installer -ArgumentList '/silent /install' -Wait -PassThru
+            if ($process.ExitCode -ne 0) { throw "WebView2 install failed: $($process.ExitCode)" }
+          }
+      - name: Windows packaged desktop GUI and proxy transfers
+        if: runner.os == 'Windows'
+        env:
+          VEIL_TEST_SYSTEM_PROXY: '1'
+        run: |
+          npm ci --prefix veil-desktop/scripts/gui --ignore-scripts --no-audit --no-fund
+          python veil-core/scripts/build.py batch --output veil-desktop/.build/gui-server.exe
+          python veil-desktop/scripts/gui/check.py --package veil-desktop/.build/releases/veil-desktop-ci-windows-amd64.zip --server veil-desktop/.build/gui-server.exe --artifacts veil-desktop/.build/gui-artifacts
+      - name: Upload Windows GUI screenshots and diagnostics
+        if: always() && runner.os == 'Windows'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-desktop-gui
+          path: veil-desktop/.build/gui-artifacts
+          if-no-files-found: ignore
+          retention-days: 7
 
   ci:
     name: CI

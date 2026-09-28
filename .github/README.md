@@ -7,11 +7,15 @@ GitHub Actions 在 `main`、`ci/**` 分支 push、所有 PR 和手动运行时�
 | Core × 3 | native、batch、OpenSSL 各自运行协议/回环网络测试和 race；batch 额外验证标准库 TLS overlay |
 | Control service | 公共控制层、持久保存、生命周期、race/vet、真实 veild/veilctl 进程、Linux 安装包、启动脚本语法及 LuCI 与 OPNsense 翻译/ACL/JS 检查、OPNsense PHP 语法 |
 | Windows control | Windows 原生命名管道、ACL、持久化、套接字错误与双向转发回归；便携 ZIP 的摘要、架构、版本及包内 CLI 生命周期 |
-| Desktop × 2 | Windows / Linux 原生构建、实例互斥、关闭释放与导入限制；界面操作另行实际验收 |
+| Desktop × 2 | Windows / Linux 原生构建、实例互斥、关闭释放与导入限制；Windows 发行包的真实 WebView2 操作、关窗保活、系统代理切换与恢复、HTTP/SOCKS5 实际转发及界面截图 |
 | Rust interoperability | fmt/clippy、规范固定向量、Rust↔Go 双向 TLS/REALITY 互通，覆盖 batch 和 OpenSSL |
 | Compile × 8 | Linux ARM64/ARMv7/MIPS/MIPSLE、FreeBSD amd64、Windows amd64/ARM64、Android ARM64；核心及支持的控制组件 |
 
 Linux amd64 已由运行测试覆盖。Windows 包含原生控制测试与桌面构建，Android 仅检查公共核心/控制包；交叉编译不代表对应设备运行、安装包或 UI 已完成。服务进程 smoke 在私有网络命名空间中运行，无需外部代理节点。
+
+Windows 桌面任务直接运行刚生成的发行包，通过 Playwright CDP 操作其真实 WebView2。测试使用临时配置和回环 TLS 服务，核验 SOCKS5 / HTTP 访问 HTTP / HTTPS、系统代理自动设置 / 保持 / 清除、断开与明确退出恢复，以及中英、深浅色和窄窗口。原生 `WM_CLOSE` 后核验窗口隐藏且转发继续；通知区图标和菜单的实际鼠标交互仍单独验收。截图和诊断保存为 `windows-desktop-gui` artifact，保留 7 天；临时凭据和状态目录不上传。调试端口只由测试用户的临时 WebView2 策略启用，结束后恢复原策略和系统代理。
+
+这项检查复用 Windows 桌面构建与 Go 缓存，只安装锁定的 `playwright-core`，不下载 Playwright 浏览器；已有 WebView2 时不重复安装。需要本地复现时，在隔离 Windows 用户中设置 `VEIL_TEST_SYSTEM_PROXY=1`，执行工作流中的 GUI 步骤。
 
 效率设计：
 
