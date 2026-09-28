@@ -223,6 +223,17 @@ jobs:
           scope: windows-control
       - name: Native pipe, ACL, persistence and lifecycle checks
         run: python veil-service/scripts/build.py batch --check
+      - name: Native Windows socket and relay regressions
+        run: |
+          python - <<'PY'
+          import json
+          import subprocess
+          import sys
+          sys.path.insert(0, "veil-core/scripts")
+          from build import ENV, ROOT
+          flags = json.loads((ROOT / ".build/batch/flags.json").read_text())
+          subprocess.run(["go", "test", *flags, "-count=1", "-timeout=120s", "./core"], cwd=ROOT, env=ENV, check=True)
+          PY
       - name: Build and exercise Windows CLI processes
         run: |
           python veil-service/scripts/build.py batch --version ci

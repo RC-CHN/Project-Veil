@@ -6,7 +6,7 @@ GitHub Actions 在 `main`、`ci/**` 分支 push、所有 PR 和手动运行时�
 | --- | --- |
 | Core × 3 | native、batch、OpenSSL 各自运行协议/回环网络测试和 race；batch 额外验证标准库 TLS overlay |
 | Control service | 公共控制层、持久保存、生命周期、race/vet、真实 veild/veilctl 进程、Linux 安装包、启动脚本语法及 LuCI 与 OPNsense 翻译/ACL/JS 检查、OPNsense PHP 语法 |
-| Windows control | Windows 原生命名管道、ACL、持久化与实际 CLI 生命周期 |
+| Windows control | Windows 原生命名管道、ACL、持久化、套接字错误与双向转发回归、实际 CLI 生命周期 |
 | Desktop × 2 | Windows / Linux 原生构建、实例互斥、关闭释放与导入限制；界面操作另行实际验收 |
 | Rust interoperability | fmt/clippy、规范固定向量、Rust↔Go 双向 TLS/REALITY 互通，覆盖 batch 和 OpenSSL |
 | Compile × 8 | Linux ARM64/ARMv7/MIPS/MIPSLE、FreeBSD amd64、Windows amd64/ARM64、Android ARM64；核心及支持的控制组件 |
