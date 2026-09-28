@@ -1,0 +1,2 @@
+#!/bin/sh
+/usr/local/etc/rc.d/veil onestop >/dev/null 2>&1 || true

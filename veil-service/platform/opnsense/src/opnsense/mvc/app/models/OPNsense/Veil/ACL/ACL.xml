@@ -1,0 +1,17 @@
+<acl>
+    <page-veil-manage>
+        <name>Services: Veil: Configuration</name>
+        <patterns>
+            <pattern>ui/veil/*</pattern>
+            <pattern>api/veil/settings/*</pattern>
+            <pattern>api/veil/service/*</pattern>
+        </patterns>
+    </page-veil-manage>
+    <page-veil-status>
+        <name>Services: Veil: Status</name>
+        <patterns>
+            <pattern>ui/veil/*</pattern>
+            <pattern>api/veil/service/status</pattern>
+        </patterns>
+    </page-veil-status>
+</acl>

@@ -1,0 +1,2 @@
+Veil proxy management for OPNsense: config.xml persistence, configd control,
+SOCKS5/HTTP/mixed listeners, bilingual configuration and runtime status.

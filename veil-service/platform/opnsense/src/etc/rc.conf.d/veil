@@ -1,0 +1,3 @@
+veil_enable="YES"
+veil_autostart="NO"
+veil_state_dir="/var/run/veil/state"

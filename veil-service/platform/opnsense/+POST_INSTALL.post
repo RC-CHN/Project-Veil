@@ -1,0 +1,5 @@
+install -d -m 0700 /var/run/veil /var/run/veil/requests /var/run/veil/state
+if ! /usr/local/etc/rc.d/veil onestatus >/dev/null 2>&1; then
+    /usr/local/etc/rc.d/veil onestart >/dev/null
+fi
+# Proxy startup remains an explicit UI action or the system boot hook.

@@ -12,11 +12,15 @@ load_rc_config "$name"
 : "${veil_enable:=NO}"
 : "${veil_state_dir:=/var/db/veil}"
 : "${veil_run_dir:=/var/run/veil}"
+: "${veil_autostart:=YES}"
 
 pidfile="${veil_run_dir}/daemon.pid"
 procname="/usr/local/bin/veild"
 command="/usr/sbin/daemon"
-command_args="-f -S -T veil -p ${pidfile} ${procname} -state-dir ${veil_state_dir} -socket ${veil_run_dir}/control.sock -autostart"
+command_args="-f -S -T veil -p ${pidfile} ${procname} -state-dir ${veil_state_dir} -socket ${veil_run_dir}/control.sock"
+if checkyesno veil_autostart; then
+    command_args="${command_args} -autostart"
+fi
 start_precmd="veil_prepare"
 
 veil_prepare()

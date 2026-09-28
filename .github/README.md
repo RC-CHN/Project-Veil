@@ -5,7 +5,7 @@ GitHub Actions 在 `main`、`ci/**` 分支 push、所有 PR 和手动运行时�
 | 并行任务 | 验证内容 |
 | --- | --- |
 | Core × 3 | native、batch、OpenSSL 各自运行协议/回环网络测试和 race；batch 额外验证标准库 TLS overlay |
-| Control service | 公共控制层、持久保存、生命周期、race/vet、真实 veild/veilctl 进程、Linux 安装包、启动脚本语法及 LuCI 翻译/ACL/JS 检查 |
+| Control service | 公共控制层、持久保存、生命周期、race/vet、真实 veild/veilctl 进程、Linux 安装包、启动脚本语法及 LuCI 与 OPNsense 翻译/ACL/JS 检查、OPNsense PHP 语法 |
 | Rust interoperability | fmt/clippy、规范固定向量、Rust↔Go 双向 TLS/REALITY 互通，覆盖 batch 和 OpenSSL |
 | Compile × 8 | Linux ARM64/ARMv7/MIPS/MIPSLE、FreeBSD amd64、Windows amd64/ARM64、Android ARM64；核心及支持的控制组件 |
 
@@ -18,7 +18,7 @@ Linux amd64 已由运行测试覆盖。Windows 检查 CLI 和公共控制包，A
 - 不缓存生成的 TLS 源码副本和 overlay，每次从固定依赖重建并校验源文件哈希。Go 版本固定在根目录 `.go-version`，Rust 固定在 `interop/rust/rust-toolchain.toml`。
 - 普通 Markdown 修改只跑工作流自检与汇总；`PROTOCOL.md` 修改还会验证 Rust 互通及向量。仅控制层改动不重跑核心/Rust，Rust 改动不重跑全部 Go/交叉编译。核心、CI、工具链和未知组件改动运行完整检查。浅克隆无法确定差异时安全退回全量。
 - 新提交自动取消同一 PR/分支的旧运行；只使用普通 `pull_request`、只读 token 和不持久化凭据的 checkout。
-- 有意暂停 30 秒的下载回归通过手动运行的 `extended` 开关开启，只在 batch 跑一次。性能基准、WAN 测速、浏览器抓包不放在普通 PR 中。OpenWrt SDK 打包与真实 VM 界面验收按平台改动本地执行；常规 CI 仅增加轻量 LuCI 检查，Linux 交叉编译包含 rpcd 适配器。
+- 有意暂停 30 秒的下载回归通过手动运行的 `extended` 开关开启，只在 batch 跑一次。性能基准、WAN 测速、浏览器抓包不放在普通 PR 中。OpenWrt SDK/OPNsense 原生打包与真实 VM 界面验收按平台改动本地执行；常规 CI 仅增加轻量平台语法、翻译和 ACL 检查，Linux 交叉编译包含 rpcd 适配器。
 
 选择固定 `ubuntu-26.04` runner，因为现有混合密钥交换测试需要 OpenSSL 3.5 的 X25519MLKEM768，避免每次从源码编译 OpenSSL，也不静默跳过这项测试。该镜像目前属于 GitHub 官方公开预览，工具清单见 [runner image](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2604-Readme.md)。actionlint 的标签表暂未更新，因此单独声明了这个已核实的 runner 标签。Actions 按完整提交固定；actionlint 发布包按 SHA-256 校验。
 
@@ -30,6 +30,7 @@ bash .github/scripts/lint-workflow.sh
 python3 veil-core/scripts/check.py batch --race --stdlib
 python3 veil-service/scripts/build.py batch --check --race
 python3 veil-service/scripts/openwrt_check.py
+python3 veil-service/scripts/opnsense_check.py
 python3 veil-core/scripts/cross_check.py --target linux/arm64
 python3 veil-service/scripts/cross_check.py --target linux/arm64
 ```

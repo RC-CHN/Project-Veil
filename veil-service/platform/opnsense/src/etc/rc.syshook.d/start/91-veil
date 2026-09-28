@@ -1,0 +1,4 @@
+#!/bin/sh
+# config.xml owns proxy startup; veild itself starts without a proxy.
+install -d -m 0700 /var/run/veil /var/run/veil/requests /var/run/veil/state
+/usr/local/sbin/configctl veil configure

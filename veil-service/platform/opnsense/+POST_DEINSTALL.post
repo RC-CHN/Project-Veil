@@ -1,0 +1,4 @@
+# Preserve config.xml; the runtime mirror can be discarded after daemon exit.
+if [ ! -S /var/run/veil/control.sock ]; then
+    rm -rf /var/run/veil
+fi

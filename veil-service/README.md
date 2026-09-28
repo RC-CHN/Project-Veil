@@ -71,7 +71,7 @@ python3 scripts/cross_check.py
 
 `save`/`validate` 用 `config` 携带原配置对象，最大 1 MiB。`expected_revision` 可作比较后更新保护，防止多个界面覆盖彼此的配置；`veilctl -if-revision HASH ...` 对应此字段。不支持的版本、未知字段、同一行的多余对象会被拒绝；每条连接只处理第一行。响应总含 `version`，成功含 `status`，失败含 `error.code` 与 `error.message`；生命周期和保存错误尽可能附带当前状态。收到超时后应先查 `status`，不要盲目重复 `restart`。此版本没有热重载、事件推送或跨重启请求去重。
 
-最多同时处理 16 个控制连接，每个连接有 15 秒截止时间；不在后台轮询核心。权限检查依靠私有目录和 socket。浏览器页面不能直接访问该 socket，LuCI 通过固定方法的 rpcd 适配接入，其他界面也应使用本地命令或平台 RPC；不要转发成无鉴权 TCP 接口。
+最多同时处理 16 个控制连接，每个连接有 15 秒截止时间；不在后台轮询核心。权限检查依靠私有目录和 socket。浏览器页面不能直接访问该 socket；LuCI 通过 rpcd 接入，OPNsense 通过 configd 桥接，其他界面也应使用本地命令或平台 RPC；不要转发成无鉴权 TCP 接口。
 
 ## 平台适配
 
@@ -79,7 +79,7 @@ python3 scripts/cross_check.py
 | --- | --- | --- |
 | systemd Linux | 静态发行包、安装/卸载、`veil-system` 实例管理；Ubuntu 22.04 systemd 容器验收 | 其他发行版及 ARM 设备实测 |
 | OpenWrt | procd、rpcd/ubus、双语 LuCI、SOCKS5/HTTP 软件包；OpenWrt 24.10.8 x86_64 虚拟机实际验收，含 Argon | ARM/MIPS 实机及 apk 包适配 |
-| OPNsense / FreeBSD | `platform/freebsd/veil` rc.d 脚本；FreeBSD amd64 编译检查 | OPNsense configd/config.xml、GUI、插件包和设备实测 |
+| OPNsense / FreeBSD | 原生插件、config.xml/configd、双语 GUI、权限分离、FreeBSD rc.d；26.7 amd64 虚拟机验收 | 其他 OPNsense 版本验收 |
 | Windows | 公共 service/control 包编译检查 | 服务、命名管道、权限与桌面界面 |
 | Android | 公共 service/control 包编译检查 | VpnService、socket protect 绑定、TUN/DNS、应用 |
 
@@ -89,7 +89,7 @@ systemd 模板预期 `/usr/local/bin/veild`，使用专用 `veil` 用户；`veil
 
 OpenWrt 模板预期 `/usr/sbin/veild`，保存配置于 `/etc/veil`，socket 在 `/var/run/veil/control.sock`，由 procd 负责异常重启。没有配置变更自动重启钩子，保持保存与应用分离。
 
-FreeBSD 模板预期 `/usr/local/bin/veild`，默认以 root 运行（基础 rc.d 适配），启用项为 `veil_enable="YES"`，默认目录 `/var/db/veil`、`/var/run/veil`。它使用 [FreeBSD daemon(8)](https://man.freebsd.org/cgi/man.cgi?query=daemon&sektion=8) 的子进程 PID 文件配合 rc.d 停止，没有启用 daemon 的自动重启选项，避免停止子进程后被立即拉起。目录项请使用无空格的绝对路径。完整 OPNsense 插件应由 configd 统一管理持久配置与服务。
+FreeBSD 模板预期 `/usr/local/bin/veild`，默认以 root 运行（基础 rc.d 适配），启用项为 `veil_enable="YES"`，默认目录 `/var/db/veil`、`/var/run/veil`。它使用 [FreeBSD daemon(8)](https://man.freebsd.org/cgi/man.cgi?query=daemon&sektion=8) 的子进程 PID 文件配合 rc.d 停止，没有启用 daemon 的自动重启选项，避免停止子进程后被立即拉起。目录项请使用无空格的绝对路径。[OPNsense 插件](platform/opnsense/README.md) 由 config.xml 持久保存配置，通过 configd 同步到独立的 daemon 运行目录。设置 `veil_autostart=NO` 后，rc.d 只启动管理服务，代理开机策略由平台启动钩子执行。
 
 ## 回归与性能
 

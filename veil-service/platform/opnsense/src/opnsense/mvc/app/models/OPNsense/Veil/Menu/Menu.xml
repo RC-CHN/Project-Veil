@@ -1,0 +1,5 @@
+<menu>
+    <Services>
+        <Veil VisibleName="Veil" url="/ui/veil/" cssClass="fa fa-lock fa-fw" order="80"/>
+    </Services>
+</menu>

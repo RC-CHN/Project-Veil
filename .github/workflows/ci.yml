@@ -109,6 +109,8 @@ jobs:
           sh -n veil-service/platform/freebsd/veil
           shellcheck veil-service/platform/systemd/install.sh veil-service/platform/systemd/veil-system
           python3 veil-service/scripts/openwrt_check.py
+          python3 veil-service/scripts/opnsense_check.py
+          find veil-service/platform/opnsense -name '*.php' -print0 | xargs -0 -n1 php -l
       - name: Control API, persistence, lifecycle, race and vet
         run: python3 veil-service/scripts/build.py batch --check --race
       - name: Build and verify installable Linux release

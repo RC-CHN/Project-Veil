@@ -30,7 +30,7 @@ Veil 将握手外观、会话认证、流生命周期和发送策略分别处理
 | --- | --- |
 | [`veil-core/`](veil-core/README.md) | 公共 Go API、TLS 传输、并发复用、SOCKS5、HTTP/HTTPS CONNECT、混合入口、固定目标 TCP 转发与 Veil CLI |
 | [`veil-service/`](veil-service/README.md) | `veild` / `veilctl`、配置保存与 revision、运行生命周期、私有 Unix socket 控制接口 |
-| [`veil-service/platform/`](veil-service/platform/) | Linux 安装包与 systemd 管理、OpenWrt 软件包与双语 LuCI、FreeBSD rc.d 启动适配 |
+| [`veil-service/platform/`](veil-service/platform/) | Linux 安装包与 systemd 管理、OpenWrt 双语 LuCI、OPNsense 原生插件与 FreeBSD rc.d 适配 |
 | [`interop/rust/`](interop/rust/README.md) | 独立 Rust 互通验证端，覆盖客户端和服务端角色 |
 
 核心和控制服务分别为独立 Go module。应用通过 `veil/core`、`veil/inbound` 和 `veil/service` 使用核心；平台组件通过公共控制层管理配置与运行状态，代理数据由核心直接转发。
@@ -60,6 +60,7 @@ veil-core/.build/veil -config /path/to/client.json
 - [控制服务说明](veil-service/README.md)：配置保存、启停控制和平台适配。
 - [Linux 安装与管理](veil-service/platform/systemd/README.md)：发行包、安装卸载、实例管理与日志。
 - [OpenWrt / LuCI](veil-service/platform/openwrt/README.md)：SOCKS5 与 HTTP 入口、软件包、配置导入与双语界面。
+- [OPNsense 插件](veil-service/platform/opnsense/README.md)：config.xml 配置、configd 控制、原生双语界面与安装包。
 - [Rust 互通验证](interop/rust/README.md)：独立实现的构建与双向互通检查。
 - [CI 说明](.github/README.md)：并行任务、构建缓存和跨平台检查。
 
