@@ -2,11 +2,15 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
+	"veil-desktop/internal/systemproxy"
 	"veil-service/control"
 	"veil-service/local"
 	"veil/service"
@@ -17,11 +21,17 @@ import (
 // App is a thin desktop binding. All configuration and runtime state belong to
 // the shared manager; the frontend never proxies traffic or spawns commands.
 type App struct {
-	manager *control.Manager
-	lock    *os.File
-	ctx     context.Context
-	mu      sync.Mutex
-	lang    string
+	manager    *control.Manager
+	lock       *os.File
+	ctx        context.Context
+	mu         sync.Mutex
+	lang       string
+	tray       *desktopTray
+	trayOnce   sync.Once
+	quitting   atomic.Bool
+	opMu       sync.Mutex
+	proxy      *systemproxy.Controller
+	activeHTTP bool
 }
 
 func openApp(dir string) (*App, error) {
@@ -37,19 +47,37 @@ func openApp(dir string) (*App, error) {
 		lock.Close()
 		return nil, err
 	}
-	return &App{manager: m, lock: lock, lang: "en"}, nil
+	proxy, err := systemproxy.Open(filepath.Join(dir, "system-proxy.json"), systemproxy.Native())
+	if err != nil {
+		m.Close()
+		lock.Close()
+		return nil, err
+	}
+	return &App{manager: m, lock: lock, lang: "en", proxy: proxy}, nil
 }
 
 func (a *App) Request(q control.Request) control.Response {
-	return a.manager.Handle(q)
+	a.opMu.Lock()
+	defer a.opMu.Unlock()
+	wasRunning := a.manager.Status().State == "running"
+	r := a.manager.Handle(q)
+	if r.Error == nil && (q.Action == "restart" || (q.Action == "start" && !wasRunning)) {
+		config := a.manager.Handle(control.Request{Version: 1, Action: "config"})
+		var cfg struct{ Role, Inbound, Target string }
+		if json.Unmarshal(config.Config, &cfg) == nil {
+			a.activeHTTP = cfg.Role == "client" && cfg.Target == "" && (cfg.Inbound == "http" || cfg.Inbound == "mixed")
+		}
+	}
+	return a.syncSystemProxy(q, r)
 }
 
 func (a *App) SetLanguage(lang string) {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	if lang == "zh" || lang == "en" {
 		a.lang = lang
 	}
+	a.mu.Unlock()
+	a.updateTrayLanguage()
 }
 
 func (a *App) text(en, zh string) string {
@@ -88,36 +116,44 @@ func readProfile(path string) (string, error) {
 	return string(b), nil
 }
 
-func (a *App) ConfirmApply() (bool, error) {
-	return a.confirm(a.text("Apply saved changes?", "应用已保存的更改？"),
-		a.text("Active connections will close when the proxy restarts.", "代理将重新启动，当前连接会中断。"))
-}
-
-func (a *App) ConfirmDiscard() (bool, error) {
-	return a.confirm(a.text("Discard unsaved changes?", "放弃未保存的更改？"),
-		a.text("Your current edits will be replaced.", "当前编辑内容将被替换。"))
-}
-
-func (a *App) confirm(title, message string) (bool, error) {
-	answer, err := wailsruntime.MessageDialog(a.ctx, wailsruntime.MessageDialogOptions{
-		Type: wailsruntime.QuestionDialog, Title: title, Message: message,
-		Buttons: []string{"No", "Yes"}, DefaultButton: "No", CancelButton: "No",
-	})
-	// Both supported Wails backends use system-localized Yes/No buttons and
-	// return stable English identifiers, ignoring custom button labels.
-	return answer == "Yes", err
+// Quit is called only after the application-owned confirmation panel accepts.
+func (a *App) Quit() error {
+	a.opMu.Lock()
+	defer a.opMu.Unlock()
+	if err := a.proxy.Restore(); err != nil && !errors.Is(err, systemproxy.ErrChanged) {
+		return err
+	}
+	a.quitting.Store(true)
+	wailsruntime.Quit(a.ctx)
+	return nil
 }
 
 func (a *App) beforeClose(context.Context) bool {
-	if a.manager.Status().State != "running" {
+	if a.quitting.Load() {
 		return false
 	}
-	ok, err := a.confirm(a.text("Quit Veil?", "退出 Veil？"),
-		a.text("Quitting will stop the proxy and close active connections.", "退出后代理将停止，当前连接会中断。"))
-	return err != nil || !ok
+	a.mu.Lock()
+	t := a.tray
+	a.mu.Unlock()
+	if t != nil && t.ready.Load() && trayAvailable() {
+		wailsruntime.WindowHide(a.ctx)
+	} else {
+		// A desktop without a tray keeps a taskbar entry to reopen the window.
+		wailsruntime.WindowMinimise(a.ctx)
+	}
+	return true
 }
 
 func (a *App) close() {
+	a.opMu.Lock()
+	defer a.opMu.Unlock()
+	a.mu.Lock()
+	t := a.tray
+	a.mu.Unlock()
+	t.stop()
+	if err := a.proxy.Restore(); err != nil && !errors.Is(err, systemproxy.ErrChanged) {
+		fmt.Fprintln(os.Stderr, "restore system proxy:", err)
+	}
 	a.manager.Close()
 	a.lock.Close()
 }

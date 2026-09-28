@@ -10,4 +10,4 @@ OpenSSL is an optional system dependency (tested with 3.5.5, Apache-2.0). Go dep
 
 The independent Rust interoperability peer uses the OpenSSL Rust bindings and the crates pinned in `interop/rust/Cargo.lock`. It does not link or import the Veil Go implementation. Cargo downloads dependency sources with their upstream licenses; they are not vendored into this repository.
 
-The desktop embeds Wails v2.16.0 (MIT) and its Go dependencies, with versions and integrity sums in `veil-desktop/go.mod` and `veil-desktop/go.sum`. GTK3 and WebKitGTK (Linux) and Microsoft WebView2 (Windows) provide the system webview. Upstream licenses remain in downloaded modules.
+The desktop embeds Wails v2.16.0 (MIT), fyne.io/systray v1.12.2 (Apache-2.0), and their Go dependencies, with versions and integrity sums in `veil-desktop/go.mod` and `veil-desktop/go.sum`. GTK3 and WebKitGTK (Linux) and Microsoft WebView2 (Windows) provide the system webview. Upstream licenses remain in downloaded modules.

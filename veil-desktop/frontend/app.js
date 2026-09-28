@@ -14,6 +14,51 @@ let status = { state: "stopped", stats: {} },
   busy = false,
   epoch = 0;
 const t = (key) => messages[language][key];
+let systemProxy = { mode: "keep", supported: false, managed: false };
+
+function confirmAction(
+  title,
+  message,
+  accept,
+  cancel = t("cancel"),
+  detail = "",
+) {
+  const dialog = $("confirmation");
+  if (dialog.open) return Promise.resolve(false);
+  $("confirmation-title").textContent = title;
+  $("confirmation-message").textContent = message;
+  $("confirmation-detail").textContent = detail;
+  $("confirmation-detail").hidden = !detail;
+  $("confirmation-accept").textContent = accept;
+  $("confirmation-cancel").textContent = cancel;
+  dialog.returnValue = "cancel";
+  dialog.showModal();
+  $("confirmation-cancel").focus();
+  return new Promise((resolve) => {
+    dialog.addEventListener(
+      "close",
+      () => resolve(dialog.returnValue === "confirm"),
+      { once: true },
+    );
+  });
+}
+const confirmDiscard = () =>
+  confirmAction(t("discardTitle"), t("discardMessage"), t("discard"));
+function requestQuit() {
+  return perform(async () => {
+    if (
+      await confirmAction(
+        t("quitTitle"),
+        t("quitMessage"),
+        t("quit"),
+        t("keepRunning"),
+        dirty ? t("quitDirty") : "",
+      )
+    ) {
+      await api().Quit();
+    }
+  });
+}
 const config = () => {
   let value;
   try {
@@ -67,6 +112,20 @@ function render() {
             : "readyHint",
     );
   $("diagnostic-data").textContent = JSON.stringify(status, null, 2);
+  $("proxy-mode").value = systemProxy.mode;
+  $("proxy-mode").disabled = busy || !systemProxy.supported;
+  $("proxy-clear").disabled = busy || !systemProxy.supported;
+  $("proxy-hint").textContent =
+    systemProxy.error ||
+    t(
+      !systemProxy.supported
+        ? "proxyUnsupported"
+        : systemProxy.managed
+          ? "proxyManaged"
+          : systemProxy.mode === "auto"
+            ? "proxyAutoHint"
+            : "proxyKeepHint",
+    );
   for (const id of [
     "import",
     "reload",
@@ -76,6 +135,7 @@ function render() {
     "protocol",
     "listen",
     "config",
+    "quit",
   ])
     $(id).disabled = busy;
   $("reload").disabled = busy || !saved;
@@ -141,6 +201,11 @@ async function perform(fn) {
   } catch (error) {
     feedback(String(error.message || error), true);
   } finally {
+    try {
+      systemProxy = await api().SystemProxy();
+    } catch {
+      /* Keep the action's original error visible. */
+    }
     busy = false;
     render();
   }
@@ -178,7 +243,7 @@ for (const id of ["protocol", "listen"])
   };
 $("import").onclick = () =>
   perform(async () => {
-    if (dirty && !(await api().ConfirmDiscard())) return;
+    if (dirty && !(await confirmDiscard())) return;
     const content = await api().Import();
     if (!content) return;
     // Parse before replacing the draft so a malformed file cannot erase it.
@@ -191,7 +256,7 @@ $("import").onclick = () =>
   });
 $("reload").onclick = () =>
   perform(async () => {
-    if (dirty && !(await api().ConfirmDiscard())) return;
+    if (dirty && !(await confirmDiscard())) return;
     await load();
     feedback(t("reloaded"));
   });
@@ -218,11 +283,43 @@ $("toggle").onclick = () =>
 $("apply").onclick = () =>
   perform(async () => {
     const revision = savedRevision;
-    if (!(await api().ConfirmApply())) return;
+    if (!(await confirmAction(t("applyTitle"), t("applyMessage"), t("apply"))))
+      return;
     await request("restart", { expected_revision: revision });
     feedback(t("applied"));
   });
+$("proxy-mode").onchange = () => {
+  const mode = $("proxy-mode").value;
+  perform(async () => {
+    if (
+      mode === "auto" &&
+      !(await confirmAction(
+        t("proxyAutoTitle"),
+        t("proxyAutoMessage"),
+        t("proxyAuto"),
+      ))
+    )
+      return;
+    await api().SetSystemProxyMode(mode);
+    feedback(t("proxyUpdated"));
+  });
+};
+$("proxy-clear").onclick = () =>
+  perform(async () => {
+    if (
+      !(await confirmAction(
+        t("proxyClearTitle"),
+        t("proxyClearMessage"),
+        t("proxyClear"),
+      ))
+    )
+      return;
+    await api().ClearSystemProxy();
+    feedback(t("proxyCleared"));
+  });
 document.documentElement.dataset.theme = theme;
+$("quit").onclick = requestQuit;
+window.runtime.EventsOn("quit-requested", requestQuit);
 applyLanguage();
 (async () => {
   try {
@@ -238,7 +335,10 @@ applyLanguage();
       const r = await api().Request({ version: 1, action: "status" });
       if (current !== epoch || busy) return;
       if (r.error) throw new Error(r.error.message);
+      const proxy = await api().SystemProxy();
+      if (current !== epoch || busy) return;
       status = r.status;
+      systemProxy = proxy;
       render();
     } catch {
       if (!busy) feedback(t("unavailable"), true);

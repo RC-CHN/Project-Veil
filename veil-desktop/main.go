@@ -65,6 +65,7 @@ func run() error {
 		AssetServer:      &assetserver.Options{Assets: assets}, Bind: []interface{}{a},
 		OnStartup:     func(ctx context.Context) { a.ctx = ctx },
 		OnBeforeClose: a.beforeClose,
+		OnDomReady:    a.startTray,
 		Linux: &linux.Options{Icon: icon, ProgramName: "net.projectveil.Veil",
 			WebviewGpuPolicy: linux.WebviewGpuPolicyNever},
 		Windows: &windows.Options{WebviewUserDataPath: filepath.Join(*dir, "webview")},

@@ -136,16 +136,74 @@
             </button>
           </div>
         </section>
+        <section class="system-proxy" aria-labelledby="system-proxy-title">
+          <div>
+            <label
+              id="system-proxy-title"
+              for="proxy-mode"
+              data-i18n="systemProxy"
+              >System proxy</label
+            >
+            <p id="proxy-hint"></p>
+          </div>
+          <div class="actions">
+            <select id="proxy-mode">
+              <option value="keep" data-i18n="proxyKeep">
+                Leave unchanged
+              </option>
+              <option value="auto" data-i18n="proxyAuto">
+                Configure automatically
+              </option></select
+            ><button id="proxy-clear" class="quiet" data-i18n="proxyClear">
+              Clear system proxy
+            </button>
+          </div>
+        </section>
         <details class="diagnostics" id="diagnostics">
           <summary data-i18n="diagnostics">Diagnostics</summary>
           <pre id="diagnostic-data"></pre>
         </details>
       </main>
       <footer>
-        <span data-i18n="footer">SOCKS5 & HTTP · Local proxy</span
-        ><span data-i18n="closing">Quitting Veil stops this connection.</span>
+        <span data-i18n="footer">SOCKS5 & HTTP · Local proxy</span>
+        <div class="footer-actions">
+          <span data-i18n="closing">Closing the window keeps Veil running.</span
+          ><button id="quit" class="quiet" data-i18n="quit">Exit Veil</button>
+        </div>
       </footer>
     </div>
+    <dialog
+      id="confirmation"
+      aria-labelledby="confirmation-title"
+      aria-describedby="confirmation-message"
+    >
+      <form method="dialog">
+        <div class="confirmation-mark" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            width="26"
+            height="26"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+          >
+            <path d="M12 3v9m-5-7a8 8 0 1 0 10 0" />
+          </svg>
+        </div>
+        <h2 id="confirmation-title"></h2>
+        <p id="confirmation-message"></p>
+        <p id="confirmation-detail" class="confirmation-detail" hidden></p>
+        <div class="confirmation-actions">
+          <button id="confirmation-cancel" value="cancel" autofocus></button>
+          <button
+            id="confirmation-accept"
+            value="confirm"
+            class="primary"
+          ></button>
+        </div>
+      </form>
+    </dialog>
     <script src="i18n.js"></script>
     <script src="app.js"></script>
   </body>

@@ -6,6 +6,8 @@ Windows / Linux 桌面端使用 Wails v2 与 Go 公共控制层。界面直接�
 - 配置校验、私有保存、启停、确认后应用更改。
 - 运行状态、连接计数及诊断信息。
 - 简体中文 / English、浅色 / 深色外观。
+- 关闭窗口收进托盘，托盘菜单或界面可明确退出，自绘确认面板。
+- Windows / GNOME 系统代理自动设置与恢复、不改变设置、显式清除。
 - 独占实例目录，退出关闭代理，重新打开保留配置。
 
 ## 安装
@@ -41,6 +43,8 @@ python3 veil-desktop/scripts/build.py --check
 
 输出 `veil-desktop/.build/veil-desktop`，Windows 输出 `veil-desktop.exe`。构建器复用核心固定版本的 TLS 适配与 batch 后端。Linux 可用 `GOOS=windows GOARCH=amd64 CGO_ENABLED=0` 交叉构建 Windows 二进制。
 
+`--check` 包含系统代理生命周期回归。Linux 原生设置测试使用内存后端；Windows 原生 WinINet 写入测试仅在环境变量 `VEIL_TEST_SYSTEM_PROXY=1` 时运行，请在隔离测试会话中启用，测试结束会恢复原设置。Windows CI 已启用此检查。
+
 生成发行包：
 
 ```sh
@@ -58,4 +62,8 @@ python3 veil-desktop/scripts/package.py --version 0.3.1 --target windows --arch 
 
 默认状态目录为 `os.UserConfigDir()/Veil/desktop`；可通过 `-state-dir PATH` 指定独立实例。Webview 的数据及缓存位于此目录下，与其他桌面应用分离。界面语言和外观会记忆选择；系统文件选择器等原生控件遵循系统语言。
 
-窗口退出时若代理仍在运行，会确认断开连接。应用重新打开后可显式连接到已保存配置。
+关闭窗口会收进托盘，代理继续运行；没有可用托盘的桌面会最小化到任务栏。通过托盘菜单或界面「退出」并确认后关闭程序。应用重新打开后可显式连接到已保存配置。
+
+系统代理默认「不改变」。选择「自动设置」后，连接时将系统 HTTP / HTTPS 代理指向当前 HTTP 或 mixed 监听端口，断开或明确退出时恢复原设置；收进托盘保持连接和设置。切回「不改变」也会恢复 Veil 接管前的设置。「清除系统代理」需确认，清除后切到「不改变」，本地代理继续运行。恢复前会检查设置是否仍属于 Veil，保留其他软件在此期间作出的修改；异常退出后，下次启动会尝试恢复。
+
+Windows 使用当前用户的 WinINet 设置，Linux 支持 GNOME 系统代理。应用需遵循系统代理设置才能自动使用；其他应用可手动填写本地 SOCKS5 / HTTP 地址。

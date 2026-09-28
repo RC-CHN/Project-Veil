@@ -258,7 +258,7 @@ jobs:
           if [[ "$RUNNER_OS" == Linux ]]; then
             python veil-desktop/scripts/build.py --check --race
           else
-            python veil-desktop/scripts/build.py --check
+            VEIL_TEST_SYSTEM_PROXY=1 python veil-desktop/scripts/build.py --check
           fi
       - name: Package native desktop
         run: python veil-desktop/scripts/package.py --version ci
