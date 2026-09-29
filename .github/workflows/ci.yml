@@ -121,6 +121,8 @@ jobs:
           python3 veil-service/scripts/package.py --version ci --arch amd64
           python3 veil-service/scripts/package_check.py veil-service/.build/releases/veil-ci-linux-amd64.tar.gz
           tar -xzf veil-service/.build/releases/veil-ci-linux-amd64.tar.gz -C veil-service/.build/releases
+      - name: OPNsense platform transactions with real daemon
+        run: python3 veil-service/scripts/opnsense_catalog_check.py --daemon veil-service/.build/releases/veil-ci-linux-amd64/bin/veild
       - name: Real process lifecycle in a private network namespace
         run: |
           parent_netns=$(readlink /proc/self/ns/net)
@@ -272,6 +274,24 @@ jobs:
           else
             VEIL_TEST_SYSTEM_PROXY=1 python veil-desktop/scripts/build.py --check
           fi
+      - name: Shared Desktop, LuCI and OPNsense browser journeys
+        if: runner.os == 'Linux'
+        env:
+          PLAYWRIGHT_MODULE: ${{ github.workspace }}/veil-desktop/scripts/gui/node_modules/playwright-core
+          VEIL_UI_OUTPUT: ${{ github.workspace }}/.build/ui-artifacts
+        run: |
+          npm ci --prefix veil-desktop/scripts/gui --ignore-scripts --no-audit --no-fund
+          CHROMIUM_PATH="$(command -v google-chrome || command -v chromium)"
+          export CHROMIUM_PATH
+          node veil-service/scripts/editor_smoke.cjs
+      - name: Upload shared UI screenshots and video
+        if: always() && runner.os == 'Linux'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: shared-ui
+          path: .build/ui-artifacts
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Package native desktop
         run: python veil-desktop/scripts/package.py --version ci
       - name: Ensure Windows WebView2 runtime
