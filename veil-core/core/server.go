@@ -83,21 +83,22 @@ func (s *Server) Handle(ctx context.Context, raw net.Conn) error {
 	cancel()
 	r.Release()
 	c.SetDeadline(time.Time{})
-	m, err := mux.New(c, muxOptions(c, cfg, true))
+	opts := muxOptions(c, cfg, true)
+	opts.Context = ctx
+	m, err := mux.New(c, opts)
 	if err != nil {
 		return err
 	}
-	connCtx, cancelConn := context.WithCancel(ctx)
 	var workers sync.WaitGroup
 	slots := make(chan struct{}, mux.MaxStreams)
-	defer func() { cancelConn(); m.Close(); workers.Wait(); m.Wait() }()
+	defer func() { m.Close(); workers.Wait(); m.Wait() }()
 	for {
 		select {
 		case slots <- struct{}{}:
-		case <-connCtx.Done():
+		case <-ctx.Done():
 			return nil
 		}
-		stream, err := m.Accept(connCtx)
+		stream, err := m.Accept(ctx)
 		if err != nil {
 			<-slots
 			if errors.Is(err, io.EOF) || ctx.Err() != nil {
@@ -108,11 +109,7 @@ func (s *Server) Handle(ctx context.Context, raw net.Conn) error {
 		workers.Go(func() {
 			defer func() { <-slots }()
 			defer stream.Close()
-			streamCtx, cancelStream := context.WithCancel(connCtx)
-			defer cancelStream()
-			stop := context.AfterFunc(stream.Context(), cancelStream)
-			defer stop()
-			if err := s.serve(streamCtx, stream); err != nil && connCtx.Err() == nil {
+			if err := s.serve(stream.Context(), stream); err != nil && ctx.Err() == nil {
 				s.Stats.Failed.Add(1)
 				if s.OnStreamError != nil {
 					s.OnStreamError(err)

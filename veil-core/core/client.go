@@ -98,9 +98,7 @@ func (c *Client) Open(ctx context.Context, address string) (*Stream, error) {
 		cancel()
 		return nil, opError("acquire tunnel", err)
 	}
-	openCtx, stopOpen := context.WithTimeout(ctx, c.cfg.DialTimeout+c.cfg.HandshakeTimeout)
-	stream, err := channel.mux.Open(openCtx, payload)
-	stopOpen()
+	stream, err := channel.mux.Open(ctx, payload)
 	if err != nil {
 		c.pool.put(channel)
 		stopClient()

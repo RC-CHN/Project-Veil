@@ -12,8 +12,10 @@ import (
 
 type Options struct {
 	Server                    bool
+	Context                   context.Context // Parent lifetime for accepted streams; nil means Background.
 	Profile                   Profile
 	IdleTimeout, WriteTimeout time.Duration
+	OpenTimeout               time.Duration
 	// Prefix is the caller's authentication frame, sent with the first OPEN.
 	Prefix []byte
 	// Padding is called only by the writer, with a bounded local send budget.
@@ -168,7 +170,16 @@ func (s *Session) Open(ctx context.Context, metadata []byte) (*Stream, error) {
 		st.Close()
 		return nil, err
 	}
+	var timeout <-chan time.Time
+	if s.opts.OpenTimeout > 0 {
+		timer := time.NewTimer(s.opts.OpenTimeout)
+		defer timer.Stop()
+		timeout = timer.C
+	}
 	select {
+	case <-timeout:
+		st.Close()
+		return nil, context.DeadlineExceeded
 	case <-ctx.Done():
 		st.Close()
 		return nil, ctx.Err()
@@ -230,8 +241,7 @@ func (s *Session) readPayload(st *Stream, p []byte) error {
 // DATA frame. A cancelled stream leaves ownership of an unfinished block with
 // this reader until the rest of the frame has been consumed.
 func (s *Session) receive(st *Stream, id uint32, n int) error {
-	c := blocks.Get().(*chunk)
-	c.start, c.end, c.complete, c.discard = 0, 0, false, false
+	c := takeChunk(n)
 	s.mu.Lock()
 	if st == nil || s.streams[id] != st || st.closed {
 		c.discard = true
@@ -260,7 +270,7 @@ func (s *Session) receive(st *Stream, id uint32, n int) error {
 		discard, complete := c.discard, c.complete
 		s.mu.Unlock()
 		if complete && discard {
-			blocks.Put(c)
+			putChunk(c)
 		}
 		if err != nil {
 			return err
@@ -284,6 +294,7 @@ func (r headerReader) Read(p []byte) (int, error) {
 func (s *Session) readLoop() {
 	defer close(s.readDone)
 	var h [headerSize]byte
+	var controlPayload [512]byte
 	for {
 		s.mu.Lock()
 		s.idleDeadlineLocked()
@@ -322,7 +333,7 @@ func (s *Session) readLoop() {
 			}
 			continue
 		}
-		p := make([]byte, n)
+		p := controlPayload[:n]
 		if err = s.readPayload(st, p); err != nil {
 			s.fail(err)
 			return
@@ -394,7 +405,7 @@ func (s *Session) readLoop() {
 
 func (s *Session) writeLoop() {
 	defer close(s.writeDone)
-	buf := make([]byte, 0, batchSize)
+	buf := make([]byte, 0, 4096)
 	for {
 		select {
 		case <-s.done:
@@ -432,6 +443,16 @@ func (s *Session) writeLoop() {
 			if s.shape.remaining > 0 {
 				limit = s.shape.startup.choose()
 				s.shape.remaining--
+			}
+			// Reserve once on the first bulk write; small sessions keep 4 KiB.
+			if cap(buf) < batchSize {
+				needed := len(s.prefix)
+				for _, st := range ready {
+					needed += len(st.request.p) - st.request.off + headerSize
+				}
+				if min(needed, limit) > cap(buf) {
+					buf = make([]byte, 0, batchSize)
+				}
 			}
 			buf = append(buf[:0], s.prefix...)
 			s.prefix = nil

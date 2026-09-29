@@ -31,11 +31,16 @@ type pool struct {
 }
 
 func newPool(cfg ClientConfig, key []byte, h transport.Handshake) *pool {
-	p := &pool{cfg: cfg, key: key, handshake: h, all: make(map[*session]bool), changed: make(chan struct{})}
+	p := &pool{cfg: cfg, key: key, handshake: h, all: make(map[*session]bool)}
 	p.traffic.Store(cfg.Traffic)
 	return p
 }
-func (p *pool) notifyLocked() { close(p.changed); p.changed = make(chan struct{}) }
+func (p *pool) notifyLocked() {
+	if p.changed != nil {
+		close(p.changed)
+		p.changed = nil
+	}
+}
 func (p *pool) idleLocked() int {
 	n := 0
 	for s := range p.all {
@@ -115,6 +120,9 @@ func (p *pool) get(ctx context.Context) (*session, error) {
 			return s, nil
 		}
 		if wantNew && p.dialing {
+			if p.changed == nil {
+				p.changed = make(chan struct{})
+			}
 			changed := p.changed
 			p.mu.Unlock()
 			select {
@@ -178,6 +186,7 @@ func (p *pool) dial(ctx context.Context) (*session, error) {
 		return nil, err
 	}
 	opts := muxOptions(c, cfg, false)
+	opts.OpenTimeout = p.cfg.DialTimeout + p.cfg.HandshakeTimeout
 	opts.Prefix = prefix.Bytes()
 	m, err := mux.New(c, opts)
 	if err != nil {

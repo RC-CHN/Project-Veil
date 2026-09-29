@@ -81,10 +81,37 @@ func readHeader(r io.Reader, h *[headerSize]byte) (byte, uint32, int, error) {
 	return t, id, n, nil
 }
 
-var blocks = sync.Pool{New: func() any { return new(chunk) }}
+// Separate payload and metadata avoid rounding a 32 KiB block up to 40 KiB.
+// Size classes keep tiny frames out of the bulk cache. sync.Pool allows GC to
+// reclaim historical peaks without forcing allocation during each bulk burst.
+var blockCaches [3]sync.Pool
+var blockCapacities = [...]int{256, 4096, blockSize}
 
 type chunk struct {
-	b                 [blockSize]byte
+	b                 []byte
 	start, end        int
 	complete, discard bool
+}
+
+func takeChunk(n int) *chunk {
+	for i, size := range blockCapacities {
+		if n <= size {
+			if cached := blockCaches[i].Get(); cached != nil {
+				c := cached.(*chunk)
+				c.start, c.end, c.complete, c.discard = 0, 0, false, false
+				return c
+			}
+			return &chunk{b: make([]byte, size)}
+		}
+	}
+	panic("mux: oversized receive chunk")
+}
+
+func putChunk(c *chunk) {
+	for i, size := range blockCapacities {
+		if cap(c.b) == size {
+			blockCaches[i].Put(c)
+			return
+		}
+	}
 }

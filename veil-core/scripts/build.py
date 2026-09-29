@@ -61,16 +61,10 @@ def reader_patch(s):
         s,
         "\tc.rawInput.Grow(needs + bytes.MinRead)",
         """\tif c.isHandshakeComplete.Load() && c.vers==VersionTLS13 {
-        const limit=veilBufferBytes
-        // Compact explicitly so bytes.Buffer.Grow cannot double the cap.
-        pending:=c.rawInput.Bytes()
-        if c.rawInput.Cap()!=limit { c.rawInput=*bytes.NewBuffer(veilTakeBuffer()) } else { c.rawInput.Reset() }
-        c.rawInput.Write(pending)
-        r=io.LimitReader(r,int64(limit-c.rawInput.Len()))
-    } else { c.rawInput.Grow(needs+bytes.MinRead) }""",
+        return c.veilReadFromUntil(r,n)
+    }
+    c.rawInput.Grow(needs+bytes.MinRead)""",
     )
-    # ReadFrom may grow after its final read; atLeastReader returns EOF on that
-    # read, preventing the extra Grow. Input limit bounds readable ciphertext.
     s = replace(
         s, "\trawInput ", "\tveilDraining bool // protected by in.Mutex\n\trawInput "
     )

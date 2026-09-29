@@ -200,3 +200,65 @@ func TestOpenCancellationAndDialFailure(t *testing.T) {
 		})
 	}
 }
+
+// An OPEN timeout cancels only that stream; the same physical session remains
+// usable, and the remote dial context observes RESET.
+func TestOpenTimeoutKeepsSessionUsable(t *testing.T) {
+	c, s := pair(t)
+	c.opts.OpenTimeout = 20 * time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	result := make(chan error, 1)
+	go func() { _, err := c.Open(ctx, []byte("timeout target")); result <- err }()
+	peer, err := s.Accept(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer peer.Close()
+	select {
+	case err = <-result:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatal(err)
+		}
+	case <-ctx.Done():
+		t.Fatal("OPEN timeout did not fire")
+	}
+	select {
+	case <-peer.Context().Done():
+	case <-ctx.Done():
+		t.Fatal("remote dial was not canceled")
+	}
+	c.opts.OpenTimeout = time.Second
+	openPair(t, c, s)
+}
+
+func TestAcceptedStreamParentCancellation(t *testing.T) {
+	type key struct{}
+	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), key{}, "dial policy"))
+	defer cancel()
+	a, b := net.Pipe()
+	c, err := New(a, Options{Profile: DefaultProfile()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := New(b, Options{Server: true, Context: ctx, Profile: DefaultProfile()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { c.Close(); s.Close(); c.Wait(); s.Wait() })
+	_, peer := openPair(t, c, s)
+	if peer.Context().Value(key{}) != "dial policy" {
+		t.Fatal("lost parent values")
+	}
+	done := make(chan error, 1)
+	go func() { var b [1]byte; _, err := peer.Read(b[:]); done <- err }()
+	cancel()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("canceled read succeeded")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("canceled read stayed blocked")
+	}
+}

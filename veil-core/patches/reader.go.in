@@ -28,6 +28,36 @@ func veilPutBuffer(b []byte) {
 	}
 }
 
+// Read directly into the bounded batch. Avoid allocating LimitedReader and
+// atLeastReader interface wrappers for each small control/data exchange.
+func (c *Conn) veilReadFromUntil(r io.Reader, n int) error {
+	pending := c.rawInput.Bytes()
+	if c.rawInput.Cap() != veilBufferBytes {
+		c.rawInput = *bytes.NewBuffer(veilTakeBuffer())
+	} else {
+		c.rawInput.Reset()
+	}
+	c.rawInput.Write(pending)
+	for c.rawInput.Len() < n {
+		available := c.rawInput.AvailableBuffer()
+		got, err := r.Read(available[:cap(available)])
+		c.rawInput.Write(available[:got])
+		if err != nil {
+			if err == io.EOF {
+				if c.rawInput.Len() < n {
+					return io.ErrUnexpectedEOF
+				}
+				return nil
+			}
+			return err
+		}
+		if got == 0 {
+			return io.ErrNoProgress
+		}
+	}
+	return nil
+}
+
 var errVeilNeedRecord = errors.New("tls: Veil drain requires more ciphertext")
 
 func (c *Conn) veilDrainBufferedRecords(b []byte, n int, postHandshake func() error) (int, error) {

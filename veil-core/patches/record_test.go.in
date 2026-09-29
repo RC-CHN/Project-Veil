@@ -216,3 +216,41 @@ func TestVeilRepeatedClose(t *testing.T) {
 	c.in.Unlock()
 	c.veilReleaseCrypto()
 }
+
+type veilFinalReader struct {
+	payload []byte
+	err     error
+}
+
+func (r veilFinalReader) Read(p []byte) (int, error) { return copy(p, r.payload), r.err }
+
+// A Reader may deliver its final bytes and an error together. Preserve both
+// TLS truncation detection and buffered bytes across temporary read failures.
+func TestVeilReadFinalBytesAndError(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		bytes     int
+		err, want error
+	}{
+		{"complete EOF", 5, io.EOF, nil},
+		{"truncated EOF", 3, io.EOF, io.ErrUnexpectedEOF},
+		{"complete timeout", 5, os.ErrDeadlineExceeded, os.ErrDeadlineExceeded},
+		{"partial timeout", 3, os.ErrDeadlineExceeded, os.ErrDeadlineExceeded},
+		{"empty read", 0, nil, io.ErrNoProgress},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := veilTestConn(new(veilMemoryConn))
+			defer c.veilReleaseCrypto()
+			p := bytes.Repeat([]byte{71}, tc.bytes)
+			err := c.readFromUntil(veilFinalReader{p, tc.err}, 5)
+			if !errors.Is(err, tc.want) || !bytes.Equal(c.rawInput.Bytes(), p) {
+				t.Fatalf("read %x, error %v; want %x, %v", c.rawInput.Bytes(), err, p, tc.want)
+			}
+			if tc.bytes == 5 {
+				if err := c.readFromUntil(bytes.NewReader(nil), 5); err != nil {
+					t.Fatal("lost buffered bytes", err)
+				}
+			}
+		})
+	}
+}

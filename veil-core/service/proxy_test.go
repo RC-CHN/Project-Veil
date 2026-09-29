@@ -28,7 +28,7 @@ import (
 	"veil/internal/wire"
 )
 
-func certs(t *testing.T) (string, string) {
+func certs(t testing.TB) (string, string) {
 	t.Helper()
 	key, e := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if e != nil {
@@ -49,12 +49,12 @@ func certs(t *testing.T) (string, string) {
 	os.WriteFile(kp, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: priv}), 0600)
 	return cp, kp
 }
-func cover(t *testing.T, cp, kp string) string {
+func cover(t testing.TB, cp, kp string) string {
 	t.Helper()
 	return coverGroup(t, cp, kp, "X25519")
 }
 
-func coverGroup(t *testing.T, cp, kp, group string) string {
+func coverGroup(t testing.TB, cp, kp, group string) string {
 	t.Helper()
 	if _, e := exec.LookPath("openssl"); e != nil {
 		t.Skip("openssl required for REALITY integration")
@@ -84,7 +84,7 @@ func coverGroup(t *testing.T, cp, kp, group string) string {
 	t.Fatal("cover did not start")
 	return ""
 }
-func settings(t *testing.T, mode string) (transport.Settings, transport.Settings) {
+func settings(t testing.TB, mode string) (transport.Settings, transport.Settings) {
 	cp, kp := certs(t)
 	s := transport.Settings{Mode: mode, ServerName: "cover.test", Certificate: cp, PrivateKeyFile: kp}
 	c := transport.Settings{Mode: mode, ServerName: "cover.test", CAFile: cp}
@@ -103,7 +103,7 @@ func settings(t *testing.T, mode string) (transport.Settings, transport.Settings
 	}
 	return s, c
 }
-func start(t *testing.T, cfg Config) (*Service, string) {
+func start(t testing.TB, cfg Config) (*Service, string) {
 	t.Helper()
 	svc, e := New(cfg)
 	if e != nil {
@@ -164,7 +164,7 @@ func socksDial(addr, target string) (*net.TCPConn, error) {
 	}
 	return raw, nil
 }
-func target(t *testing.T, fn func(net.Conn)) string {
+func target(t testing.TB, fn func(net.Conn)) string {
 	ln, e := net.Listen("tcp", "127.0.0.1:0")
 	if e != nil {
 		t.Fatal(e)

@@ -47,13 +47,23 @@ type Stream struct {
 	queue                                 []*chunk
 	head                                  int
 	request                               *writeRequest
+	writeRequest                          writeRequest
+	controlDone                           chan error
 	transferred                           uint64
 	activity                              time.Time
 }
 
 func (s *Session) newStreamLocked(id uint32, metadata []byte) *Stream {
-	ctx, cancel := context.WithCancel(context.Background())
-	st := &Stream{s: s, id: id, metadata: append([]byte(nil), metadata...), opened: make(chan struct{}), completed: make(chan struct{}), stopped: ctx.Done(), ctx: ctx, cancel: cancel, readable: make(chan struct{}, 1), sendCredit: windowBlocks, recvCredit: windowBlocks, activity: time.Now()}
+	parent := s.opts.Context
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithCancel(parent)
+	st := &Stream{s: s, id: id, metadata: append([]byte(nil), metadata...), stopped: ctx.Done(), ctx: ctx, cancel: cancel, readable: make(chan struct{}, 1), sendCredit: windowBlocks, recvCredit: windowBlocks, activity: time.Now()}
+	if !s.opts.Server {
+		st.opened = make(chan struct{})
+		st.completed = make(chan struct{})
+	}
 	s.streams[id] = st
 	st.refundAt = s.shape.credit.choose()
 	s.idleDeadlineLocked()
@@ -92,6 +102,8 @@ func (st *Stream) stopLocked(err error) {
 // Respond is called only after the real destination dial has completed. A
 // nonzero code rejects this stream while preserving unrelated streams.
 func (st *Stream) Respond(code byte) error {
+	st.writeMu.Lock()
+	defer st.writeMu.Unlock()
 	s := st.s
 	s.mu.Lock()
 	if st.err != nil {
@@ -103,7 +115,10 @@ func (st *Stream) Respond(code byte) error {
 		s.mu.Unlock()
 		return ErrProtocol
 	}
-	done := make(chan error, 1)
+	if st.controlDone == nil {
+		st.controlDone = make(chan error, 1)
+	}
+	done := st.controlDone
 	t := opened
 	var payload []byte
 	if code != 0 {
@@ -147,7 +162,7 @@ func (st *Stream) Read(p []byte) (int, error) {
 			if c.start != c.end || !c.complete {
 				break
 			}
-			blocks.Put(c)
+			putChunk(c)
 			st.queue[st.head] = nil
 			st.head++
 			st.refund++
@@ -195,6 +210,7 @@ func (st *Stream) Read(p []byte) (int, error) {
 		select {
 		case <-st.readable:
 		case <-st.stopped:
+			return 0, st.failure()
 		}
 	}
 }
@@ -221,7 +237,11 @@ func (st *Stream) Write(p []byte) (int, error) {
 		s.mu.Unlock()
 		return 0, nil
 	}
-	r := &writeRequest{p: p, done: make(chan writeResult, 1)}
+	r := &st.writeRequest
+	if r.done == nil {
+		r.done = make(chan writeResult, 1)
+	}
+	r.p, r.off, r.finished = p, 0, false
 	st.request = r
 	signal(s.wake)
 	s.mu.Unlock()
@@ -230,6 +250,7 @@ func (st *Stream) Write(p []byte) (int, error) {
 	if st.request == r {
 		st.request = nil
 	}
+	r.p = nil
 	s.mu.Unlock()
 	return result.n, result.err
 }
@@ -290,7 +311,7 @@ func (st *Stream) closeLocked(reason error, notify bool) error {
 	for i := st.head; i < len(st.queue); i++ {
 		c := st.queue[i]
 		if c.complete {
-			blocks.Put(c)
+			putChunk(c)
 		} else {
 			c.discard = true
 		}
@@ -317,6 +338,8 @@ func (st *Stream) Close() error {
 // Finish confirms the server's relay has completed both directions. FIN alone
 // is insufficient: another pump can still be writing bytes to the target.
 func (st *Stream) Finish() error {
+	st.writeMu.Lock()
+	defer st.writeMu.Unlock()
 	s := st.s
 	s.mu.Lock()
 	if st.err != nil {
@@ -334,7 +357,10 @@ func (st *Stream) Finish() error {
 		err = s.controlLocked(fin, st.id, nil, nil)
 		st.pendingFIN = false
 	}
-	done := make(chan error, 1)
+	if st.controlDone == nil {
+		st.controlDone = make(chan error, 1)
+	}
+	done := st.controlDone
 	if err == nil {
 		err = s.controlLocked(finished, st.id, nil, done)
 	}
@@ -366,4 +392,12 @@ func (st *Stream) WaitDone(ctx context.Context) error {
 		}
 		return st.failure()
 	}
+}
+
+// Done allows the caller to avoid allocating a timeout after FIN/DONE were
+// already decoded together. It does not retire a stream or bypass WaitDone.
+func (st *Stream) Done() bool {
+	st.s.mu.Lock()
+	defer st.s.mu.Unlock()
+	return st.peerDone
 }
