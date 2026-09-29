@@ -281,6 +281,7 @@ jobs:
           VEIL_UI_OUTPUT: ${{ github.workspace }}/.build/ui-artifacts
         run: |
           npm ci --prefix veil-desktop/scripts/gui --ignore-scripts --no-audit --no-fund
+          node veil-desktop/scripts/gui/node_modules/playwright-core/cli.js install ffmpeg
           CHROMIUM_PATH="$(command -v google-chrome || command -v chromium)"
           export CHROMIUM_PATH
           node veil-service/scripts/editor_smoke.cjs
