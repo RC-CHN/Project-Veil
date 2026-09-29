@@ -9,8 +9,8 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[1]
 for script in ("app.js", "i18n.js"):
     subprocess.run(["node", "--check", str(ROOT / "frontend" / script)], check=True)
-html = (ROOT / "frontend/index.html").read_text()
-app = (ROOT / "frontend/app.js").read_text()
+html = (ROOT / "frontend/index.html").read_text(encoding="utf-8")
+app = (ROOT / "frontend/app.js").read_text(encoding="utf-8")
 labels = set(re.findall(r'data-i18n="([A-Za-z]+)"', html))
 labels.update(key for _, key in re.findall(r'''\bt\((["'])([A-Za-z]+)\1\)''', app))
 

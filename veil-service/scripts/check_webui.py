@@ -17,10 +17,10 @@ def check():
     for path in (common / "connections.js", opnsense / "www/js/veil/page.js"):
         subprocess.run(["node", "--check", str(path)], check=True)
         labels.update(ast.literal_eval(s) for s in re.findall(
-            r"(?:_|tr)\(\s*('(?:[^'\\]|\\.)*')\s*,?\s*\)", path.read_text()))
+            r"(?:_|tr)\(\s*('(?:[^'\\]|\\.)*')\s*,?\s*\)", path.read_text(encoding="utf-8")))
     labels.update(re.findall(r'data-i18n="([^"]+)"',
-        (opnsense / "mvc/app/views/OPNsense/Veil/index.volt").read_text()))
-    source = (common / "i18n.js").read_text()
+        (opnsense / "mvc/app/views/OPNsense/Veil/index.volt").read_text(encoding="utf-8")))
+    source = (common / "i18n.js").read_text(encoding="utf-8")
     translations = json.loads(source[source.index("{"):].rstrip().removesuffix(";"))
     missing = [label for label in sorted(labels) if not translations["zh"].get(label)]
     if missing:
