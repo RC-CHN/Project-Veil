@@ -372,6 +372,16 @@ const server = http.createServer((req, res) => {
         });
       await button('Add connection').click();
       await dialog.getByLabel('Name', { exact: true }).fill('First');
+      assert(
+        await page.evaluate(() => {
+          const ids = Array.from(
+            document.querySelectorAll('[id]'),
+            (n) => n.id,
+          );
+          return new Set(ids).size === ids.length;
+        }),
+        platform + ' duplicate element IDs',
+      );
       await dialog
         .getByLabel('Server address', { exact: true })
         .fill('exit.example');

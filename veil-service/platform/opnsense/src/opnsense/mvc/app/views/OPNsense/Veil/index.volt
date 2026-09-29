@@ -23,7 +23,7 @@
       </div>
       <label for="veil-json" class="text-muted" data-i18n="Configuration JSON (contains credentials)"></label>
       <textarea id="veil-json" class="form-control" rows="12" spellcheck="false" autocomplete="off"></textarea>
-      <label class="veil-boot"><input id="veil-enabled" type="checkbox"> <span data-i18n="Start this instance when the system boots"></span></label>
+      <label class="veil-boot"><input id="veil-boot-enabled" type="checkbox"> <span data-i18n="Start this instance when the system boots"></span></label>
       <div class="veil-actions">
         <button id="veil-save-apply" class="btn btn-primary" data-i18n="Save and apply" disabled></button>
         <button id="veil-save" class="btn btn-default" data-i18n="Save only" disabled></button>

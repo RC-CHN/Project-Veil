@@ -29,7 +29,7 @@ $(function () {
     savedEnabled = false,
     busy = false;
   const dirty = () =>
-    saved !== el('json').value || savedEnabled !== el('enabled').checked;
+    saved !== el('json').value || savedEnabled !== el('boot-enabled').checked;
   async function api(endpoint, data) {
     const result = await (data === undefined
       ? ajaxGet('/api/veil/' + endpoint, {})
@@ -79,7 +79,7 @@ $(function () {
     saved = result.profile;
     savedEnabled = result.enabled;
     el('json').value = saved;
-    el('enabled').checked = savedEnabled;
+    el('boot-enabled').checked = savedEnabled;
     let legacyClient = false;
     try {
       const cfg = JSON.parse(saved);
@@ -123,7 +123,7 @@ $(function () {
       throw new Error(
         tr('Import proxy clients into the connection list above.'),
       );
-    return { profile: text, enabled: el('enabled').checked ? '1' : '0' };
+    return { profile: text, enabled: el('boot-enabled').checked ? '1' : '0' };
   }
   async function save() {
     const value = draft();
@@ -245,7 +245,7 @@ $(function () {
         await common.refresh();
       },
     );
-  el('json').oninput = el('enabled').onchange = buttons;
+  el('json').oninput = el('boot-enabled').onchange = buttons;
   window.addEventListener('beforeunload', (event) => {
     if (dirty() || common.hasDraft()) {
       event.preventDefault();
