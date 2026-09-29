@@ -72,12 +72,22 @@ func (c *Client) SetTrafficProfile(p TrafficProfile) error {
 }
 
 // PoolStats is a consistent snapshot; Total includes in-progress dials.
-type PoolStats struct{ Total, Idle int }
+type PoolStats struct {
+	Total   int  `json:"total"`
+	Idle    int  `json:"idle"`
+	Streams int  `json:"streams"`
+	Dialing bool `json:"dialing"`
+	Limit   int  `json:"limit"`
+}
 
 func (c *Client) PoolStats() PoolStats {
 	c.pool.mu.Lock()
 	defer c.pool.mu.Unlock()
-	return PoolStats{Total: c.pool.total, Idle: c.pool.idleLocked()}
+	p := PoolStats{Total: c.pool.total, Idle: c.pool.idleLocked(), Dialing: c.pool.dialing, Limit: c.cfg.MaxConnections}
+	for s := range c.pool.all {
+		p.Streams += s.active
+	}
+	return p
 }
 
 // Open waits for remote OPENED. ctx governs the entire stream lifetime, not
@@ -109,6 +119,7 @@ func (c *Client) Open(ctx context.Context, address string) (*Stream, error) {
 		}
 		return nil, opError("open target", err)
 	}
+	c.Stats.ActiveStreams.Add(1)
 	s := &Stream{client: c, channel: stream, session: channel, ctx: ctx, cancel: cancel, stopClient: stopClient}
 	s.mu.Lock()
 	s.stop = context.AfterFunc(ctx, func() { s.Close() })

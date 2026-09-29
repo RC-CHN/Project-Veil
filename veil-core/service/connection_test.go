@@ -61,6 +61,17 @@ func TestConnectionSeparateInletsAndRelay(t *testing.T) {
 			if server.Stats.Authenticated.Load() != 1 {
 				t.Fatal("inlets and probe did not share one tunnel", server.Stats.Authenticated.Load())
 			}
+			await(t, func() bool { return c.Snapshot().Stats.ActiveStreams == 0 })
+			snapshot := c.Snapshot()
+			if snapshot.Diagnostics.Pool.Total != 1 || snapshot.Diagnostics.Pool.Idle != 1 || snapshot.Diagnostics.Pool.Streams != 0 {
+				t.Fatalf("pool accounting after transfer: %+v", snapshot.Diagnostics.Pool)
+			}
+			if chain && (snapshot.Relay == nil || snapshot.Relay.Diagnostics.Pool == nil || snapshot.Relay.Stats.ActiveStreams != 1) {
+				t.Fatalf("missing independent relay diagnostics: %+v", snapshot.Relay)
+			}
+			if !chain && snapshot.Relay != nil {
+				t.Fatal("direct connection reports a relay")
+			}
 		})
 	}
 }

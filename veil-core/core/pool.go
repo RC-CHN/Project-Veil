@@ -155,7 +155,7 @@ func (p *pool) dial(ctx context.Context) (*session, error) {
 	defer cancel()
 	raw, err := p.cfg.DialContext(ctx, "tcp", p.cfg.Server)
 	if err != nil {
-		return nil, err
+		return nil, opError("tunnel dial", err)
 	}
 	stop := context.AfterFunc(ctx, func() { raw.Close() })
 	defer stop()
@@ -163,7 +163,7 @@ func (p *pool) dial(ctx context.Context) (*session, error) {
 	c, err := p.handshake(ctx, raw)
 	if err != nil {
 		raw.Close()
-		return nil, err
+		return nil, opError("TLS handshake", err)
 	}
 	exporter, err := transport.Export(c)
 	if err != nil {

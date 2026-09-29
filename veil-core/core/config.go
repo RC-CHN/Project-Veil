@@ -58,7 +58,10 @@ type ServerConfig struct {
 // Stats contains monotonic counters. Core updates Completed, Authenticated and
 // server stream failures; a listener runner counts accepts and connection failures.
 // Do not copy Stats after use.
-type Stats struct{ Accepted, Rejected, Completed, Failed, Authenticated atomic.Uint64 }
+type Stats struct {
+	Accepted, Rejected, Completed, Failed, Authenticated atomic.Uint64
+	ActiveConnections, ActiveStreams                     atomic.Int64
+}
 
 func (c *Config) defaults() error {
 	if c.MaxConnections == 0 {

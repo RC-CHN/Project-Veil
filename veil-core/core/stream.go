@@ -45,6 +45,7 @@ func (s *Stream) finishLocked(reuse bool) {
 		return
 	}
 	s.finished = true
+	s.client.Stats.ActiveStreams.Add(-1)
 	s.stop()
 	s.stopClient()
 	reuse = reuse && !s.closed && s.ctx.Err() == nil

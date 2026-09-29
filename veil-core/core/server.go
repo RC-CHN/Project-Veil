@@ -63,7 +63,7 @@ func (s *Server) Handle(ctx context.Context, raw net.Conn) error {
 	raw.SetDeadline(time.Now().Add(s.cfg.HandshakeTimeout))
 	c, err := s.handshake(hsCtx, raw)
 	if err != nil {
-		return err
+		return opError("TLS handshake", err)
 	}
 	defer c.Close()
 	exporter, err := transport.Export(c)
@@ -74,10 +74,10 @@ func (s *Server) Handle(ctx context.Context, raw net.Conn) error {
 	defer r.Release()
 	typ, p, err := r.Read()
 	if err != nil {
-		return err
+		return opError("authentication", err)
 	}
 	if typ != wire.Auth || !wire.VerifyAuth(s.key, exporter, p) {
-		return errors.New("veil: authentication failed")
+		return opError("authentication", errors.New("veil: authentication failed"))
 	}
 	s.Stats.Authenticated.Add(1)
 	cancel()
@@ -106,7 +106,9 @@ func (s *Server) Handle(ctx context.Context, raw net.Conn) error {
 			}
 			return err
 		}
+		s.Stats.ActiveStreams.Add(1)
 		workers.Go(func() {
+			defer s.Stats.ActiveStreams.Add(-1)
 			defer func() { <-slots }()
 			defer stream.Close()
 			if err := s.serve(stream.Context(), stream); err != nil && ctx.Err() == nil {

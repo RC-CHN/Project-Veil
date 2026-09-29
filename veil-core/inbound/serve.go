@@ -8,6 +8,8 @@ import (
 	"veil/core"
 )
 
+var ErrConnectionLimit = errors.New("veil: inbound connection limit reached")
+
 type ServeOptions struct {
 	MaxConnections int
 	Stats          *core.Stats
@@ -49,12 +51,17 @@ func Serve(ctx context.Context, ln net.Listener, handle Handler, opts ServeOptio
 		default:
 			opts.Stats.Rejected.Add(1)
 			conn.Close()
+			if opts.OnError != nil {
+				opts.OnError(ErrConnectionLimit)
+			}
 			continue
 		}
 		opts.Stats.Accepted.Add(1)
+		opts.Stats.ActiveConnections.Add(1)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer opts.Stats.ActiveConnections.Add(-1)
 			defer func() { <-slots }()
 			if err := handle(ctx, conn); err != nil {
 				opts.Stats.Failed.Add(1)

@@ -40,7 +40,7 @@ type Connection struct {
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
 	inlets    []Inlet
-	lastError string
+	history   errorHistory
 }
 
 func clientSettings(c Config) core.ClientConfig {
@@ -58,6 +58,7 @@ func OpenConnection(cfg Config, inlets []Inlet, relay *Config) (*Connection, err
 		return nil, err
 	}
 	c := &Connection{}
+	c.history.started = time.Now().UTC()
 	if relay != nil {
 		r := *relay
 		r.Role = "client"
@@ -160,7 +161,7 @@ func (c *Connection) SetInlets(inlets []Inlet) error {
 	return nil
 }
 
-func (c *Connection) failure(err error) { c.mu.Lock(); defer c.mu.Unlock(); c.lastError = err.Error() }
+func (c *Connection) failure(err error) { c.history.record(err) }
 func (c *Connection) Close() {
 	if c.cancel != nil {
 		c.cancel()
@@ -174,12 +175,19 @@ func (c *Connection) Close() {
 func (c *Connection) Snapshot() Snapshot {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	s := Snapshot{State: "running", Role: "client", LastConnectionError: c.lastError}
+	s := Snapshot{State: "running", Role: "client"}
+	if c.ctx.Err() != nil {
+		s.State = "stopped"
+	}
+	s.withDiagnostics(&c.history, c.cfg.MaxConnections, c.client)
+	if r := c.relay.Snapshot(); r.Role != "" {
+		s.Relay = &r
+	}
 	if len(c.inlets) > 0 {
 		s.Listen = c.inlets[0].Listen
 	}
 	a := &c.client.Stats
-	s.Stats = Counters{a.Accepted.Load(), a.Rejected.Load(), a.Completed.Load(), a.Failed.Load(), a.Authenticated.Load()}
+	s.Stats = counters(a)
 	return s
 }
 func (c *Connection) Inlets() []Inlet {

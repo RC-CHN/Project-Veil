@@ -4,8 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
-	"sync/atomic"
-	"veil/core"
+	"time"
 	"veil/inbound"
 )
 
@@ -18,30 +17,34 @@ type Runtime struct {
 }
 
 type running struct {
-	svc                 *Service
-	listen              string
-	role                string
-	cancel              context.CancelFunc
-	done                chan struct{}
-	err                 error // published by closing done
-	lastConnectionError atomic.Pointer[string]
+	svc     *Service
+	listen  string
+	role    string
+	cancel  context.CancelFunc
+	done    chan struct{}
+	err     error // published by closing done
+	history errorHistory
 }
 
 type Counters struct {
-	Accepted      uint64 `json:"accepted"`
-	Rejected      uint64 `json:"rejected"`
-	Completed     uint64 `json:"completed"`
-	Failed        uint64 `json:"failed"`
-	Authenticated uint64 `json:"authenticated"`
+	Accepted          uint64 `json:"accepted"`
+	Rejected          uint64 `json:"rejected"`
+	Completed         uint64 `json:"completed"`
+	Failed            uint64 `json:"failed"`
+	Authenticated     uint64 `json:"authenticated"`
+	ActiveConnections int64  `json:"active_connections"`
+	ActiveStreams     int64  `json:"active_streams"`
 }
 
 type Snapshot struct {
-	State               string   `json:"state"`
-	Listen              string   `json:"listen,omitempty"`
-	Role                string   `json:"role,omitempty"`
-	Stats               Counters `json:"stats"`
-	Error               string   `json:"error,omitempty"`
-	LastConnectionError string   `json:"last_connection_error,omitempty"`
+	Diagnostics         *Diagnostics `json:"diagnostics,omitempty"`
+	Relay               *Snapshot    `json:"relay,omitempty"`
+	State               string       `json:"state"`
+	Listen              string       `json:"listen,omitempty"`
+	Role                string       `json:"role,omitempty"`
+	Stats               Counters     `json:"stats"`
+	Error               string       `json:"error,omitempty"`
+	LastConnectionError string       `json:"last_connection_error,omitempty"`
 }
 
 func (r *Runtime) active() bool {
@@ -81,13 +84,8 @@ func (r *Runtime) start(s *Service) error {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	x := &running{svc: s, listen: ln.Addr().String(), role: s.cfg.Role, cancel: cancel, done: make(chan struct{})}
-	s.OnError = func(err error) {
-		var op *core.OpError
-		if errors.As(err, &op) {
-			message := err.Error()
-			x.lastConnectionError.Store(&message)
-		}
-	}
+	x.history.started = time.Now().UTC()
+	s.OnError = x.history.record
 	r.run = x
 	go func() {
 		defer close(x.done)
@@ -147,10 +145,8 @@ func (r *Runtime) Snapshot() Snapshot {
 			s.Error = x.err.Error()
 		}
 		c := x.svc.Stats
-		if message := x.lastConnectionError.Load(); message != nil {
-			s.LastConnectionError = *message
-		}
-		s.Stats = Counters{c.Accepted.Load(), c.Rejected.Load(), c.Completed.Load(), c.Failed.Load(), c.Authenticated.Load()}
+		s.withDiagnostics(&x.history, x.svc.cfg.MaxConnections, x.svc.client)
+		s.Stats = counters(c)
 	}
 	return s
 }

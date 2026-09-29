@@ -78,6 +78,8 @@ func run() error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	finishObserving := observe(ctx, m, log.Default())
+	defer finishObserving()
 	log.Printf("control listening on %s", *socket)
 	return local.Serve(ctx, ln, m)
 }
