@@ -281,7 +281,8 @@ jobs:
           VEIL_UI_OUTPUT: ${{ github.workspace }}/.build/ui-artifacts
         run: |
           npm ci --prefix veil-desktop/scripts/gui --ignore-scripts --no-audit --no-fund
-          node veil-desktop/scripts/gui/node_modules/playwright-core/cli.js install ffmpeg
+          # Playwright 1.58 maps the shared Linux encoder only through 24.04.
+          PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64 node veil-desktop/scripts/gui/node_modules/playwright-core/cli.js install ffmpeg
           CHROMIUM_PATH="$(command -v google-chrome || command -v chromium)"
           export CHROMIUM_PATH
           node veil-service/scripts/editor_smoke.cjs
