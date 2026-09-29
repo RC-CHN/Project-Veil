@@ -6,6 +6,11 @@ use OPNsense\Veil\Bridge;
 
 class ServiceController extends \OPNsense\Base\ApiControllerBase
 {
+    public function connectionsAction()
+    {
+        return $this->invoke('connections');
+    }
+
     public function statusAction()
     {
         return $this->invoke('status');
@@ -28,7 +33,7 @@ class ServiceController extends \OPNsense\Base\ApiControllerBase
 
     private function invoke(string $action): array
     {
-        if ($action !== 'status' && !$this->request->isPost()) {
+        if (!in_array($action, ['status', 'connections'], true) && !$this->request->isPost()) {
             $this->response->setStatusCode(405);
             return ['error' => ['code' => 'method', 'message' => 'POST required']];
         }

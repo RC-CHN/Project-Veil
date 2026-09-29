@@ -8,6 +8,18 @@ use OPNsense\Veil\Settings;
 
 class SettingsController extends \OPNsense\Base\ApiControllerBase
 {
+    public function connectionAction()
+    {
+        if (!$this->request->isPost()) { $this->response->setStatusCode(405); return ['error' => ['code' => 'method', 'message' => 'POST required']]; }
+        try {
+            $raw = $this->request->getPost('request');
+            if (!is_string($raw) || strlen($raw) > 65536) { throw new \InvalidArgumentException('Invalid connection request'); }
+            $request = json_decode($raw, true, 64, JSON_THROW_ON_ERROR);
+            if (!is_array($request)) { throw new \InvalidArgumentException('Expected an object'); }
+            return Bridge::call('connection', ['request' => $request]);
+        } catch (\Throwable $error) { return ['error' => ['code' => 'invalid_request', 'message' => $error->getMessage()]]; }
+    }
+
     public function getAction()
     {
         return (new Settings())->snapshot();

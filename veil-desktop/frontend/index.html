@@ -9,6 +9,7 @@
     />
     <title>Veil</title>
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="/shared/connections.css" />
   </head>
   <body>
     <div class="shell">
@@ -55,87 +56,7 @@
           </div>
         </section>
         <div id="feedback" role="status" aria-live="polite" hidden></div>
-        <section class="card">
-          <div class="card-header">
-            <div>
-              <h2 data-i18n="connection">Connection</h2>
-              <p id="profile-hint" data-i18n="importHint">
-                Import a JSON configuration to get started.
-              </p>
-            </div>
-            <button id="import" data-i18n="import">Import file</button>
-          </div>
-          <div id="empty" class="empty">
-            <span class="empty-icon" aria-hidden="true">↗</span>
-            <div>
-              <strong data-i18n="emptyTitle">Bring your connection.</strong>
-              <p data-i18n="emptyText">
-                Choose a configuration file from your server administrator, or
-                paste it below.
-              </p>
-            </div>
-          </div>
-          <div id="fields" class="fields" hidden>
-            <label
-              ><span data-i18n="protocol">Local proxy</span
-              ><select id="protocol">
-                <option value="mixed">SOCKS5 + HTTP</option>
-                <option value="socks">SOCKS5</option>
-                <option value="http">HTTP / HTTPS CONNECT</option>
-              </select></label
-            ><label
-              ><span data-i18n="listen">Listen address</span
-              ><input
-                id="listen"
-                type="text"
-                spellcheck="false"
-                autocomplete="off"
-                placeholder="127.0.0.1:1080"
-            /></label>
-          </div>
-          <details id="advanced">
-            <summary data-i18n="advanced">Configuration JSON</summary>
-            <p class="credential-note" data-i18n="credentials">
-              This configuration contains connection credentials.
-            </p>
-            <label for="config" class="sr-only" data-i18n="advanced"
-              >Configuration JSON</label
-            ><textarea
-              id="config"
-              spellcheck="false"
-              autocomplete="off"
-              rows="10"
-              placeholder="{ … }"
-            ></textarea>
-          </details>
-          <div class="editor-footer">
-            <span id="draft-state" data-i18n="noProfile"
-              >No saved connection</span
-            >
-            <div class="actions">
-              <button id="reload" class="quiet" data-i18n="reload">
-                Reload saved</button
-              ><button id="validate" data-i18n="validate">Validate</button
-              ><button id="save" data-i18n="save">Save</button>
-            </div>
-          </div>
-        </section>
-        <section class="connect-bar">
-          <div>
-            <strong id="connect-title" data-i18n="readyTitle"
-              >Ready when you are</strong
-            >
-            <p id="connect-hint" data-i18n="readyHint">
-              Save a connection, then start the local proxy.
-            </p>
-          </div>
-          <div class="actions">
-            <button id="apply" hidden data-i18n="apply">Apply changes</button
-            ><button id="toggle" class="primary" data-i18n="connect" disabled>
-              Connect
-            </button>
-          </div>
-        </section>
+        <section id="connection-list" aria-label="Connections"></section>
         <section class="system-proxy" aria-labelledby="system-proxy-title">
           <div>
             <label
@@ -147,6 +68,10 @@
             <p id="proxy-hint"></p>
           </div>
           <div class="actions">
+            <select
+              id="proxy-connection"
+              aria-label="System proxy connection"
+            ></select>
             <select id="proxy-mode">
               <option value="keep" data-i18n="proxyKeep">
                 Leave unchanged
@@ -205,6 +130,8 @@
       </form>
     </dialog>
     <script src="i18n.js"></script>
+    <script src="/shared/i18n.js"></script>
+    <script src="/shared/connections.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

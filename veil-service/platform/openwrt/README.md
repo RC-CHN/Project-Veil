@@ -20,7 +20,7 @@ make -C /path/to/luci/modules/luci-base/src po2lmo CC=cc
 python3 veil-service/scripts/openwrt_package.py \
   --sdk /path/to/openwrt-sdk \
   --po2lmo /path/to/luci/modules/luci-base/src/po2lmo \
-  --architecture x86_64 --version 0.3.2-1
+  --architecture x86_64 --version 0.3.3-1
 ```
 
 产物和 SHA-256 校验文件位于 `veil-service/.build/openwrt/`。`--architecture` 必须与设备 `opkg print-architecture` 一致；构建器支持 `x86_64`、`aarch64_*`、`arm_*`、`mips_*`、`mipsel_*`，ARM 使用 GOARM=5，MIPS 使用软浮点。ARM/MIPS 构建仍需对应设备验收。APK 包使用 apk-tools 3 的 `mkpkg`，通过 fakeroot 生成 root 属主：
@@ -29,7 +29,7 @@ python3 veil-service/scripts/openwrt_package.py \
 fakeroot python3 veil-service/scripts/openwrt_package.py \
   --format apk --apk-tool /path/to/apk \
   --po2lmo /path/to/po2lmo \
-  --architecture x86_64 --version 0.3.2-r1
+  --architecture x86_64 --version 0.3.3-r1
 ```
 
 若 apk 动态链接本地 libapk，先在 `LD_LIBRARY_PATH` 中加入其目录。构建器继承 fakeroot 所需的环境。
@@ -40,7 +40,7 @@ fakeroot python3 veil-service/scripts/openwrt_package.py \
 
 ```sh
 opkg update
-opkg install /tmp/veil_0.3.2-1_x86_64.ipk /tmp/luci-app-veil_0.3.2-1_all.ipk
+opkg install /tmp/veil_0.3.3-1_x86_64.ipk /tmp/luci-app-veil_0.3.3-1_all.ipk
 /etc/init.d/veil enable
 /etc/init.d/veil start
 ```
@@ -98,3 +98,7 @@ node veil-service/scripts/luci_smoke.cjs
 连接卡片的“导出”生成自包含 JSON：`version: 1`、`profile` 和可选 `relay`。中转地址、认证与 TLS 设置随连接一起携带；`ca_file` 引用的证书转换为 `tls.ca_pem`，不依赖原设备上的文件路径。导入自动识别路径并创建新的连接和中转 ID，保存时一次写入；本地代理监听地址和端口在确认表单中调整。导出的文件含连接凭据，请作为连接密钥保管。
 
 中转卡片只管理共享配置；Google HTTPS 测试位于完整连接卡片上，测量经过所选中转及最终出口的请求。界面根据配置中的依赖关系显示路径，不根据节点名称、IP 或地区推断角色。
+
+## 中转连接
+
+完整的服务器安装、同端口多出口、连接包和双层 Veil 配置见[中转部署与连接](../../RELAY.md)。

@@ -126,6 +126,11 @@ def main():
             for source in base.rglob("*"):
                 if source.is_file():
                     copy(source, app, str(Path(prefix) / source.relative_to(base)))
+        shared = ROOT / "webui"
+        for name in ("connections.js", "connections.css", "i18n.js"):
+            copy(shared / name, app, "www/luci-static/resources/veil/" + name)
+        adapter = app / "www/luci-static/resources/view/veil.js"
+        adapter.write_text(adapter.read_text().replace("__VEIL_UI_VERSION__", args.version))
         translation = app / "usr/lib/lua/luci/i18n/veil.zh-cn.lmo"
         translation.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run(

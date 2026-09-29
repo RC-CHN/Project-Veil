@@ -25,17 +25,19 @@ type Backend interface {
 }
 
 type record struct {
-	Mode    string   `json:"mode"`
-	Backend string   `json:"backend,omitempty"`
-	Before  Snapshot `json:"before,omitempty"`
-	Applied Snapshot `json:"applied,omitempty"`
+	Mode       string   `json:"mode"`
+	Connection string   `json:"connection,omitempty"`
+	Backend    string   `json:"backend,omitempty"`
+	Before     Snapshot `json:"before,omitempty"`
+	Applied    Snapshot `json:"applied,omitempty"`
 }
 
 type Status struct {
-	Mode      string `json:"mode"`
-	Supported bool   `json:"supported"`
-	Managed   bool   `json:"managed"`
-	Error     string `json:"error,omitempty"`
+	Mode       string `json:"mode"`
+	Connection string `json:"connection,omitempty"`
+	Supported  bool   `json:"supported"`
+	Managed    bool   `json:"managed"`
+	Error      string `json:"error,omitempty"`
 }
 
 type Controller struct {
@@ -73,7 +75,21 @@ func Open(path string, backend Backend) (*Controller, error) {
 func (c *Controller) Status() Status {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return Status{Mode: c.state.Mode, Supported: c.backend != nil, Managed: c.state.Applied != nil, Error: c.lastError}
+	return Status{Mode: c.state.Mode, Connection: c.state.Connection, Supported: c.backend != nil, Managed: c.state.Applied != nil, Error: c.lastError}
+}
+
+// SelectConnection records a host-selected profile; this package does not know
+// catalog or listener semantics and never starts a connection itself.
+func (c *Controller) SelectConnection(id string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	previous := c.state.Connection
+	c.state.Connection = id
+	if err := c.save(); err != nil {
+		c.state.Connection = previous
+		return err
+	}
+	return nil
 }
 
 func (c *Controller) save() error {
@@ -235,7 +251,7 @@ func (c *Controller) Clear() error {
 		return errors.Join(err, c.backend.Write(current))
 	}
 	previous := c.state
-	c.state = record{Mode: "keep"}
+	c.state = record{Mode: "keep", Connection: c.state.Connection}
 	if err = c.save(); err != nil {
 		c.state = previous
 		return errors.Join(err, c.backend.Write(current))

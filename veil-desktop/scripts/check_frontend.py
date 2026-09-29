@@ -34,3 +34,5 @@ console.log('Desktop English/Chinese labels and JS syntax passed.');
     ],
     check=True,
 )
+
+subprocess.run(["python3", str(ROOT.parent / "veil-service/scripts/check_webui.py")], check=True)

@@ -21,7 +21,7 @@ class Engine
                 }
                 $request = substr($request, $written);
             }
-            $reply = fgets($socket, 2 * 1024 * 1024);
+            $reply = fgets($socket, 4 * 1024 * 1024 + 1);
             if ($reply === false || !str_ends_with($reply, "\n")) {
                 throw new \RuntimeException('Control response is incomplete');
             }

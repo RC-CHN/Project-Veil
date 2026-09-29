@@ -12,7 +12,7 @@ class Bridge
 
     public static function call(string $action, ?array $payload = null): array
     {
-        if (!in_array($action, ['status', 'validate', 'start', 'stop', 'restart'], true)) {
+        if (!in_array($action, ['status', 'validate', 'start', 'stop', 'restart', 'connections', 'connection'], true)) {
             throw new \InvalidArgumentException('Unsupported control action');
         }
         $path = null;

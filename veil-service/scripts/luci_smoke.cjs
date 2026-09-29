@@ -16,7 +16,7 @@ const labels = zh
 			apply: '应用更改',
 			stop: '停止',
 			running: '代理已启动',
-			disabled: '连接已停用',
+			disabled: '已停止',
 		}
 	: {
 			save: 'Save and apply',
@@ -24,7 +24,7 @@ const labels = zh
 			apply: 'Apply changes',
 			stop: 'Stop',
 			running: 'Proxy started',
-			disabled: 'Connection disabled',
+			disabled: 'Stopped',
 		};
 (async () => {
 	const output = path.resolve(env.VEIL_LUCI_OUTPUT || '.build/luci-review');
@@ -131,8 +131,8 @@ const labels = zh
 		const renamed = page
 			.locator('.veil-card')
 			.filter({ has: page.getByRole('heading', { name: 'Veil renamed', exact: true }) });
-		await renamed.locator('.veil-switch').click();
-		await page.getByRole('button', { name: labels.stop, exact: true }).click();
+		await renamed.getByRole('button', { name: labels.stop, exact: true }).click();
+		await page.locator('dialog.veil-dialog').getByRole('button', { name: labels.stop, exact: true }).click();
 		await renamed.getByText(labels.disabled, { exact: true }).waitFor();
 		await page.screenshot({ path: path.join(output, 'desktop.png'), fullPage: true });
 		await page.setViewportSize({ width: 390, height: 844 });

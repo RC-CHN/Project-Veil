@@ -73,6 +73,7 @@ cargo build --manifest-path veil-rust/Cargo.toml --release --locked
 
 - [线协议规范](PROTOCOL.md)：字节格式、认证计算、流状态机和固定向量。
 - [核心使用说明](veil-core/README.md)：配置、嵌入 API 和传输策略。
+- [中转部署与连接](veil-service/RELAY.md)：同一中转端口、多出口、连接包导入、双层 Veil 与排查步骤。
 - [控制服务说明](veil-service/README.md)：配置保存、启停控制和平台适配。
 - [Linux 安装与管理](veil-service/platform/systemd/README.md)：发行包、安装卸载、实例管理与日志。
 - [OpenWrt / LuCI](veil-service/platform/openwrt/README.md)：SOCKS5 与 HTTP 入口、软件包、配置导入与双语界面。

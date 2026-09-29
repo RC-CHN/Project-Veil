@@ -137,3 +137,9 @@ veilctl -socket /var/run/veil/control.sock -config office.json -if-revision '' c
 ```
 
 连接包包含认证信息；只向有配置写入权限的调用方开放导出。`connection_test` 仅接受完整连接，不接受独立中转配置。
+
+## 中转连接
+
+完整的服务器安装、同端口多出口、连接包和双层 Veil 配置见[中转部署与连接](RELAY.md)。
+
+连接故障定位、分层诊断和日志读取见[连接诊断](DIAGNOSTICS.md)。

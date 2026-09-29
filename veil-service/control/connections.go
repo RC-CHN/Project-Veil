@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 	"veil/service"
@@ -63,6 +64,7 @@ type connectionEntry struct {
 	active                                  string
 	err                                     string
 	probe                                   *ProbeResult
+	last                                    *service.Snapshot
 }
 type Catalog struct {
 	mu       sync.Mutex
@@ -151,6 +153,9 @@ func (c *Catalog) list() []ConnectionStatus {
 		if r, ok := c.profiles[p.RelayID]; ok {
 			s.RelayName = r.Name
 			s.RelayServer = r.Config.Server
+		}
+		if e.last != nil && e.run == nil {
+			s.Snapshot = *e.last
 		}
 		if p.Kind == "relay" {
 			s.State = "ready"
@@ -328,6 +333,8 @@ func (c *Catalog) stop(id string) {
 	e := c.entry(id)
 	if e.run != nil {
 		e.run.Close()
+		last := e.run.Snapshot()
+		e.last = &last
 		e.run = nil
 	}
 	e.active = ""
@@ -403,6 +410,9 @@ func (c *Catalog) Handle(q Request) Response {
 	}
 	if c.closed {
 		return Fail("closed", errors.New("manager is closed"))
+	}
+	if strings.HasPrefix(q.Action, "connections_") {
+		return c.handleSnapshot(q)
 	}
 	if q.Action == "connections" {
 		return Response{Version: Version, Connections: c.list()}

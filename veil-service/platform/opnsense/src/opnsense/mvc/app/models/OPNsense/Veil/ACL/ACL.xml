@@ -12,6 +12,7 @@
         <patterns>
             <pattern>ui/veil/*</pattern>
             <pattern>api/veil/service/status</pattern>
+            <pattern>api/veil/service/connections</pattern>
         </patterns>
     </page-veil-status>
 </acl>

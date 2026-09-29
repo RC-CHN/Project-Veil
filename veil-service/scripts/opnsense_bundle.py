@@ -37,6 +37,12 @@ def main():
             shutil.copytree(args.plugins / name, folder / name)
         port = folder / "net/veil"
         shutil.copytree(ROOT / "platform/opnsense", port)
+        shared = port / "src/opnsense/www/js/veil/shared"
+        shared.mkdir(parents=True, exist_ok=True)
+        for name in ("connections.js", "connections.css", "i18n.js"):
+            shutil.copyfile(ROOT / "webui" / name, shared / name)
+        view = port / "src/opnsense/mvc/app/views/OPNsense/Veil/index.volt"
+        view.write_text(view.read_text().replace("__VEIL_UI_VERSION__", args.version))
         subprocess.run(
             [
                 sys.executable,

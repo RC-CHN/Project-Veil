@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"veil-desktop/internal/systemproxy"
@@ -57,8 +58,26 @@ func openApp(dir string) (*App, error) {
 }
 
 func (a *App) Request(q control.Request) control.Response {
+	switch q.Action {
+	case "connections", "connection_get", "connection_export", "connection_test", "status", "config", "validate":
+		return a.manager.Handle(q)
+	}
 	a.opMu.Lock()
 	defer a.opMu.Unlock()
+	if q.Action == "connections" || strings.HasPrefix(q.Action, "connection_") {
+		r := a.manager.Handle(q)
+		if q.Action == "connection_delete" && r.Error == nil && a.proxy.Status().Connection == q.ID {
+			if err := a.proxy.SelectConnection(""); err != nil {
+				r.Error = &control.Failure{Code: "system_proxy_failed", Message: err.Error()}
+			}
+		}
+		if q.Action == "connection_start" || q.Action == "connection_stop" || q.Action == "connection_delete" || (q.Action == "connection_save" && q.Apply) {
+			if err := a.syncCatalogProxy(); err != nil && r.Error == nil {
+				r.Error = &control.Failure{Code: "system_proxy_failed", Message: err.Error()}
+			}
+		}
+		return r
+	}
 	wasRunning := a.manager.Status().State == "running"
 	r := a.manager.Handle(q)
 	if r.Error == nil && (q.Action == "restart" || (q.Action == "start" && !wasRunning)) {
@@ -156,4 +175,33 @@ func (a *App) close() {
 	}
 	a.manager.Close()
 	a.lock.Close()
+}
+
+// PrepareConnections migrates the saved single client once, without starting it.
+func (a *App) PrepareConnections() error {
+	a.opMu.Lock()
+	defer a.opMu.Unlock()
+	return a.manager.MigrateConnection()
+}
+
+// Export writes the explicitly requested portable bundle; the frontend never
+// chooses an arbitrary filesystem path or exports credentials during polling.
+func (a *App) Export(id string) error {
+	r := a.Request(control.Request{Version: 1, Action: "connection_export", ID: id})
+	if r.Error != nil {
+		return errors.New(r.Error.Message)
+	}
+	data, err := json.MarshalIndent(struct {
+		Version int              `json:"version"`
+		Profile *control.Profile `json:"profile"`
+		Relay   *control.Profile `json:"relay,omitempty"`
+	}{1, r.Profile, r.Relay}, "", "  ")
+	if err != nil {
+		return err
+	}
+	path, err := wailsruntime.SaveFileDialog(a.ctx, wailsruntime.SaveDialogOptions{Title: a.text("Export connection", "导出连接"), DefaultFilename: id + ".json", Filters: []wailsruntime.FileFilter{{DisplayName: "JSON", Pattern: "*.json"}}})
+	if err != nil || path == "" {
+		return err
+	}
+	return control.WritePrivateFile(path, append(data, '\n'))
 }

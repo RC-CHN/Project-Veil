@@ -45,7 +45,7 @@ func Fail(code string, err error) Response {
 // Handle serializes changes, including the status returned with each change.
 // Saving never restarts a running instance. Start never applies pending changes.
 func (m *Manager) Handle(q Request) Response {
-	if q.Action == "connections" || strings.HasPrefix(q.Action, "connection_") {
+	if q.Action == "connections" || strings.HasPrefix(q.Action, "connections_") || strings.HasPrefix(q.Action, "connection_") {
 		return m.catalog.Handle(q)
 	}
 	m.mu.Lock()

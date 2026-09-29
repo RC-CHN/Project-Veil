@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Check LuCI syntax, translation coverage and the read-only ACL without an SDK."""
 
+from check_webui import check as check_webui
+
 import ast
 import json
 from pathlib import Path
@@ -38,6 +40,7 @@ def catalog(path):
 
 
 def main():
+    check_webui()
     source = APP / "htdocs/luci-static/resources/view/veil.js"
     subprocess.run(["node", "--check", str(source)], check=True)
     subprocess.run(["node", "--check", str(ROOT / "scripts/luci_smoke.cjs")], check=True)

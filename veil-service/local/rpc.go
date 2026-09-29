@@ -16,18 +16,21 @@ import (
 )
 
 const maxRequest = service.MaxConfigSize + 1024
+const maxResponse = 4 * service.MaxConfigSize
 
 // ErrStateLocked means another process already owns the instance directory.
 var ErrStateLocked = errors.New("another process owns this state directory or socket")
 
 // One bounded JSON line per connection. No HTTP server or background poller is
 // needed for this private, local command channel.
-func readMessage(r io.Reader, v any) error {
-	b, err := bufio.NewReader(io.LimitReader(r, maxRequest+1)).ReadBytes('\n')
+func readMessage(r io.Reader, v any) error { return readBoundedMessage(r, v, maxRequest) }
+
+func readBoundedMessage(r io.Reader, v any, limit int) error {
+	b, err := bufio.NewReader(io.LimitReader(r, int64(limit)+1)).ReadBytes('\n')
 	if err != nil {
 		return err
 	}
-	if len(b) > maxRequest {
+	if len(b) > limit {
 		return errors.New("control message too large")
 	}
 	d := json.NewDecoder(bytes.NewReader(b))
@@ -101,7 +104,7 @@ func Call(ctx context.Context, socket string, q control.Request) (control.Respon
 	if err := json.NewEncoder(c).Encode(q); err != nil {
 		return result, err
 	}
-	if err := readMessage(c, &result); err != nil {
+	if err := readBoundedMessage(c, &result, maxResponse); err != nil {
 		return result, err
 	}
 	if result.Version != control.Version {

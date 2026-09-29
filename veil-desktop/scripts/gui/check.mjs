@@ -41,6 +41,14 @@ async function mode(value) {
   await page.locator('#proxy-mode').selectOption(value);
   if (value === 'auto') await confirm(); else await idle();
 }
+async function toggle() {
+  const card = page.locator('.veil-card').first();
+  const running = await card.getAttribute('data-state') === 'running';
+  await card.getByRole('button', {name: /^(Start|Stop|启动|停止)$/}).click();
+  if (running) await page.locator('dialog.veil-dialog').getByRole('button', {name: /^(Stop|停止)$/}).click();
+  await page.waitForFunction(expected => document.querySelector('.veil-card').dataset.state === expected, running ? 'stopped' : 'running');
+  await idle();
+}
 async function screenshot(name) {
   await page.screenshot({path: path.join(fixture.artifacts, name + '.png')});
 }
@@ -58,11 +66,14 @@ try {
   await page.waitForSelector('#language'); await idle();
   await page.locator('#language').selectOption('zh');
   if (await page.locator('html').getAttribute('data-theme') !== 'light') await click('theme');
-  await page.locator('#advanced > summary').click();
-  await page.locator('#config').fill(fs.readFileSync(fixture.config, 'utf8'));
-  await click('validate'); await click('save');
-  await page.locator('#advanced > summary').click();
-  await click('toggle');
+  await page.getByRole('button', {name:'粘贴 JSON',exact:true}).click();
+  await page.locator('dialog.veil-dialog textarea').fill(fs.readFileSync(fixture.config,'utf8'));
+  await page.locator('dialog.veil-dialog').getByRole('button',{name:'导入',exact:true}).click();
+  await page.locator('#veil-enabled').check();
+  await page.locator('dialog.veil-dialog').getByRole('button',{name:'保存并应用',exact:true}).click();
+  await page.locator('.veil-card').first().waitFor();
+  await page.locator('#proxy-connection').selectOption({index:1});
+  await idle();
   await page.waitForFunction(() => document.querySelector('#state').classList.contains('running'));
   assert.deepEqual(native('proxy'), fixture.baseline); transfers();
   await mode('auto'); assert.equal(native('proxy').flags, 3);
@@ -78,8 +89,8 @@ try {
   native('show');
   assert.equal(native('window').visible, true);
   await mode('keep'); assert.deepEqual(native('proxy'), fixture.baseline); transfers();
-  await mode('auto'); await click('toggle'); assert.deepEqual(native('proxy'), fixture.baseline);
-  await click('toggle'); assert.equal(native('proxy').flags, 3);
+  await mode('auto'); await toggle(); assert.deepEqual(native('proxy'), fixture.baseline);
+  await toggle(); assert.equal(native('proxy').flags, 3);
   await page.locator('#quit').click(); await page.locator('#confirmation').waitFor({state:'visible'});
   await screenshot('quit-zh'); await page.keyboard.press('Escape'); await idle(); transfers();
   await page.locator('#language').selectOption('en'); await click('theme');
@@ -96,9 +107,7 @@ try {
   await page.locator('#quit').click();
   await page.locator('#confirmation-accept').click();
 } catch (error) {
-  if (await page.locator('#advanced').getAttribute('open').catch(() => null) !== null) {
-    await page.locator('#advanced > summary').click().catch(() => {});
-  }
+  await page.locator('dialog.veil-dialog').evaluateAll(nodes => nodes.forEach(node => node.remove())).catch(()=>{});
   await screenshot('failure').catch(() => {});
   throw error;
 } finally {

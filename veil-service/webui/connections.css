@@ -1,0 +1,353 @@
+.veil-page {
+  max-width: 1200px;
+}
+.veil-head,
+.veil-card-head,
+.veil-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.veil-head,
+.veil-card-head {
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.veil-head h2,
+.veil-card h3 {
+  margin: 0 !important;
+}
+.veil-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: 20px;
+}
+.veil-card {
+  min-width: 0;
+  padding: 22px;
+  border: 1px solid rgba(128, 128, 128, 0.2);
+  border-radius: 12px;
+  background: var(--surface, var(--cbi-section-bg, #fff));
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.035);
+}
+.veil-card code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  overflow-wrap: anywhere;
+}
+.veil-server {
+  display: block;
+  margin-top: 8px;
+}
+.veil-badge {
+  padding: 5px 12px;
+  border-radius: 20px;
+  background: #e9edf2;
+  color: #354052;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.veil-running {
+  background: #d9f3e6;
+  color: #145b3b;
+}
+.veil-muted {
+  opacity: 0.72;
+  line-height: 1.7;
+}
+.veil-route {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-bottom: 16px;
+  overflow-wrap: anywhere;
+}
+.veil-endpoints {
+  margin: 18px 0;
+  display: grid;
+  gap: 8px;
+}
+.veil-endpoint {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(113, 132, 160, 0.08);
+  border-radius: 6px;
+}
+.veil-test-result {
+  margin: 16px 0;
+}
+.veil-test-result small {
+  margin-left: 12px;
+  opacity: 0.65;
+}
+.veil-error {
+  color: var(--danger, #b53c46);
+  overflow-wrap: anywhere;
+}
+.veil-error:empty {
+  display: none;
+}
+.veil-notice,
+.veil-confirm {
+  border-left: 3px solid #7184a0;
+  padding: 12px;
+  background: rgba(113, 132, 160, 0.08);
+}
+.veil-relay-heading {
+  margin-top: 32px;
+}
+.veil-footnote {
+  margin-top: 24px;
+  font-size: 13px;
+}
+.veil-enable {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.veil-switch {
+  width: 18px !important;
+  height: 18px !important;
+}
+.veil-more summary {
+  cursor: pointer;
+  padding: 8px;
+}
+.veil-more[open] {
+  flex-basis: 100%;
+}
+.veil-right {
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+.veil-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.veil-field {
+  display: flex !important;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 14px;
+}
+.veil-field input,
+.veil-field select,
+.veil-editor {
+  width: 100% !important;
+  box-sizing: border-box;
+}
+.veil-field small {
+  opacity: 0.7;
+}
+.veil-field [aria-invalid='true'] {
+  border-color: var(--danger, #b53c46) !important;
+}
+.veil-editor-form {
+  max-width: 860px;
+}
+.veil-editor-form h4 {
+  margin: 24px 0 14px;
+}
+.veil-inlet-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.5fr 0.7fr auto;
+  gap: 10px;
+  align-items: center;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+  margin-bottom: 12px;
+}
+.veil-editor {
+  font-family: monospace;
+  margin-top: 12px;
+}
+.veil-editor-form details {
+  margin-top: 20px;
+}
+.veil-page button,
+.veil-editor-form button {
+  min-height: 36px;
+}
+.veil-page button:disabled {
+  opacity: 0.45;
+}
+.veil-page [hidden],
+.veil-editor-form [hidden],
+.veil-confirm[hidden] {
+  display: none !important;
+}
+.veil-empty {
+  padding: 32px;
+  border: 1px dashed #a7afba;
+  border-radius: 12px;
+}
+@media (max-width: 600px) {
+  .veil-card {
+    padding: 16px;
+  }
+  .veil-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .veil-inlet-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .veil-actions {
+    gap: 8px;
+  }
+  .veil-head .veil-actions {
+    width: 100%;
+  }
+  .veil-head .veil-actions button {
+    flex: 1;
+  }
+  .veil-right button {
+    flex: 1;
+  }
+}
+/* Host adapters detect an explicitly selected router theme, independent of OS preference. */
+.veil-page[data-theme='dark'],
+.veil-dialog[data-theme='dark'] {
+  --surface: #2b2b2b;
+  --line: #535353;
+  --text: #ddd;
+  --accent: #79b2e0;
+  color: var(--text);
+}
+.veil-page h2,
+.veil-page h3,
+.veil-dialog h2,
+.veil-dialog h3,
+.veil-dialog h4 {
+  color: inherit;
+  background: transparent;
+  box-shadow: none;
+  border: 0;
+}
+
+.veil-card h3,
+.veil-relay-heading h3 {
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  width: auto !important;
+}
+.veil-relay-heading h3 {
+  margin: 0 !important;
+}
+.veil-card-head > div {
+  min-width: 0;
+}
+
+.veil-dialog {
+  margin: auto;
+  inset: 0;
+  box-sizing: border-box;
+  color: inherit;
+  background: var(--surface, var(--cbi-section-bg, #fff));
+  border: 1px solid var(--line, #bbb);
+  border-radius: 14px;
+  width: min(900px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  padding: 24px;
+  overflow: auto;
+}
+.veil-dialog::backdrop {
+  background: #14251b77;
+}
+.veil-dialog input,
+.veil-dialog select,
+.veil-dialog textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--surface, transparent);
+  border: 1px solid var(--line, #aaa);
+  border-radius: 6px;
+  padding: 9px;
+  min-width: 0;
+  width: 100%;
+}
+.veil-dialog input[type='checkbox'] {
+  width: auto;
+}
+.veil-dialog button,
+.veil-page button {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--line, #aaa);
+  border-radius: 6px;
+  padding: 9px 14px;
+  background: var(--surface, transparent);
+  color: inherit;
+}
+.veil-dialog .cbi-button-positive,
+.veil-page .cbi-button-positive {
+  background: var(--accent, #2776a6);
+  color: var(--surface, white);
+}
+.veil-dialog button:disabled,
+.veil-page button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.veil-dialog [hidden],
+.veil-page [hidden] {
+  display: none !important;
+}
+
+.veil-diagnostic-hop {
+  margin: 24px 0;
+}
+.veil-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+.veil-metrics > div {
+  padding: 12px;
+  background: rgba(113, 132, 160, 0.08);
+  border-radius: 8px;
+}
+.veil-metrics dt {
+  font-size: 12px;
+  opacity: 0.72;
+}
+.veil-metrics dd {
+  margin: 6px 0 0;
+  font-variant-numeric: tabular-nums;
+}
+.veil-diagnostic-event {
+  padding: 12px 0;
+  border-top: 1px solid rgba(128, 128, 128, 0.2);
+  overflow-wrap: anywhere;
+}
+.veil-diagnostic-event small {
+  display: block;
+  opacity: 0.72;
+  margin-top: 4px;
+}
+.veil-diagnostic-raw {
+  max-height: 300px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.veil-dialog h2,
+.veil-dialog h3,
+.veil-dialog h4 {
+  padding: 0;
+}
+.veil-dialog > .veil-actions.veil-right {
+  position: sticky;
+  bottom: -24px;
+  background: var(--surface, #fff);
+  padding: 16px 0;
+}

@@ -7,6 +7,7 @@ use OPNsense\Core\Config;
 use OPNsense\Veil\Bridge;
 use OPNsense\Veil\Engine;
 use OPNsense\Veil\Settings;
+use OPNsense\Veil\Catalog;
 
 function requestPayload(string $id): array
 {
@@ -56,6 +57,10 @@ function ensureDaemon(): void
 
 function executeAction(string $action, array $payload): array
 {
+    if ($action === 'connections' || $action === 'connection') {
+        if ($action === 'connection') { ensureDaemon(); }
+        return Catalog::execute($action, json_decode(json_encode($payload['request'] ?? [], JSON_THROW_ON_ERROR), true, 64, JSON_THROW_ON_ERROR));
+    }
     if ($action === 'status') {
         $result = Engine::call('status');
         $model = new Settings();
@@ -71,6 +76,10 @@ function executeAction(string $action, array $payload): array
     ensureDaemon();
     if ($action === 'validate') {
         return Engine::call('validate', ['config' => $payload['config'] ?? null]);
+    }
+    if ($action === 'configure') {
+        $catalog = Catalog::execute('configure');
+        if (isset($catalog['error']) || (string)(new Settings())->profile === '') { return $catalog; }
     }
     $system = Config::getInstance()->lock();
     try {
@@ -97,23 +106,23 @@ function executeAction(string $action, array $payload): array
 
 try {
     $action = $argv[1] ?? '';
-    if (!in_array($action, ['status', 'validate', 'start', 'stop', 'restart', 'configure'], true)) {
+    if (!in_array($action, ['status', 'validate', 'start', 'stop', 'restart', 'configure', 'connections', 'connection'], true)) {
         throw new InvalidArgumentException('Unsupported action');
     }
-    $needsPayload = in_array($action, ['validate', 'start', 'restart'], true);
+    $needsPayload = in_array($action, ['validate', 'start', 'restart', 'connection'], true);
     if (count($argv) !== ($needsPayload ? 3 : 2)) {
         throw new InvalidArgumentException('Invalid action arguments');
     }
     $payload = $needsPayload ? requestPayload($argv[2]) : [];
-    $lock = fopen('/var/run/veil/platform.lock', 'c');
-    if ($lock === false || !flock($lock, LOCK_EX)) {
+    $readOnly = in_array($action, ['status', 'connections'], true) || ($action === 'connection' && ($payload['request']->action ?? '') === 'connection_test');
+    $lock = $readOnly ? null : fopen('/var/run/veil/platform.lock', 'c');
+    if (!$readOnly && ($lock === false || !flock($lock, LOCK_EX))) {
         throw new RuntimeException('Unable to lock management operation');
     }
     try {
         $result = executeAction($action, $payload);
     } finally {
-        flock($lock, LOCK_UN);
-        fclose($lock);
+        if ($lock !== null) { flock($lock, LOCK_UN); fclose($lock); }
     }
 } catch (Throwable $error) {
     $result = ['error' => ['code' => 'control_failed', 'message' => $error->getMessage()]];

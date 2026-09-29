@@ -110,3 +110,20 @@ func TestBoundedStrictRequests(t *testing.T) {
 		t.Fatal("malformed request changed state")
 	}
 }
+
+func TestResponsesHaveSeparateBound(t *testing.T) {
+	// A catalog may combine a near-limit config and diagnostics. Requests must
+	// retain their smaller bound while clients can read that complete response.
+	input := `{"version":1,"config":{"text":"` + strings.Repeat("x", maxRequest) + `"}}` + "\n"
+	var response control.Response
+	if err := readBoundedMessage(strings.NewReader(input), &response, maxResponse); err != nil {
+		t.Fatal(err)
+	}
+	if err := readMessage(strings.NewReader(input), &response); err == nil {
+		t.Fatal("request limit expanded with response limit")
+	}
+	input = `{"version":1,"config":"` + strings.Repeat("x", maxResponse) + `"}` + "\n"
+	if err := readBoundedMessage(strings.NewReader(input), &response, maxResponse); err == nil {
+		t.Fatal("unbounded response")
+	}
+}

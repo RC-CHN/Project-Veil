@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"veil-service/webui"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -62,7 +63,7 @@ func run() error {
 	return wails.Run(&options.App{
 		Title: "Veil", Width: 1040, Height: 850, MinWidth: 640, MinHeight: 600,
 		BackgroundColour: options.NewRGB(246, 248, 247),
-		AssetServer:      &assetserver.Options{Assets: assets}, Bind: []interface{}{a},
+		AssetServer:      &assetserver.Options{Assets: assets, Handler: webui.Handler()}, Bind: []interface{}{a},
 		OnStartup:     func(ctx context.Context) { a.ctx = ctx },
 		OnBeforeClose: a.beforeClose,
 		OnDomReady:    a.startTray,

@@ -133,3 +133,10 @@ func writeConfig(path string, b []byte) (committed bool, err error) {
 
 // StartConnections restores independently enabled connection profiles.
 func (m *Manager) StartConnections() { m.catalog.Autostart() }
+
+// WritePrivateFile atomically exports a user-selected file with the same private
+// permissions as saved configuration, including when replacing an existing file.
+func WritePrivateFile(path string, data []byte) error {
+	_, err := writeConfig(path, data)
+	return err
+}

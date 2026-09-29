@@ -1,140 +1,261 @@
 'use strict';
-
 $(function () {
-    const writable = window.veilUI.writable;
-    const tr = text => window.veilUI.catalog[text] || text;
-    const el = id => document.getElementById('veil-' + id);
-    const note = (id, text) => { el(id).textContent = text; el(id).hidden = !text; };
-    document.querySelectorAll('#veil-page [data-i18n]').forEach(node => { node.textContent = tr(node.dataset.i18n); });
-    el('settings').hidden = !writable;
-    let current = {}, busy = false, saved = '', revision = '', savedEnabled = false;
-
-    async function api(endpoint, data) {
-        const result = await (data === undefined ? ajaxGet('/api/veil/' + endpoint, {}) : ajaxCall('/api/veil/' + endpoint, data));
-        if (result.error) {
-            const labels = {
-                conflict: 'The saved configuration changed elsewhere. Reload it before saving again.',
-                invalid_config: 'Configuration validation failed.',
-                unavailable: 'The control service is unavailable.',
-                no_config: 'Import and save a configuration first.'
-            };
-            throw new Error(tr(labels[result.error.code] || 'Operation failed.') + ' ' + result.error.message);
-        }
-        return result;
+  const { writable, language } = window.veilUI;
+  const tr = (text) => window.VeilTranslations[language]?.[text] || text;
+  const el = (id) => document.getElementById('veil-' + id);
+  const note = (id, text) => {
+    el(id).textContent = text;
+    el(id).hidden = !text;
+  };
+  document.querySelectorAll('#veil-page [data-i18n]').forEach((node) => {
+    node.textContent = tr(node.dataset.i18n);
+  });
+  const request = (q) =>
+    q.action === 'connections'
+      ? ajaxGet('/api/veil/service/connections', {})
+      : ajaxCall('/api/veil/settings/connection', {
+          request: JSON.stringify(q),
+        });
+  const common = window.VeilConnections({
+    root: el('connections'),
+    language,
+    writable,
+    request,
+  });
+  el('settings').hidden = !writable;
+  let status = {},
+    revision = '',
+    saved = '',
+    savedEnabled = false,
+    busy = false;
+  const dirty = () =>
+    saved !== el('json').value || savedEnabled !== el('enabled').checked;
+  async function api(endpoint, data) {
+    const result = await (data === undefined
+      ? ajaxGet('/api/veil/' + endpoint, {})
+      : ajaxCall('/api/veil/' + endpoint, data));
+    if (result.error) throw new Error(result.error.message);
+    return result;
+  }
+  function buttons() {
+    el('settings').disabled = busy;
+    const running = status.status?.state === 'running';
+    el('start').disabled =
+      !writable || busy || running || !el('json').value.trim();
+    el('start').textContent = dirty() ? tr('Save and start') : tr('Start');
+    el('stop').disabled = !writable || busy || !running;
+    for (const id of ['save', 'save-apply', 'validate'])
+      el(id).disabled =
+        busy ||
+        !writable ||
+        !el('json').value.trim() ||
+        (id === 'save' && !dirty());
+    el('reload').disabled = !dirty() || busy;
+    el('export').disabled = !el('json').value.trim() || busy;
+    el('migrate').disabled = !writable || busy;
+  }
+  async function refresh() {
+    try {
+      status = await api('service/status');
+      el('state').textContent = tr(
+        status.status?.state === 'running' ? 'Running' : 'Stopped',
+      );
+      el('listen').textContent = status.status?.listen || '';
+      el('status-json').textContent = JSON.stringify(status, null, 2);
+      note(
+        'notice',
+        status.pending ? tr('Saved changes are waiting to be applied.') : '',
+      );
+      if (status.status?.error) note('error', status.status.error);
+    } catch (error) {
+      el('state').textContent = tr('Service unavailable');
+      note('error', error.message);
     }
-
-    function buttons() {
-        const running = current.status?.state === 'running';
-        el('start').disabled = busy || !writable || running || !current.configured;
-        el('stop').disabled = busy || !writable || !running;
-        el('apply').disabled = busy || !writable || !current.configured || !current.pending || !running;
-        el('save').disabled = busy || !writable || (saved === el('json').value && savedEnabled === el('enabled').checked);
-        el('validate').disabled = busy || !writable || !el('json').value.trim();
-        for (const id of ['choose', 'file', 'json', 'enabled', 'reload']) el(id).disabled = busy || !writable;
-        for (const id of ['protocol', 'address']) el(id).disabled = busy || !writable || !el('json').value.trim();
+    buttons();
+  }
+  async function load() {
+    const result = await api('settings/get');
+    revision = result.revision;
+    saved = result.profile;
+    savedEnabled = result.enabled;
+    el('json').value = saved;
+    el('enabled').checked = savedEnabled;
+    let legacyClient = false;
+    try {
+      const cfg = JSON.parse(saved);
+      legacyClient = cfg.role === 'client' && !cfg.target;
+    } catch (_) {}
+    el('migrate').hidden = !legacyClient;
+    if (legacyClient) {
+      el('standalone').open = true;
+      note(
+        'notice',
+        tr(
+          'Move this existing client into the shared connection list. Its connection information is preserved.',
+        ),
+      );
     }
-
-    async function refresh() {
-        try {
-            current = await api('service/status');
-            const status = current.status || {};
-            el('state').textContent = tr(status.state === 'running' ? 'Running' : 'Stopped');
-            el('state').className = 'label ' + (status.state === 'running' ? 'label-success' : 'label-default');
-            el('role').textContent = status.role ? tr(status.role === 'client' ? 'Client' : 'Server') : '—';
-            el('listen').textContent = status.listen || '—';
-            el('count').textContent = status.stats?.completed || 0;
-            note('notice', !current.configured ? tr('Import a configuration to get started.') : current.pending && status.state === 'running' ? tr('A saved configuration is waiting to be applied. Applying it will disconnect current connections.') : '');
-            if (status.error || status.last_connection_error) note('error', status.error || status.last_connection_error);
-        } catch (error) {
-            current = {};
-            el('state').textContent = tr('Service unavailable');
-            el('state').className = 'label label-danger';
-            note('error', error.message || tr('Operation failed.'));
-        }
-        buttons();
+    buttons();
+  }
+  async function run(operation) {
+    if (busy) return;
+    busy = true;
+    buttons();
+    note('error', '');
+    note('feedback', '');
+    try {
+      await operation();
+    } catch (error) {
+      note('error', error.message);
+    } finally {
+      busy = false;
+      await refresh();
     }
-
-    async function run(operation) {
-        if (busy) return;
-        busy = true; buttons(); note('error', ''); note('feedback', '');
-        try { await operation(); }
-        catch (error) { note('error', error.message || tr('Operation failed.')); }
-        finally { busy = false; await refresh(); }
-    }
-
-    function profile() {
-        if (new Blob([el('json').value]).size > 65536) throw new Error(tr('Configuration must be smaller than 64 KiB.'));
-        let value;
-        try { value = JSON.parse(el('json').value); }
-        catch (_) { throw new Error(tr('Invalid JSON. Check the configuration before saving.')); }
-        if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(tr('The configuration must be a JSON object.'));
-        return value;
-    }
-
-    function syncFields() {
-        try {
-            const cfg = profile();
-            el('listener').hidden = cfg.role !== 'client' || !!cfg.target;
-            el('protocol').value = cfg.inbound || 'socks';
-            el('address').value = cfg.listen || '127.0.0.1:1080';
-        } catch (_) { /* Keep an invalid draft editable. */ }
-    }
-
-    function draft() { profile(); return {profile: el('json').value, enabled: el('enabled').checked ? '1' : '0'}; }
-    async function load() {
-        const settings = await api('settings/get');
-        revision = settings.revision;
-        saved = settings.profile;
-        savedEnabled = settings.enabled;
-        el('json').value = saved;
-        el('enabled').checked = savedEnabled;
-        syncFields(); buttons();
-    }
-
-    el('refresh').onclick = refresh;
-    el('start').onclick = () => run(() => api('service/start', {expected_revision: current.revision}));
-    el('stop').onclick = () => run(() => api('service/stop', {}));
-    el('apply').onclick = () => {
-        const expected = current.revision;
-        stdDialogConfirm(
-            tr('Apply saved configuration?'),
-            tr('Current connections will be disconnected. Unsaved edits in the editor are not applied.'),
-            tr('Apply and restart'), tr('Cancel'),
-            () => run(() => api('service/restart', {expected_revision: expected}))
+  }
+  function draft() {
+    const text = el('json').value;
+    if (new Blob([text]).size > 65536)
+      throw new Error(tr('Configuration must be smaller than 64 KiB.'));
+    const cfg = JSON.parse(text);
+    if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg))
+      throw new Error(tr('Configuration must be a JSON object.'));
+    if (cfg.role === 'client' && !cfg.target)
+      throw new Error(
+        tr('Import proxy clients into the connection list above.'),
+      );
+    return { profile: text, enabled: el('enabled').checked ? '1' : '0' };
+  }
+  async function save() {
+    const value = draft();
+    const result = await api('settings/save', {
+      ...value,
+      expected_revision: revision,
+    });
+    revision = result.revision;
+    saved = value.profile;
+    savedEnabled = value.enabled === '1';
+    note('feedback', tr('Saved.'));
+  }
+  const confirm = (title, text, action) =>
+    common.confirm(title, text, tr('Continue'), () => run(action));
+  const apply = async () => {
+    await save();
+    await api(
+      'service/' + (status.status?.state === 'running' ? 'restart' : 'start'),
+      { expected_revision: revision },
+    );
+  };
+  el('save').onclick = () => run(save);
+  el('save-apply').onclick = () =>
+    status.status?.state === 'running'
+      ? confirm(
+          tr('Apply changes'),
+          tr('Applying this instance will reconnect its active streams.'),
+          apply,
+        )
+      : run(apply);
+  el('start').onclick = () =>
+    run(async () => {
+      if (dirty()) await save();
+      await api('service/start', { expected_revision: revision });
+    });
+  el('stop').onclick = () =>
+    confirm(
+      tr('Stop instance?'),
+      tr('Only this standalone instance will stop.'),
+      () => api('service/stop', {}),
+    );
+  el('validate').onclick = () =>
+    run(async () => {
+      await api('settings/validate', draft());
+      note('feedback', tr('Configuration is valid.'));
+    });
+  el('refresh').onclick = refresh;
+  el('reload').onclick = () =>
+    dirty()
+      ? confirm(
+          tr('Discard edits'),
+          tr('Discard unsaved edits and reload the saved configuration?'),
+          load,
+        )
+      : run(load);
+  el('choose').onclick = () => el('file').click();
+  el('file').onchange = async (event) => {
+    const file = event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      if (file.size > 65536)
+        throw new Error(tr('Configuration must be smaller than 64 KiB.'));
+      const cfg = JSON.parse(await file.text());
+      if (
+        !cfg ||
+        typeof cfg !== 'object' ||
+        Array.isArray(cfg) ||
+        cfg.profile ||
+        cfg.kind ||
+        (cfg.role === 'client' && !cfg.target)
+      )
+        throw new Error(
+          tr('Import proxy clients into the connection list above.'),
         );
-    };
-    el('choose').onclick = () => el('file').click();
-    el('file').onchange = () => run(async () => {
-        const file = el('file').files[0];
-        if (!file) return;
-        if (file.size > 65536) throw new Error(tr('Configuration must be smaller than 64 KiB.'));
-        el('filename').textContent = file.name;
-        el('json').value = await file.text();
-        syncFields();
-        await api('settings/validate', draft());
-        note('feedback', tr('Configuration imported and validated. Save it when ready.'));
-    });
-    el('save').onclick = () => run(async () => {
-        const result = await api('settings/save', {...draft(), expected_revision: revision});
-        revision = result.revision;
-        saved = el('json').value;
-        savedEnabled = el('enabled').checked;
-        note('feedback', tr('Configuration saved.'));
-    });
-    el('validate').onclick = () => run(async () => { await api('settings/validate', draft()); note('feedback', tr('Configuration is valid.')); });
-    el('reload').onclick = () => {
-        if (saved !== el('json').value || savedEnabled !== el('enabled').checked) {
-            stdDialogConfirm(tr('Reload saved configuration'), tr('Discard unsaved edits and reload the saved configuration?'), tr('Reload saved configuration'), tr('Cancel'), () => run(load));
-        } else run(load);
-    };
-    el('json').oninput = () => { syncFields(); buttons(); };
-    el('enabled').onchange = buttons;
-    for (const id of ['protocol', 'address']) el(id).onchange = () => {
-        try {
-            const cfg = profile(); cfg.inbound = el('protocol').value; cfg.listen = el('address').value;
-            el('json').value = JSON.stringify(cfg, null, 2); buttons();
-        } catch (error) { note('error', error.message); }
-    };
-    run(async () => { if (writable) await load(); });
-    setInterval(() => { if (!busy && !document.hidden) refresh(); }, 5000);
+      const replace = () => {
+        el('json').value = JSON.stringify(cfg, null, 2);
+        buttons();
+      };
+      if (dirty())
+        confirm(
+          tr('Replace draft?'),
+          tr('Discard unsaved edits and import this file?'),
+          replace,
+        );
+      else replace();
+    } catch (error) {
+      note('error', error.message);
+    }
+  };
+  el('export').onclick = () => {
+    try {
+      const value = draft(),
+        url = URL.createObjectURL(
+          new Blob([value.profile], { type: 'application/json' }),
+        );
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'veil-instance.json';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      note('error', error.message);
+    }
+  };
+  el('migrate').onclick = () =>
+    confirm(
+      tr('Move client to connection list'),
+      tr(
+        'This will reconnect the existing client using the saved settings. Unsaved edits will be discarded.',
+      ),
+      async () => {
+        const result = await request({
+          version: 1,
+          action: 'connection_migrate',
+        });
+        if (result.error) throw new Error(result.error.message);
+        await load();
+        await common.refresh();
+      },
+    );
+  el('json').oninput = el('enabled').onchange = buttons;
+  window.addEventListener('beforeunload', (event) => {
+    if (dirty() || common.hasDraft()) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+  });
+  run(async () => {
+    if (writable) await load();
+  });
+  setInterval(() => {
+    if (!busy && !document.hidden) refresh();
+  }, 5000);
 });

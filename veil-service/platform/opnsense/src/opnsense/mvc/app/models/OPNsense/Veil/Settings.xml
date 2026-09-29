@@ -1,8 +1,9 @@
 <model>
     <mount>//OPNsense/veil</mount>
     <description>Veil proxy settings</description>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
     <items>
+        <catalog type="TextField"><Required>N</Required></catalog>
         <enabled type="BooleanField">
             <Default>0</Default>
             <Required>Y</Required>

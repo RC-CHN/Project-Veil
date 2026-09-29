@@ -1,45 +1,40 @@
 <div id="veil-page">
-  <div class="veil-heading">
-    <div><h1>Veil</h1><p class="text-muted" data-i18n="Manage your proxy connection and configuration."></p></div>
-    <span id="veil-state" class="label label-default" role="status"></span>
-  </div>
-  <section class="content-box veil-card">
-    <h2 data-i18n="Connection"></h2>
-    <div class="veil-metrics">
-      <div><span data-i18n="Mode"></span><strong id="veil-role">—</strong></div>
-      <div><span data-i18n="Listening address"></span><strong id="veil-listen">—</strong></div>
-      <div><span data-i18n="Completed connections"></span><strong id="veil-count">0</strong></div>
-    </div>
+  <div class="veil-heading"><h1>Veil</h1></div>
+  <div id="veil-connections"></div>
+  <details id="veil-standalone" class="content-box veil-standalone">
+    <summary data-i18n="Advanced: standalone server or fixed forwarding"></summary>
+    <p class="text-muted" data-i18n="Use this separate instance to run a Veil server or forward to a fixed target. Manage proxy client connections in the list above."></p>
     <p id="veil-notice" class="alert alert-info" role="status" hidden></p>
     <p id="veil-error" class="alert alert-danger" role="alert" hidden></p>
+    <p id="veil-feedback" class="alert alert-success" role="status" hidden></p>
+    <p><strong id="veil-state"></strong> <code id="veil-listen"></code></p>
     <div class="veil-actions">
-      <button id="veil-start" class="btn btn-primary" data-i18n="Start proxy" disabled></button>
-      <button id="veil-stop" class="btn btn-default" data-i18n="Stop proxy" disabled></button>
-      <button id="veil-apply" class="btn btn-default" data-i18n="Apply saved configuration" disabled></button>
+      <button id="veil-start" class="btn btn-primary" data-i18n="Start" disabled></button>
+      <button id="veil-stop" class="btn btn-default" data-i18n="Stop" disabled></button>
+      <button id="veil-migrate" class="btn btn-default" data-i18n="Move client to connection list" hidden></button>
       <button id="veil-refresh" class="btn btn-default" data-i18n="Refresh"></button>
     </div>
-  </section>
-  <section id="veil-settings" class="content-box veil-card" hidden>
-    <h2 data-i18n="Configuration"></h2>
-    <p class="text-muted" data-i18n="Import a JSON connection profile. Saving preserves current connections; apply changes separately."></p>
-    <div class="veil-file">
-      <button id="veil-choose" class="btn btn-default" data-i18n="Choose file"></button>
-      <span id="veil-filename" data-i18n="No file selected"></span>
-      <input id="veil-file" type="file" accept=".json,application/json" hidden>
-    </div>
-    <div id="veil-listener" class="veil-fields">
-      <label><span data-i18n="Proxy protocol"></span><select id="veil-protocol" class="form-control"><option value="mixed">SOCKS5 + HTTP</option><option value="socks">SOCKS5</option><option value="http">HTTP</option></select></label>
-      <label><span data-i18n="Listening address"></span><input id="veil-address" class="form-control" placeholder="127.0.0.1:1080"></label>
-    </div>
-    <label class="veil-boot"><input id="veil-enabled" type="checkbox"> <span data-i18n="Start proxy when the system boots"></span></label>
-    <p id="veil-feedback" class="alert alert-success" role="status" hidden></p>
-    <details><summary data-i18n="Advanced: edit configuration JSON"></summary><label for="veil-json" class="text-muted" data-i18n="Contains credentials. Share only with trusted administrators."></label><textarea id="veil-json" class="form-control" rows="14" spellcheck="false" autocomplete="off"></textarea></details>
-    <div class="veil-actions">
-      <button id="veil-save" class="btn btn-primary" data-i18n="Save configuration" disabled></button>
-      <button id="veil-validate" class="btn btn-default" data-i18n="Validate" disabled></button>
-      <button id="veil-reload" class="btn btn-default" data-i18n="Reload saved configuration"></button>
-    </div>
-  </section>
+    <fieldset id="veil-settings" hidden>
+      <div class="veil-actions">
+        <button id="veil-choose" class="btn btn-default" data-i18n="Import"></button>
+        <button id="veil-export" class="btn btn-default" data-i18n="Export"></button>
+        <button id="veil-reload" class="btn btn-default" data-i18n="Discard edits"></button>
+        <input id="veil-file" type="file" accept=".json,application/json" hidden>
+      </div>
+      <label for="veil-json" class="text-muted" data-i18n="Configuration JSON (contains credentials)"></label>
+      <textarea id="veil-json" class="form-control" rows="12" spellcheck="false" autocomplete="off"></textarea>
+      <label class="veil-boot"><input id="veil-enabled" type="checkbox"> <span data-i18n="Start this instance when the system boots"></span></label>
+      <div class="veil-actions">
+        <button id="veil-save-apply" class="btn btn-primary" data-i18n="Save and apply" disabled></button>
+        <button id="veil-save" class="btn btn-default" data-i18n="Save only" disabled></button>
+        <button id="veil-validate" class="btn btn-default" data-i18n="Validate" disabled></button>
+      </div>
+    </fieldset>
+    <details><summary data-i18n="Diagnostics"></summary><pre id="veil-status-json"></pre></details>
+  </details>
 </div>
-<script>window.veilUI = {catalog: {{ veilCatalog }}, writable: {{ veilWritable }}};</script>
-<script src="/ui/js/veil/page.js"></script>
+<link rel="stylesheet" href="/ui/js/veil/shared/connections.css?v=__VEIL_UI_VERSION__">
+<script>window.veilUI = {language: {{ veilLanguage }}, writable: {{ veilWritable }}};</script>
+<script src="/ui/js/veil/shared/i18n.js?v=__VEIL_UI_VERSION__"></script>
+<script src="/ui/js/veil/shared/connections.js?v=__VEIL_UI_VERSION__"></script>
+<script src="/ui/js/veil/page.js?v=__VEIL_UI_VERSION__"></script>
