@@ -1,5 +1,9 @@
 # Project Veil
 
+[![CI](https://github.com/RC-CHN/Project-Veil/actions/workflows/ci.yml/badge.svg)](https://github.com/RC-CHN/Project-Veil/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/RC-CHN/Project-Veil)](https://github.com/RC-CHN/Project-Veil/releases/latest)
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
+
 Veil 是基于 TCP 与 TLS 1.3 的代理协议与工具集。它在加密连接中复用独立业务流，通过范围式随机调度和 TLS 记录填充组织流量，并提供可嵌入核心、命令行入口与公共控制服务。
 
 ## 协议思路
@@ -32,6 +36,7 @@ Veil 将握手外观、会话认证、流生命周期和发送策略分别处理
 | [`veil-service/`](veil-service/README.md) | `veild` / `veilctl`、配置保存与 revision、运行生命周期、私有 Unix socket / Windows 命名管道控制接口 |
 | [`veil-service/platform/`](veil-service/platform/) | Linux 安装包与 systemd 管理、OpenWrt 双语 LuCI、OPNsense 原生插件与 FreeBSD rc.d 适配 |
 | [`veil-desktop/`](veil-desktop/README.md) | Windows / Linux 桌面端，配置导入、双语界面、启停与诊断、托盘和系统代理管理 |
+| [`veil-rust/`](veil-rust/README.md) | 实验性独立 Rust 核心（Veil v0.3 / T 档位），用于性能对照与替代实现探索 |
 | [`interop/rust/`](interop/rust/README.md) | 独立 Rust 互通验证端，覆盖客户端和服务端角色 |
 
 核心和控制服务分别为独立 Go module。应用通过 `veil/core`、`veil/inbound` 和 `veil/service` 使用核心；平台组件通过公共控制层管理配置与运行状态，代理数据由核心直接转发。
@@ -40,21 +45,29 @@ Veil 将握手外观、会话认证、流生命周期和发送策略分别处理
 
 预编译安装包见 [GitHub Releases](https://github.com/RC-CHN/Project-Veil/releases/latest)，按平台选择 CLI、桌面或路由器组件；每个发行包附 SHA-256 校验和。
 
-使用 Go 1.26.3 和 Python 3；集成测试使用 OpenSSL 3.5 与 curl。仓库构建器负责生成固定版本的 TLS 适配。
+使用 Go 1.26.3 和 Python 3；集成测试使用 OpenSSL 3.5 与 curl。所有 Go 构建必须经过仓库构建器，它负责生成固定版本的 TLS 适配补丁；直接 `go build` 无法编译。
 
 ```sh
-make build
-make service       # 构建 veild、veilctl
-make test
-make race
-make service-race
-
-veil-core/.build/veil -keygen
-veil-core/.build/veil -profilegen
-veil-core/.build/veil -config /path/to/client.json
+make build           # 核心与 CLI
+make service         # veild、veilctl
+make test            # 核心测试
+make race            # 核心竞态检查
+make service-race    # 服务竞态检查
 ```
 
 核心构建输出位于 `veil-core/.build/`，控制服务输出位于 `veil-service/.build/`。配置示例见 [`veil-core/examples/`](veil-core/examples/)，固定目标入口见 [client.forward.json](veil-core/examples/client.forward.json)。
+
+```sh
+veil-core/.build/veil -keygen        # 生成 REALITY 密钥对
+veil-core/.build/veil -profilegen    # 生成随机化流量策略
+veil-core/.build/veil -config /path/to/client.json
+```
+
+实验性 Rust 核心需要 Rust 1.96.0：
+
+```sh
+cargo build --manifest-path veil-rust/Cargo.toml --release --locked
+```
 
 ## 文档
 
@@ -66,7 +79,10 @@ veil-core/.build/veil -config /path/to/client.json
 - [OPNsense 插件](veil-service/platform/opnsense/README.md)：config.xml 配置、configd 控制、原生双语界面与安装包。
 - [桌面安装与使用](veil-desktop/README.md)：Windows / Linux 发行包、配置导入、托盘和系统代理管理。
 - [Windows CLI](veil-service/platform/windows/README.md)：amd64 / ARM64 便携包、私有命名管道与实例管理。
+- [Rust 实验核心](veil-rust/README.md)：独立 Rust 实现的功能范围、构建与[实测数据](veil-rust/BENCHMARK.md)。
 - [Rust 互通验证](interop/rust/README.md)：独立实现的构建与双向互通检查。
-- [CI 说明](.github/README.md)：并行任务、构建缓存和跨平台检查。
+- [CI 说明](.github/CI.md)：并行任务、构建缓存和跨平台检查。
+
+## 许可
 
 本项目使用 [GPL-3.0-or-later](LICENSE)，代码来源见 [第三方说明](THIRD_PARTY.md)。
