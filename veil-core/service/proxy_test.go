@@ -23,6 +23,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"veil/inbound"
 	"veil/internal/mux"
 	"veil/internal/transport"
 	"veil/internal/wire"
@@ -110,7 +111,7 @@ func start(t testing.TB, cfg Config) (*Service, string) {
 		t.Fatal(e)
 	}
 	svc.OnError = func(err error) { t.Log(err) }
-	ln, e := net.Listen("tcp", "127.0.0.1:0")
+	ln, e := inbound.Listen("127.0.0.1:0")
 	if e != nil {
 		t.Fatal(e)
 	}

@@ -3,10 +3,10 @@ package service
 import (
 	"context"
 	"errors"
-	"net"
 	"sync"
 	"sync/atomic"
 	"veil/core"
+	"veil/inbound"
 )
 
 // Runtime serializes application lifecycle operations. Its zero value is ready
@@ -74,7 +74,7 @@ func (r *Runtime) Start(cfg Config) error {
 }
 
 func (r *Runtime) start(s *Service) error {
-	ln, err := net.Listen("tcp", s.cfg.Listen)
+	ln, err := inbound.Listen(s.cfg.Listen)
 	if err != nil {
 		s.Close()
 		return err

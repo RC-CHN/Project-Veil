@@ -114,7 +114,7 @@ func (c *Connection) SetInlets(inlets []Inlet) error {
 		}
 		handlers[entry.Listen] = h
 		if c.listeners[entry.Listen] == nil {
-			ln, err := net.Listen("tcp", entry.Listen)
+			ln, err := inbound.Listen(entry.Listen)
 			if err != nil {
 				rollback()
 				return err
@@ -191,7 +191,7 @@ func (c *Connection) Inlets() []Inlet {
 // ProbeHTTP measures an HTTPS request through this client's actual tunnel pool.
 // The temporary proxy is loopback-only and always joined before returning.
 func (c *Connection) ProbeHTTP(ctx context.Context, target string) error {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := inbound.Listen("127.0.0.1:0")
 	if err != nil {
 		return err
 	}

@@ -11,11 +11,11 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net"
 	"os"
 	"os/signal"
 	"syscall"
 	"veil/core"
+	"veil/inbound"
 	"veil/service"
 )
 
@@ -69,7 +69,7 @@ func run() error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	ln, err := net.Listen("tcp", cfg.Listen)
+	ln, err := inbound.Listen(cfg.Listen)
 	if err != nil {
 		return err
 	}
