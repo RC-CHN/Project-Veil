@@ -351,3 +351,13 @@
   background: var(--surface, #fff);
   padding: 16px 0;
 }
+
+/* Router themes may impose a 32px height and a narrow input maximum. */
+.veil-dialog input:not([type='checkbox']),
+.veil-dialog select,
+.veil-dialog textarea {
+  height: auto;
+  max-width: none;
+  line-height: 1.4;
+  box-sizing: border-box;
+}
