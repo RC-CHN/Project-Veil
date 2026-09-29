@@ -11,5 +11,6 @@
 *.prof
 __pycache__/
 /interop/rust/target/
+/veil-rust/target/
 
 /veil-desktop/scripts/gui/node_modules/
