@@ -73,18 +73,22 @@ func (c *Client) SetTrafficProfile(p TrafficProfile) error {
 
 // PoolStats is a consistent snapshot; Total includes in-progress dials.
 type PoolStats struct {
-	Total    int  `json:"total"`
-	Idle     int  `json:"idle"`
-	Streams  int  `json:"streams"`
-	Dialing  bool `json:"dialing"`
-	Limit    int  `json:"limit"`
-	Draining int  `json:"draining,omitempty"`
+	Total            int   `json:"total"`
+	Idle             int   `json:"idle"`
+	Streams          int   `json:"streams"`
+	Dialing          bool  `json:"dialing"`
+	Limit            int   `json:"limit"`
+	Draining         int   `json:"draining,omitempty"`
+	RetryAfterMillis int64 `json:"retry_after_ms,omitempty"`
 }
 
 func (c *Client) PoolStats() PoolStats {
 	c.pool.mu.Lock()
 	defer c.pool.mu.Unlock()
 	p := PoolStats{Total: c.pool.total, Idle: c.pool.idleLocked(), Dialing: c.pool.dialing, Limit: c.cfg.MaxConnections}
+	if c.pool.dialError != nil {
+		p.RetryAfterMillis = int64(max(0, (time.Until(c.pool.retryAt)+time.Millisecond-1)/time.Millisecond))
+	}
 	for s := range c.pool.all {
 		p.Streams += s.active
 		if s.draining {

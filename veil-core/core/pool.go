@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"math/rand/v2"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -25,6 +26,9 @@ type pool struct {
 	total           int
 	closed, dialing bool
 	changed         chan struct{}
+	dialError       error
+	retryAt         time.Time
+	retryDelay      time.Duration
 	cfg             ClientConfig
 	key             []byte
 	handshake       transport.Handshake
@@ -105,6 +109,14 @@ func (p *pool) get(ctx context.Context) (*session, error) {
 		// Mix real concurrency first. A second TCP lane separates sustained bulk
 		// transfer or a busier group from new interactive work.
 		wantNew := best == nil || (dialErr == nil && p.total < min(2, p.cfg.MaxConnections) && (bestBulk || best.active >= 4))
+		if wantNew && p.dialError != nil && time.Now().Before(p.retryAt) {
+			if best == nil {
+				err := p.dialError
+				p.mu.Unlock()
+				return nil, err
+			}
+			wantNew = false
+		}
 		if wantNew && p.total < p.cfg.MaxConnections && !p.dialing {
 			p.total++
 			p.dialing = true
@@ -115,6 +127,14 @@ func (p *pool) get(ctx context.Context) (*session, error) {
 			p.notifyLocked()
 			if err != nil {
 				p.total--
+				if ctx.Err() == nil && !p.closed {
+					// One short, shared cooldown prevents a request burst from
+					// repeating the same failing TCP/TLS handshake. No timer or
+					// background dial is needed: a later request retries.
+					p.retryDelay = min(max(2*p.retryDelay, 100*time.Millisecond), time.Second)
+					p.retryAt = time.Now().Add(p.retryDelay + rand.N(p.retryDelay))
+					p.dialError = err
+				}
 				p.mu.Unlock()
 				if best != nil && ctx.Err() == nil {
 					// Expansion is optional. Recheck the live lanes instead of
@@ -130,6 +150,7 @@ func (p *pool) get(ctx context.Context) (*session, error) {
 				stopSession(s)
 				return nil, net.ErrClosed
 			}
+			p.dialError, p.retryAt, p.retryDelay = nil, time.Time{}, 0
 			s.active = 1
 			p.all[s] = true
 			p.mu.Unlock()

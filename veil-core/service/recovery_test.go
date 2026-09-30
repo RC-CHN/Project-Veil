@@ -172,6 +172,9 @@ func TestDoubleHopRecoversFromBlackhole(t *testing.T) {
 		if err == nil {
 			break
 		}
+		// Retrying immediately is intentionally coalesced after a TCP/TLS
+		// failure. Wait for the advertised budget before the next user request.
+		time.Sleep(time.Duration(inner.PoolStats().RetryAfterMillis) * time.Millisecond)
 	}
 	if err != nil {
 		t.Fatal("double hop stayed on the blackholed connection:", err)
@@ -186,4 +189,50 @@ func TestDoubleHopRecoversFromBlackhole(t *testing.T) {
 		t.Fatal(err)
 	}
 	halfEchoPayload(t, app, []byte("recovered through two REALITY layers"))
+}
+
+func TestCoreDialBackoffRecovery(t *testing.T) {
+	st, ct := settings(t, "tls")
+	server, err := core.NewServer(core.ServerConfig{Config: core.Config{Secret: testKey, TLS: st}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr, _ := startHandler(t, server.Handle)
+	dst := target(t, func(c net.Conn) { io.Copy(c, c) })
+	var available atomic.Bool
+	var attempts atomic.Int32
+	failure := errors.New("injected temporary network failure")
+	client := newCoreClient(t, core.ClientConfig{
+		Config: core.Config{Secret: testKey, TLS: ct}, Server: addr,
+		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+			attempts.Add(1)
+			if !available.Load() {
+				return nil, failure
+			}
+			return (&net.Dialer{}).DialContext(ctx, network, address)
+		},
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	for range 2 {
+		if stream, err := client.Open(ctx, dst); !errors.Is(err, failure) {
+			if stream != nil {
+				stream.Close()
+			}
+			t.Fatal("expected temporary dial failure:", err)
+		}
+	}
+	if attempts.Load() != 1 {
+		t.Fatal("requests did not share dial cooldown")
+	}
+	available.Store(true)
+	time.Sleep(time.Duration(client.PoolStats().RetryAfterMillis) * time.Millisecond)
+	stream, err := client.Open(ctx, dst)
+	if err != nil {
+		t.Fatal("network recovery required a restart:", err)
+	}
+	defer stream.Close()
+	if attempts.Load() != 2 || client.PoolStats().RetryAfterMillis != 0 {
+		t.Fatal("successful handshake did not clear cooldown")
+	}
 }
