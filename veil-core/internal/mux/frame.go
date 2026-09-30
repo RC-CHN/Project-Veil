@@ -3,8 +3,10 @@
 package mux
 
 import (
+	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"sync"
 )
@@ -36,6 +38,8 @@ var (
 	ErrProtocol = errors.New("veil mux: invalid frame or state")
 	ErrReset    = errors.New("veil mux: stream reset")
 	ErrFull     = errors.New("veil mux: connection at stream limit")
+	// Distinguish our missing-reply budget from a caller's shorter deadline.
+	ErrOpenTimeout = fmt.Errorf("veil mux: OPEN response: %w", context.DeadlineExceeded)
 )
 
 type OpenError byte

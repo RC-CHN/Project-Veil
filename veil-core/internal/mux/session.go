@@ -179,7 +179,7 @@ func (s *Session) Open(ctx context.Context, metadata []byte) (*Stream, error) {
 	select {
 	case <-timeout:
 		st.Close()
-		return nil, context.DeadlineExceeded
+		return nil, ErrOpenTimeout
 	case <-ctx.Done():
 		st.Close()
 		return nil, ctx.Err()

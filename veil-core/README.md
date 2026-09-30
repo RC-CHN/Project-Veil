@@ -98,6 +98,8 @@ return stream.Relay(localConn)
 
 物理连接的常驻读取任务持续处理 TLS 关闭和控制帧，失效连接在下次 OPEN 前淘汰。关闭和任务回收不占用池锁。不发送心跳，不能证明黑洞链路可用，也不重放已经发送的 OPEN 或业务字节。
 
+等待 OPEN 回复超过核心预算，或双向 FIN 后未按时收到 DONE 时，该物理连接转为排空：已有流继续运行，新流选择其他连接，最后一条流结束后关闭。目标明确返回的拨号失败、DNS 错误、超时，以及调用方自己的取消或较短期限，都不会触发此策略。排空连接仍计入 `MaxConnections`，`PoolStats.Draining` 报告其数量；达到总上限时返回连接池上限错误，不通过无限建连绕过限制。等待其他请求拨号受 `HandshakeTimeout` 约束；可选的第二条连接拨号失败后，本次请求会重新检查已有连接。
+
 `core.OpError` 支持 `errors.As`/`errors.Is`，包含本地/隧道的读写操作；`core.ErrIdleTimeout` 的错误还报告两个转发任务的等待位置。`core.TargetError` 表示远端拨号原因。CLI 输出这些操作错误，`service.Runtime.Snapshot` 的 `last_connection_error` 保留本次运行最近一条操作错误，重启实例后清空。正常 EOF 通过 FIN 半关闭；目标 RST 重置一条流，外层截断使物理连接失效；本地错误不保证与原始 TCP RST 报文完全相同。
 
 `ClientConfig.DialContext` 可接平台的 socket 保护/绑定逻辑，`ServerConfig.DialContext` 可接目标访问策略；两者须遵守 context。没有实现这些钩子时，保持普通 TCP 拨号。配置在构造时复制。`Client.SetTrafficProfile(profile)` / `Server.SetTrafficProfile(profile)` 原子替换后续物理连接使用的策略，已有连接沿用自己的快照，错误更新不覆盖有效策略。其他配置通过创建新实例生效。公共控制服务尚未提供独立的在线策略更新命令，保存配置后仍按原来的 restart 流程应用。核心不修改系统路由、DNS、防火墙或服务状态。

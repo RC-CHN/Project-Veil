@@ -73,11 +73,12 @@ func (c *Client) SetTrafficProfile(p TrafficProfile) error {
 
 // PoolStats is a consistent snapshot; Total includes in-progress dials.
 type PoolStats struct {
-	Total   int  `json:"total"`
-	Idle    int  `json:"idle"`
-	Streams int  `json:"streams"`
-	Dialing bool `json:"dialing"`
-	Limit   int  `json:"limit"`
+	Total    int  `json:"total"`
+	Idle     int  `json:"idle"`
+	Streams  int  `json:"streams"`
+	Dialing  bool `json:"dialing"`
+	Limit    int  `json:"limit"`
+	Draining int  `json:"draining,omitempty"`
 }
 
 func (c *Client) PoolStats() PoolStats {
@@ -86,6 +87,9 @@ func (c *Client) PoolStats() PoolStats {
 	p := PoolStats{Total: c.pool.total, Idle: c.pool.idleLocked(), Dialing: c.pool.dialing, Limit: c.cfg.MaxConnections}
 	for s := range c.pool.all {
 		p.Streams += s.active
+		if s.draining {
+			p.Draining++
+		}
 	}
 	return p
 }
@@ -110,6 +114,9 @@ func (c *Client) Open(ctx context.Context, address string) (*Stream, error) {
 	}
 	stream, err := channel.mux.Open(ctx, payload)
 	if err != nil {
+		if errors.Is(err, mux.ErrOpenTimeout) && ctx.Err() == nil {
+			c.pool.drain(channel)
+		}
 		c.pool.put(channel)
 		stopClient()
 		cancel()

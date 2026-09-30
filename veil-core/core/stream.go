@@ -93,5 +93,9 @@ func (s *Stream) Relay(local net.Conn) (err error) {
 	}
 	doneCtx, cancel := context.WithTimeout(s.ctx, s.client.cfg.HandshakeTimeout)
 	defer cancel()
-	return opError("tunnel DONE", s.channel.WaitDone(doneCtx))
+	err = s.channel.WaitDone(doneCtx)
+	if errors.Is(err, context.DeadlineExceeded) && s.ctx.Err() == nil {
+		s.client.pool.drain(s.session)
+	}
+	return opError("tunnel DONE", err)
 }
