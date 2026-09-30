@@ -9,9 +9,9 @@
 在对应版本的 OPNsense 上安装原生包：
 
 ```sh
-pkg add /path/to/os-veil-0.3.3.pkg
+pkg add /path/to/os-veil-0.3.4.pkg
 # 已安装时，用 -f 替换为指定的本地包：
-pkg add -f /path/to/os-veil-0.3.3.pkg
+pkg add -f /path/to/os-veil-0.3.4.pkg
 ```
 
 安装会启动管理服务。打开 **服务 → Veil**，导入连接 JSON、确认入口和监听地址、保存，然后启动代理。应用已保存配置会提示确认并断开旧连接；仅保存不会影响正在运行的实例。升级会停止旧管理进程，保留保存配置，升级后在页面启动代理。
@@ -60,10 +60,10 @@ configctl veil configure
 
 ```sh
 python3 veil-service/scripts/opnsense_bundle.py \
-  --plugins /path/to/opnsense-plugins --version 0.3.3
+  --plugins /path/to/opnsense-plugins --version 0.3.4
 ```
 
-将 `veil-service/.build/opnsense/veil-opnsense-build-0.3.3.tar.gz` 放入一次性 OPNsense 构建机，解压后运行 `./build.sh`。脚本使用官方 `make package` 和本机 `pkg`，从 `opnsense-version` 取得 ABI；产物位于 `net/veil/work/pkg/os-veil-0.3.3.pkg`。框架副本和 Go 二进制只进入构建产物，不提交到源码目录。
+将 `veil-service/.build/opnsense/veil-opnsense-build-0.3.4.tar.gz` 放入一次性 OPNsense 构建机，解压后运行 `./build.sh`。脚本使用官方 `make package` 和本机 `pkg`，从 `opnsense-version` 取得 ABI；产物位于 `net/veil/work/pkg/os-veil-0.3.4.pkg`。框架副本和 Go 二进制只进入构建产物，不提交到源码目录。
 
 原生构建目标为 OPNsense 26.7 / FreeBSD 15.1 amd64。包需在目标 OPNsense 版本的原生环境生成，其他版本应重复安装和运行验收。
 
