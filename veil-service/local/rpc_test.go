@@ -116,14 +116,34 @@ func TestResponsesHaveSeparateBound(t *testing.T) {
 	// retain their smaller bound while clients can read that complete response.
 	input := `{"version":1,"config":{"text":"` + strings.Repeat("x", maxRequest) + `"}}` + "\n"
 	var response control.Response
-	if err := readBoundedMessage(strings.NewReader(input), &response, maxResponse); err != nil {
+	if err := readBoundedMessage(strings.NewReader(input), &response, maxResponse, false); err != nil {
 		t.Fatal(err)
 	}
 	if err := readMessage(strings.NewReader(input), &response); err == nil {
 		t.Fatal("request limit expanded with response limit")
 	}
 	input = `{"version":1,"config":"` + strings.Repeat("x", maxResponse) + `"}` + "\n"
-	if err := readBoundedMessage(strings.NewReader(input), &response, maxResponse); err == nil {
+	if err := readBoundedMessage(strings.NewReader(input), &response, maxResponse, false); err == nil {
 		t.Fatal("unbounded response")
+	}
+}
+
+func TestResponseExtensionFields(t *testing.T) {
+	input := `{"version":1,"future":true,"status":{"state":"running","stats":{"accepted":7,"future":1},"future":{"enabled":true}}}` + "\n"
+	var response control.Response
+	if err := readBoundedMessage(strings.NewReader(input), &response, maxResponse, false); err != nil {
+		t.Fatal("additive response field broke control client:", err)
+	}
+	if response.Status == nil || response.Status.State != "running" || response.Status.Stats.Accepted != 7 {
+		t.Fatal("known response fields were lost")
+	}
+	for _, malformed := range []string{
+		`{"version":"bad"}`,
+		`{"version":1,"status":{"stats":{"accepted":"bad"}}}`,
+		`{"version":1} {}`,
+	} {
+		if err := readBoundedMessage(strings.NewReader(malformed+"\n"), &response, maxResponse, false); err == nil {
+			t.Fatal("invalid response accepted:", malformed)
+		}
 	}
 }

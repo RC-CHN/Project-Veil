@@ -69,7 +69,7 @@ python3 scripts/cross_check.py
 {"version":1,"action":"status"}
 ```
 
-`save`/`validate` 用 `config` 携带原配置对象，最大 1 MiB。`expected_revision` 可作比较后更新保护，防止多个界面覆盖彼此的配置；`veilctl -if-revision HASH ...` 对应此字段。不支持的版本、未知字段、同一行的多余对象会被拒绝；每条连接只处理第一行。响应总含 `version`，成功含 `status`，失败含 `error.code` 与 `error.message`；生命周期和保存错误尽可能附带当前状态。收到超时后应先查 `status`，不要盲目重复 `restart`。此版本没有热重载、事件推送或跨重启请求去重。
+`save`/`validate` 用 `config` 携带原配置对象，最大 1 MiB。`expected_revision` 可作比较后更新保护，防止多个界面覆盖彼此的配置；`veilctl -if-revision HASH ...` 对应此字段。不支持的版本、请求中的未知字段、同一行的多余对象会被拒绝；每条连接只处理第一行。响应总含 `version`，成功含 `status`，失败含 `error.code` 与 `error.message`；生命周期和保存错误尽可能附带当前状态。本版客户端允许响应增加可选字段，同时保留已知字段类型、协议版本和 4 MiB 响应上限校验；旧客户端升级时应一起更新，以支持后续诊断扩展。收到超时后应先查 `status`，不要盲目重复 `restart`。此版本没有热重载、事件推送或跨重启请求去重。
 
 最多同时处理 16 个控制连接，每个连接有 15 秒截止时间；不在后台轮询核心。权限检查依靠私有目录和 socket。浏览器页面不能直接访问该 socket；LuCI 通过 rpcd 接入，OPNsense 通过 configd 桥接，其他界面也应使用本地命令或平台 RPC；不要转发成无鉴权 TCP 接口。
 

@@ -23,9 +23,9 @@ var ErrStateLocked = errors.New("another process owns this state directory or so
 
 // One bounded JSON line per connection. No HTTP server or background poller is
 // needed for this private, local command channel.
-func readMessage(r io.Reader, v any) error { return readBoundedMessage(r, v, maxRequest) }
+func readMessage(r io.Reader, v any) error { return readBoundedMessage(r, v, maxRequest, true) }
 
-func readBoundedMessage(r io.Reader, v any, limit int) error {
+func readBoundedMessage(r io.Reader, v any, limit int, strict bool) error {
 	b, err := bufio.NewReader(io.LimitReader(r, int64(limit)+1)).ReadBytes('\n')
 	if err != nil {
 		return err
@@ -34,13 +34,15 @@ func readBoundedMessage(r io.Reader, v any, limit int) error {
 		return errors.New("control message too large")
 	}
 	d := json.NewDecoder(bytes.NewReader(b))
-	d.DisallowUnknownFields()
+	if strict {
+		d.DisallowUnknownFields()
+	}
 	if err := d.Decode(v); err != nil {
 		return err
 	}
 	var extra any
 	if d.Decode(&extra) != io.EOF {
-		return errors.New("expected one JSON request")
+		return errors.New("expected one JSON message")
 	}
 	return nil
 }
@@ -104,7 +106,9 @@ func Call(ctx context.Context, socket string, q control.Request) (control.Respon
 	if err := json.NewEncoder(c).Encode(q); err != nil {
 		return result, err
 	}
-	if err := readBoundedMessage(c, &result, maxResponse); err != nil {
+	// Status can gain optional diagnostics independently of a client's version.
+	// Requests stay strict; responses retain type, framing and size checks.
+	if err := readBoundedMessage(c, &result, maxResponse, false); err != nil {
 		return result, err
 	}
 	if result.Version != control.Version {
