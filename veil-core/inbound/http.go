@@ -69,6 +69,8 @@ func HTTP(client *core.Client, timeout time.Duration) Handler {
 			return err
 		}
 		stream, err := client.Open(ctx, address)
+		// CONNECT, errors and 100 Continue must survive a slow remote OPEN.
+		local.SetWriteDeadline(time.Now().Add(timeout))
 		if err != nil {
 			httpFailure(local, http.StatusBadGateway)
 			return err

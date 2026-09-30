@@ -30,6 +30,8 @@ func SOCKS5(client *core.Client, timeout time.Duration) Handler {
 			return err
 		}
 		stream, err := client.Open(ctx, address)
+		// Remote dialing has its own budget; replies need a fresh local one.
+		local.SetWriteDeadline(time.Now().Add(timeout))
 		if err != nil {
 			socks.Reply(local, 1)
 			return err
