@@ -135,6 +135,8 @@ func (st *Stream) Respond(code byte) error {
 	select {
 	case err = <-done:
 		return err
+	case <-st.stopped:
+		return st.failure()
 	case <-s.done:
 		return s.Err()
 	}

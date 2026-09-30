@@ -232,6 +232,55 @@ func TestOpenTimeoutKeepsSessionUsable(t *testing.T) {
 	openPair(t, c, s)
 }
 
+type notifiedWriter struct {
+	net.Conn
+	started chan struct{}
+	once    sync.Once
+}
+
+func (c *notifiedWriter) Write(p []byte) (int, error) {
+	c.once.Do(func() { close(c.started) })
+	return c.Conn.Write(p)
+}
+
+func TestRespondCancellationDuringBlockedWrite(t *testing.T) {
+	a, peer := net.Pipe()
+	defer peer.Close()
+	w := &notifiedWriter{Conn: a, started: make(chan struct{})}
+	s, err := New(w, Options{Server: true, Profile: DefaultProfile(), WriteTimeout: 3 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { s.Close(); s.Wait() }()
+	if _, err := peer.Write(appendFrame(nil, open, 1, []byte("target"))); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	stream, err := s.Accept(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- stream.Respond(0) }()
+	select {
+	case <-w.started:
+	case <-ctx.Done():
+		t.Fatal("response write did not start")
+	}
+	// The remote peer is not reading. Cancel only this stream while the
+	// physical writer remains blocked until its own deadline.
+	stream.Close()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("canceled response succeeded")
+		}
+	case <-ctx.Done():
+		t.Fatal("canceled response held its server worker until the socket timeout")
+	}
+}
+
 func TestAcceptedStreamParentCancellation(t *testing.T) {
 	type key struct{}
 	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), key{}, "dial policy"))
