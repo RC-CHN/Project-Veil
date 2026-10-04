@@ -32,6 +32,16 @@ def conn_patch(s):
     padding_guard = " && c.out.veilPadRecords == 0" if "veilPadRecords" in s else ""
     s = replace(
         s,
+        "func (c *Conn) writeRecordLocked(typ recordType, data []byte) (int, error) {",
+        "func (c *Conn) writeRecordLocked(typ recordType, data []byte) (int, error) {\n\tif c.veilCryptoClosed { return 0, net.ErrClosed }",
+    )
+    s = replace(
+        s,
+        "\tactiveCall atomic.Int32\n",
+        "\tactiveCall atomic.Int32\n\tveilCryptoClosed bool // protected by out.Mutex\n",
+    )
+    s = replace(
+        s,
         "\toutBufPtr := outBufPool.Get().(*[]byte)",
         """\tif typ == recordTypeApplicationData && c.vers == VersionTLS13 && !c.buffering && c.bytesSent >= recordSizeBoostThreshold && len(data)>maxPlaintextPADDING_GUARD {
         return c.veilWriteApplicationBatchLocked(data)
@@ -83,7 +93,8 @@ def read_patch(s):
 \t\tif err := c.readRecord(); err != nil {
 \t\t\treturn 0, err
 \t\t}""",
-        """\tfor c.input.Len() == 0 {
+        """\tif c.activeCall.Load()&1 != 0 { return 0, net.ErrClosed }
+\tfor c.input.Len() == 0 {
         if c.hand.Len()==0 { if err:=c.readRecord();err!=nil{return 0,err} }""",
     )
     s = replace(

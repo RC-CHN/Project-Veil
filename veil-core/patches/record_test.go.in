@@ -2,10 +2,12 @@ package tls
 
 import (
 	"bytes"
+	"crypto/cipher"
 	"errors"
 	"io"
 	"net"
 	"os"
+	"sync"
 	"testing"
 	"time"
 )
@@ -99,23 +101,23 @@ func TestVeilBatchAndDrain(t *testing.T) {
 	rr.input.Write(raw.output.Bytes())
 	r := veilTestConn(rr)
 	defer r.veilReleaseCrypto()
-	out := make([]byte, len(plain)/2)
-	for batch := 0; batch < 2; batch++ {
-		n, e := r.Read(out)
-		if e != nil || n != len(out) || !bytes.Equal(out, plain[batch*len(out):(batch+1)*len(out)]) {
-			t.Fatalf("read %d %v", n, e)
-		}
-		if batch == 0 {
-			r.VeilReleaseBuffers()
-			if r.rawInput.Len() == 0 {
-				t.Fatal("released the next buffered batch")
-			}
-		}
+	out := make([]byte, len(plain))
+	n, err := r.Read(out)
+	if err != nil || n != 3*maxPlaintext {
+		t.Fatalf("complete buffered records: %d %v", n, err)
 	}
-	if rr.reads != 1 {
+	r.VeilReleaseBuffers()
+	if r.rawInput.Len() == 0 {
+		t.Fatal("released the partial next record")
+	}
+	if _, err := io.ReadFull(r, out[n:]); err != nil || !bytes.Equal(out, plain) {
+		t.Fatal("read batches changed plaintext", err)
+	}
+	// Each fill can carry three complete records plus a partial fourth.
+	if rr.reads != 7 {
 		t.Fatalf("extra read: %d", rr.reads)
 	}
-	if r.rawInput.Cap() > veilBufferBytes {
+	if r.rawInput.Cap() > veilReadBufferBytes {
 		t.Fatalf("unbounded input buffer %d", r.rawInput.Cap())
 	}
 	r.VeilReleaseBuffers()
@@ -139,7 +141,7 @@ func TestVeilPartialAndBadTag(t *testing.T) {
 		r := veilTestConn(rr)
 		b := make([]byte, 2*maxPlaintext)
 		n, e := r.Read(b)
-		if e != nil || n != maxPlaintext || rr.reads != 1 || r.in.err != nil {
+		if e != nil || n != maxPlaintext || rr.reads != 2 || r.in.err != nil {
 			t.Fatalf("cut=%d n=%d reads=%d err=%v sticky=%v", cut, n, rr.reads, e, r.in.err)
 		}
 		rr.input.Write(second[cut:])
@@ -217,6 +219,148 @@ func TestVeilRepeatedClose(t *testing.T) {
 	c.veilReleaseCrypto()
 }
 
+// A completed Close owns and releases both traffic keys. Buffered ciphertext
+// must not let a later Read enter decrypt or send an alert with released keys.
+func TestVeilReadAfterClose(t *testing.T) {
+	veilCheckReadAfterClose(t, func(c *Conn) io.Reader { return c })
+}
+
+func veilCheckReadAfterClose(t *testing.T, reader func(*Conn) io.Reader) {
+	t.Helper()
+	unhandshaken := veilTestConn(new(veilMemoryConn))
+	unhandshaken.isHandshakeComplete.Store(false)
+	if err := unhandshaken.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := reader(unhandshaken).Read(make([]byte, 1)); n != 0 || !errors.Is(err, net.ErrClosed) {
+		t.Fatalf("post-close handshake: %d, %v", n, err)
+	}
+	raw := new(veilMemoryConn)
+	w := veilTestConn(raw)
+	defer w.veilReleaseCrypto()
+	plain := bytes.Repeat([]byte{37}, 2*maxPlaintext)
+	if _, err := w.Write(plain); err != nil {
+		t.Fatal(err)
+	}
+	rr := new(veilMemoryConn)
+	rr.input.Write(raw.output.Bytes())
+	r := veilTestConn(rr)
+	read := reader(r)
+	if _, err := read.Read(make([]byte, 1)); err != nil {
+		t.Fatal(err)
+	}
+	if r.rawInput.Len() == 0 || r.input.Len() == 0 {
+		t.Fatal("test needs both buffered plaintext and ciphertext")
+	}
+	if err := r.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := read.Read(make([]byte, len(plain))); n != 0 || !errors.Is(err, net.ErrClosed) {
+		t.Fatalf("post-close read: %d, %v", n, err)
+	}
+	// A pending post-handshake message skips readRecord's usual error guard.
+	r.input.Reset(nil)
+	r.hand.Write([]byte{24, 0, 0, 1, 1})
+	secret := append([]byte(nil), r.in.trafficSecret...)
+	if n, err := read.Read(make([]byte, 1)); n != 0 || !errors.Is(err, net.ErrClosed) {
+		t.Fatalf("post-close key update: %d, %v", n, err)
+	}
+	if !bytes.Equal(secret, r.in.trafficSecret) {
+		t.Fatal("post-close read replaced traffic keys")
+	}
+	writes := rr.writes
+	if err := r.sendAlert(alertInternalError); err == nil || rr.writes != writes {
+		t.Fatal("post-close alert wrote to the wire", err, rr.writes)
+	}
+	if _, err := r.Write([]byte{1}); !errors.Is(err, net.ErrClosed) {
+		t.Fatal("post-close Write", err)
+	}
+}
+
+type veilBlockingAEAD struct {
+	cipher.AEAD
+	entered, resume chan struct{}
+	once            sync.Once
+}
+
+func (a *veilBlockingAEAD) Open(dst, nonce, ciphertext, additional []byte) ([]byte, error) {
+	a.once.Do(func() { close(a.entered); <-a.resume })
+	return a.AEAD.Open(dst, nonce, ciphertext, additional)
+}
+
+func (a *veilBlockingAEAD) Close() error {
+	if closer, ok := a.AEAD.(interface{ Close() error }); ok {
+		return closer.Close()
+	}
+	return nil
+}
+
+type veilObservedCloseConn struct {
+	net.Conn
+	closed chan struct{}
+}
+
+func (c *veilObservedCloseConn) Close() error {
+	close(c.closed)
+	return c.Conn.Close()
+}
+
+func TestVeilCloseDuringBufferedRead(t *testing.T) {
+	veilCheckCloseDuringBufferedRead(t, func(c *Conn) io.Reader { return c })
+}
+
+func veilCheckCloseDuringBufferedRead(t *testing.T, reader func(*Conn) io.Reader) {
+	t.Helper()
+	for _, corrupt := range []bool{false, true} {
+		raw := new(veilMemoryConn)
+		w := veilTestConn(raw)
+		plain := bytes.Repeat([]byte{53}, 2*maxPlaintext)
+		if _, err := w.Write(plain); err != nil {
+			t.Fatal(err)
+		}
+		w.veilReleaseCrypto()
+		if corrupt {
+			raw.output.Bytes()[recordHeaderLen+maxPlaintext] ^= 1
+		}
+		r := veilTestConn(new(veilMemoryConn))
+		rawClose := &veilObservedCloseConn{Conn: r.conn, closed: make(chan struct{})}
+		r.conn = rawClose
+		r.rawInput.Write(raw.output.Bytes())
+		x := r.in.cipher.(*xorNonceAEAD)
+		block := &veilBlockingAEAD{AEAD: x.aead, entered: make(chan struct{}), resume: make(chan struct{})}
+		x.aead = block
+		read := reader(r)
+		readDone := make(chan error, 1)
+		go func() {
+			got := make([]byte, len(plain))
+			n, err := read.Read(got)
+			if !corrupt && (n != len(plain) || !bytes.Equal(got, plain)) {
+				err = errors.New("concurrent Close changed buffered plaintext")
+			}
+			readDone <- err
+		}()
+		<-block.entered
+		closeDone := make(chan error, 1)
+		go func() { closeDone <- r.Close() }()
+		<-rawClose.closed
+		// Close must wait until the reader gives up ownership of the key.
+		select {
+		case err := <-closeDone:
+			close(block.resume)
+			t.Fatal("Close released a key in use", err)
+		default:
+		}
+		close(block.resume)
+		if err := <-readDone; (err != nil) != corrupt {
+			t.Fatal("read error", err)
+		}
+		<-closeDone
+		if n, err := read.Read(make([]byte, 1)); n != 0 || !errors.Is(err, net.ErrClosed) {
+			t.Fatalf("post-concurrent-close read: %d, %v", n, err)
+		}
+	}
+}
+
 type veilFinalReader struct {
 	payload []byte
 	err     error
@@ -252,5 +396,37 @@ func TestVeilReadFinalBytesAndError(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A short connection keeps a small receive buffer. Its first large record
+// promotes once, retaining the original batching bound and byte semantics.
+func TestVeilAdaptiveReadBuffer(t *testing.T) {
+	raw := new(veilMemoryConn)
+	w := veilTestConn(raw)
+	defer w.veilReleaseCrypto()
+	rr := new(veilMemoryConn)
+	r := veilTestConn(rr)
+	defer r.veilReleaseCrypto()
+	promoted := false
+	for _, size := range []int{1, 64, 2048, maxPlaintext, 64, 2 * maxPlaintext} {
+		p := bytes.Repeat([]byte{byte(size + 1)}, size)
+		raw.output.Reset()
+		if _, err := w.Write(p); err != nil {
+			t.Fatal(err)
+		}
+		rr.input.Write(raw.output.Bytes())
+		got := make([]byte, len(p))
+		if _, err := io.ReadFull(r, got); err != nil || !bytes.Equal(got, p) {
+			t.Fatalf("size %d: %v", size, err)
+		}
+		promoted = promoted || size >= maxPlaintext
+		want := veilSmallReadBytes
+		if promoted {
+			want = veilReadBufferBytes
+		}
+		if r.rawInput.Cap() != want {
+			t.Fatalf("size %d: capacity %d want %d", size, r.rawInput.Cap(), want)
+		}
 	}
 }

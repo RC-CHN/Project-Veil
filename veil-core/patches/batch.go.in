@@ -68,6 +68,18 @@ func (c *Conn) veilReleaseCrypto() {
 	defer c.in.Unlock()
 	c.out.Lock()
 	defer c.out.Unlock()
+	// Publish terminal state while holding the same locks as record I/O.
+	// A later reader or alert writer must never reuse the released AEADs.
+	if c.handshakeErr == nil && !c.isHandshakeComplete.Load() {
+		c.handshakeErr = net.ErrClosed
+	}
+	if c.in.err == nil {
+		c.in.setErrorLocked(net.ErrClosed)
+	}
+	if c.out.err == nil {
+		c.out.setErrorLocked(net.ErrClosed)
+	}
+	c.veilCryptoClosed = true
 	veilReleaseAEAD(c.in.cipher)
 	veilReleaseAEAD(c.out.cipher)
 }

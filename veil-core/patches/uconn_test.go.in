@@ -2,8 +2,17 @@ package tls
 
 import (
 	"bytes"
+	"io"
 	"testing"
 )
+
+func TestVeilUConnReadAfterClose(t *testing.T) {
+	veilCheckReadAfterClose(t, func(c *Conn) io.Reader { return &UConn{Conn: c} })
+}
+
+func TestVeilUConnCloseDuringBufferedRead(t *testing.T) {
+	veilCheckCloseDuringBufferedRead(t, func(c *Conn) io.Reader { return &UConn{Conn: c} })
+}
 
 func TestVeilUConnDrain(t *testing.T) {
 	raw := new(veilMemoryConn)
@@ -20,8 +29,22 @@ func TestVeilUConnDrain(t *testing.T) {
 	u := &UConn{Conn: r}
 	b := make([]byte, len(plain)+1)
 	n, err := u.Read(b)
-	if err != nil || n != len(plain) || !bytes.Equal(b[:n], plain) || rr.reads != 1 {
-		t.Fatal("UConn did not drain full batch", n, err, rr.reads)
+	if err != nil || n != 3*maxPlaintext || rr.reads != 2 {
+		t.Fatal("UConn did not drain complete buffered records", n, err, rr.reads)
+	}
+	for n < len(plain) {
+		m, err := u.Read(b[n:])
+		if err != nil || m == 0 {
+			t.Fatal("UConn batch read", m, err)
+		}
+		n += m
+	}
+	if n != len(plain) || !bytes.Equal(b[:n], plain) {
+		t.Fatal("UConn changed plaintext")
+	}
+	// The final read drains the buffered KeyUpdate after the application data.
+	if rr.reads != 4 {
+		t.Fatal("unexpected ciphertext reads", rr.reads)
 	}
 	if bytes.Equal(r.in.trafficSecret, make([]byte, 32)) || rr.writes != 1 {
 		t.Fatal("UConn lost KeyUpdate")

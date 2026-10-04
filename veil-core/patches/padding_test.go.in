@@ -151,8 +151,10 @@ func TestVeilPaddingReaderDrain(t *testing.T) {
 	defer r.Close()
 	u := &UConn{Conn: r}
 	b := make([]byte, len(plain))
-	if n, err := u.Read(b); err != nil || n != len(b) || !bytes.Equal(b, plain) {
-		t.Fatal("incomplete UConn batch", n, err)
+	if n, err := u.Read(b); err != nil || n != 3*maxPlaintext {
+		t.Fatal("did not drain complete buffered records", n, err)
+	} else if _, err := io.ReadFull(u, b[n:]); err != nil || !bytes.Equal(b, plain) {
+		t.Fatal("incomplete UConn batch", err)
 	}
 	r.VeilReleaseBuffers()
 	if r.rawInput.Cap() != 0 {
@@ -166,6 +168,33 @@ func TestVeilPaddingRejectUnsafeBudget(t *testing.T) {
 	for _, v := range [][3]int{{-1, 1, 1}, {513, 1, 1}, {1, -1, 1}, {1, 13, 1}, {1, 1, -1}, {1, 1, 4097}} {
 		if c.VeilSetPaddingBudget(v[0], v[1], v[2]) == nil {
 			t.Fatal("unsafe budget accepted", v)
+		}
+	}
+}
+
+// Covers the portable backend as well as the optimized uTLS builds.
+func TestVeilPaddingAdaptiveReadBuffer(t *testing.T) {
+	raw := new(veilPaddingMemory)
+	w, r := veilPaddingConn(raw), veilPaddingConn(raw)
+	defer w.Close()
+	defer r.Close()
+	promoted := false
+	for _, size := range []int{1, 64, 2048, maxPlaintext, 64, 2 * maxPlaintext} {
+		p := bytes.Repeat([]byte{byte(size + 1)}, size)
+		if _, err := w.Write(p); err != nil {
+			t.Fatal(err)
+		}
+		got := make([]byte, len(p))
+		if _, err := io.ReadFull(r, got); err != nil || !bytes.Equal(got, p) {
+			t.Fatalf("size %d: %v", size, err)
+		}
+		promoted = promoted || size >= maxPlaintext
+		want := veilSmallReadBytes
+		if promoted {
+			want = veilReadBufferBytes
+		}
+		if r.rawInput.Cap() != want {
+			t.Fatalf("size %d: capacity %d want %d", size, r.rawInput.Cap(), want)
 		}
 	}
 }
