@@ -138,6 +138,91 @@ func TestPoolWaitForDialIsBounded(t *testing.T) {
 	}
 }
 
+func waitPoolQueue(t *testing.T, p *pool, count int) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for {
+		p.mu.Lock()
+		n := p.waiters.Len()
+		p.mu.Unlock()
+		if n == count {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("queued opens: got %d, want %d", n, count)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+func TestPoolQueuedAdmission(t *testing.T) {
+	a, b := net.Pipe()
+	defer b.Close()
+	live := pooled(t, a)
+	p := testPool(t)
+	p.cfg.MaxConnections = 1
+	p.all[live], p.total = true, 1
+	// Hold an older admission as if its goroutine has not been scheduled yet.
+	// A free lane must not let newcomers overtake it indefinitely.
+	older := p.waiters.PushBack(make(chan struct{}, 1))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	result := make(chan error, 1)
+	go func() {
+		_, err := p.get(ctx)
+		result <- err
+	}()
+	waitPoolQueue(t, p, 2)
+	cancel()
+	if err := <-result; !errors.Is(err, context.Canceled) {
+		t.Fatal("queued cancellation:", err)
+	}
+	waitPoolQueue(t, p, 1)
+	go func() {
+		s, err := p.get(context.Background())
+		if err == nil {
+			p.put(s)
+		}
+		result <- err
+	}()
+	waitPoolQueue(t, p, 2)
+	p.mu.Lock()
+	p.waiters.Remove(older)
+	p.notifyLocked()
+	p.mu.Unlock()
+	select {
+	case err := <-result:
+		if err != nil {
+			t.Fatal("admission did not recover:", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("queued open was not woken")
+	}
+	waitPoolQueue(t, p, 0)
+}
+
+func TestPoolCloseWakesQueuedOpens(t *testing.T) {
+	p := testPool(t)
+	p.total, p.dialing = 1, true
+	results := make(chan error, 32)
+	for range cap(results) {
+		go func() { _, err := p.get(context.Background()); results <- err }()
+	}
+	waitPoolQueue(t, p, cap(results))
+	p.close()
+	for range cap(results) {
+		select {
+		case err := <-results:
+			if !errors.Is(err, net.ErrClosed) {
+				t.Fatal(err)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("close left an open queued")
+		}
+	}
+	waitPoolQueue(t, p, 0)
+}
+
 func TestDrainingLaneCountsAgainstPoolLimit(t *testing.T) {
 	a, b := net.Pipe()
 	defer b.Close()

@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"container/list"
 	"context"
 	"errors"
 	"math/rand/v2"
@@ -25,7 +26,7 @@ type pool struct {
 	all             map[*session]bool
 	total           int
 	closed, dialing bool
-	changed         chan struct{}
+	waiters         list.List // FIFO admission while a physical dial is pending.
 	dialError       error
 	retryAt         time.Time
 	retryDelay      time.Duration
@@ -41,9 +42,11 @@ func newPool(cfg ClientConfig, key []byte, h transport.Handshake) *pool {
 	return p
 }
 func (p *pool) notifyLocked() {
-	if p.changed != nil {
-		close(p.changed)
-		p.changed = nil
+	if first := p.waiters.Front(); first != nil {
+		select {
+		case first.Value.(chan struct{}) <- struct{}{}:
+		default:
+		}
 	}
 }
 func (p *pool) idleLocked() int {
@@ -67,6 +70,41 @@ func (p *pool) removeLocked(s *session) bool {
 func stopSession(s *session) { s.mux.Close(); s.mux.Wait() }
 func (p *pool) get(ctx context.Context) (*session, error) {
 	var cancel context.CancelFunc
+	var waiter *list.Element
+	leaveQueueLocked := func() {
+		if waiter != nil {
+			p.waiters.Remove(waiter)
+			waiter = nil
+			p.notifyLocked()
+		}
+	}
+	defer func() {
+		if cancel != nil {
+			cancel()
+		}
+		if waiter != nil {
+			p.mu.Lock()
+			leaveQueueLocked()
+			p.mu.Unlock()
+		}
+	}()
+	waitLocked := func() error {
+		if waiter == nil {
+			waiter = p.waiters.PushBack(make(chan struct{}, 1))
+		}
+		ready := waiter.Value.(chan struct{})
+		p.mu.Unlock()
+		if cancel == nil {
+			// Queueing and any subsequent dial share the original budget.
+			ctx, cancel = context.WithTimeout(ctx, p.cfg.HandshakeTimeout)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ready:
+			return nil
+		}
+	}
 	var dialErr error
 	for {
 		if err := ctx.Err(); err != nil {
@@ -76,6 +114,14 @@ func (p *pool) get(ctx context.Context) (*session, error) {
 		if p.closed {
 			p.mu.Unlock()
 			return nil, net.ErrClosed
+		}
+		// New arrivals cannot repeatedly take slots from older queued opens.
+		// Wake one waiter at a time instead of broadcasting every completion.
+		if first := p.waiters.Front(); first != nil && first != waiter {
+			if err := waitLocked(); err != nil {
+				return nil, err
+			}
+			continue
 		}
 		var best *session
 		var dead []*session
@@ -96,6 +142,7 @@ func (p *pool) get(ctx context.Context) (*session, error) {
 			}
 		}
 		if len(dead) > 0 {
+			leaveQueueLocked()
 			p.mu.Unlock()
 			for _, s := range dead {
 				stopSession(s)
@@ -120,6 +167,8 @@ func (p *pool) get(ctx context.Context) (*session, error) {
 		if wantNew && p.total < p.cfg.MaxConnections && !p.dialing {
 			p.total++
 			p.dialing = true
+			// A slow optional expansion must not hold up live reusable lanes.
+			leaveQueueLocked()
 			p.mu.Unlock()
 			s, err := p.dial(ctx)
 			p.mu.Lock()
@@ -157,23 +206,10 @@ func (p *pool) get(ctx context.Context) (*session, error) {
 			return s, nil
 		}
 		if wantNew && p.dialing && best == nil {
-			if p.changed == nil {
-				p.changed = make(chan struct{})
+			if err := waitLocked(); err != nil {
+				return nil, err
 			}
-			changed := p.changed
-			p.mu.Unlock()
-			if cancel == nil {
-				// Bound queueing and any subsequent dial together. Allocate a
-				// deadline only for queued opens, not the normal reuse path.
-				ctx, cancel = context.WithTimeout(ctx, p.cfg.HandshakeTimeout)
-				defer cancel()
-			}
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-changed:
-				continue
-			}
+			continue
 		}
 		if best != nil {
 			best.active++
