@@ -33,7 +33,7 @@ type Settings struct {
 
 type Handshake func(context.Context, net.Conn) (net.Conn, error)
 
-func Server(s Settings, timeout, idle time.Duration) (Handshake, error) {
+func Server(s Settings, timeout, idle time.Duration, protocols ...string) (Handshake, error) {
 	if s.ServerName == "" {
 		return nil, errors.New("transport: server_name required")
 	}
@@ -43,7 +43,10 @@ func Server(s Settings, timeout, idle time.Duration) (Handshake, error) {
 		if err != nil {
 			return nil, err
 		}
-		cfg := &utls.Config{MinVersion: utls.VersionTLS13, MaxVersion: utls.VersionTLS13, Certificates: []utls.Certificate{cert}, NextProtos: []string{"http/1.1"}, SessionTicketsDisabled: true, DynamicRecordSizingDisabled: true}
+		if len(protocols) == 0 {
+			protocols = []string{"http/1.1"}
+		}
+		cfg := &utls.Config{MinVersion: utls.VersionTLS13, MaxVersion: utls.VersionTLS13, Certificates: []utls.Certificate{cert}, NextProtos: protocols, SessionTicketsDisabled: true, DynamicRecordSizingDisabled: true}
 		return func(ctx context.Context, raw net.Conn) (net.Conn, error) {
 			c := utls.Server(raw, cfg)
 			err := c.HandshakeContext(ctx)
@@ -176,4 +179,12 @@ func RecordBudget(c net.Conn, limit, records, budget int) error {
 		return nil
 	}
 	return errors.New("transport: traffic profile requires the patched TLS library")
+}
+
+// Protocol returns the negotiated application protocol on a completed TLS stream.
+func Protocol(c net.Conn) string {
+	if x, ok := c.(interface{ ConnectionState() utls.ConnectionState }); ok {
+		return x.ConnectionState().NegotiatedProtocol
+	}
+	return ""
 }

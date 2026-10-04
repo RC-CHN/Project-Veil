@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"time"
 	"veil/core"
 	"veil/internal/transport"
@@ -16,6 +17,7 @@ type Config struct {
 	Inbound          string               `json:"inbound,omitempty"`
 	Secret           string               `json:"secret"`
 	TLS              transport.Settings   `json:"tls"`
+	HTTPFallback     *HTTPFallbackConfig  `json:"http_fallback,omitempty"`
 	Traffic          *core.TrafficProfile `json:"traffic,omitempty"`
 	MaxConnections   int                  `json:"max_connections"`
 	MaxIdle          int                  `json:"max_idle"`
@@ -23,6 +25,21 @@ type Config struct {
 	DialSeconds      int                  `json:"dial_seconds"`
 	IdleSeconds      int                  `json:"idle_seconds"`
 	PoolSeconds      int                  `json:"pool_seconds"`
+}
+
+// HTTPFallbackConfig routes unauthenticated ordinary TLS bytes to fixed HTTP
+// backends. Choose plaintext HTTP/1 (optionally h2c), or a verified HTTPS site.
+type HTTPFallbackConfig struct {
+	HTTP1 string               `json:"http1,omitempty"`
+	H2C   string               `json:"h2c,omitempty"`
+	HTTPS *HTTPSFallbackConfig `json:"https,omitempty"`
+}
+
+type HTTPSFallbackConfig struct {
+	Address    string `json:"address"`
+	ServerName string `json:"server_name"`
+	CAFile     string `json:"ca_file,omitempty"`
+	HTTP2      bool   `json:"http2,omitempty"`
 }
 
 func (c *Config) Defaults() error {
@@ -87,6 +104,39 @@ func (c *Config) Defaults() error {
 		if c.Inbound != "socks" && c.Inbound != "http" && c.Inbound != "mixed" {
 			return errors.New("inbound must be socks, http or mixed")
 		}
+	}
+	if c.HTTPFallback != nil {
+		if c.Role != "server" || c.TLS.Mode != "tls" {
+			return errors.New("http_fallback is only valid for an ordinary TLS server")
+		}
+		fallback := *c.HTTPFallback
+		addresses := map[string]string{"http1": fallback.HTTP1, "h2c": fallback.H2C}
+		if fallback.HTTPS != nil {
+			if fallback.HTTP1 != "" || fallback.H2C != "" {
+				return errors.New("http_fallback.https cannot be combined with http1 or h2c")
+			}
+			https := *fallback.HTTPS
+			if https.Address == "" || https.ServerName == "" {
+				return errors.New("http_fallback.https requires address and server_name")
+			}
+			fallback.HTTPS = &https
+			addresses["https.address"] = https.Address
+		} else if fallback.HTTP1 == "" {
+			return errors.New("http_fallback.http1 is required")
+		}
+		for name, address := range addresses {
+			if address == "" {
+				continue
+			}
+			encoded, err := wire.EncodeAddress(address)
+			if err == nil {
+				_, err = wire.DecodeAddress(encoded)
+			}
+			if err != nil {
+				return fmt.Errorf("http_fallback.%s: %w", name, err)
+			}
+		}
+		c.HTTPFallback = &fallback
 	}
 	_, err := transport.DecodeKey(c.Secret)
 	return err

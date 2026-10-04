@@ -29,7 +29,11 @@ func New(cfg Config) (*Service, error) {
 	}
 	s := &Service{cfg: cfg}
 	if cfg.Role == "server" {
-		server, err := core.NewServer(core.ServerConfig{Config: opts})
+		fallback, err := httpFallback(cfg)
+		if err != nil {
+			return nil, err
+		}
+		server, err := core.NewServer(core.ServerConfig{Config: opts, Fallback: fallback})
 		if err != nil {
 			return nil, err
 		}

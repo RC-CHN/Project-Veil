@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // REALITY client handshake adapted from SagerNet/sing-box v1.15.0-alpha.9,
 // common/tls/reality_client.go, Copyright (C) 2022 nekohasekai.
-// Veil uses the TLS library's parsed certificate, rejects non-REALITY peers, and disables
-// TLS renegotiation to permit channel-bound TLS 1.3 exporter authentication.
+// Veil uses parsed certificates and never admits non-REALITY peers to the core.
+// TLS renegotiation remains disabled for channel-bound exporter authentication.
 package transport
 
 import (
@@ -48,18 +48,18 @@ func realityClient(s Settings) (Handshake, error) {
 		var authKey []byte
 		verified := false
 		cfg := &utls.Config{ServerName: s.ServerName, MinVersion: utls.VersionTLS13, MaxVersion: utls.VersionTLS13, SessionTicketsDisabled: true, DynamicRecordSizingDisabled: true, InsecureSkipVerify: true}
-		// InsecureSkipVerify is paired with mandatory REALITY HMAC authentication.
-		// A normal trusted website certificate is insufficient for this transport.
+		// A REALITY proof permits the core transport. A separately verified
+		// trusted HTTPS certificate permits only the bounded cover request.
 		cfg.VerifyConnection = func(state utls.ConnectionState) error {
 			if len(state.PeerCertificates) == 0 || len(authKey) != 32 {
 				return errors.New("REALITY authentication failed")
 			}
 			cert := state.PeerCertificates[0]
-			if !verifyRealityCertificate(cert, authKey) {
-				return errors.New("REALITY authentication failed")
+			if verifyRealityCertificate(cert, authKey) {
+				verified = true
+				return nil
 			}
-			verified = true
-			return nil
+			return verifyCoverCertificate(s, state.PeerCertificates)
 		}
 		// Fix the profile before ApplyPreset generates key shares. Specs contain
 		// mutable slices and extension state, so each connection gets its own.
@@ -116,7 +116,10 @@ func realityClient(s Settings) (Handshake, error) {
 			return nil, err
 		}
 		if !verified {
-			c.Close()
+			browseCover(ctx, c, s.ServerName, profile.Version)
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			return nil, errors.New("REALITY authentication failed")
 		}
 		return c, nil

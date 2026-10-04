@@ -30,6 +30,55 @@ make build
 
 REALITY 的 `cover_address` 指向兼容所用浏览器模板的 TLS 1.3 参考站点，两端 `server_name` 一致。普通 TLS 模式使用 `certificate` 和 `private_key_file`，客户端通过 `ca_file` 增加自有 CA；证书和主机名验证始终启用。
 
+普通 TLS 服务端可配置 `http_fallback`，将未通过 Veil AUTH 的解密数据交给管理员指定的网站后端。可选择明文 `http1`（可选 `h2c`），或经过证书验证的 `https` 后端，两种配置互斥。没有 ALPN 的连接使用 HTTP/1；协商到 `h2` 的连接在 TLS 握手后直接交给网站，不等待 Veil AUTH。目标地址固定，不从请求 Host、URL 或 CONNECT 中提取；该配置与 REALITY 的 `cover_address` 分开。已通过 AUTH 的 Veil 流继续按 OPEN 目标转发。见 [TLS 网站回落示例](examples/server.tls-fallback.json)。
+
+固定的二进制 AUTH 前缀不等同于 HTTP 语法：只发送部分有效 AUTH 前缀时，服务端可能等待认证超时，而网站已返回 HTTP 错误，因而仍可通过响应时序区分。
+
+例如，先由 Caddy 在本机提供实际网站；`site/` 中放入自己的 `index.html` 和其他资源：
+
+```caddyfile
+{
+    admin off
+    auto_https off
+    servers {
+        protocols h1 h2c
+    }
+}
+http://127.0.0.1:8080 {
+    bind 127.0.0.1
+    root * ./site
+    file_server
+}
+```
+
+运行 `caddy run --config Caddyfile` 后，在普通 TLS 服务端 JSON 增加：
+
+```json
+"http_fallback": {
+  "http1": "127.0.0.1:8080",
+  "h2c": "127.0.0.1:8080"
+}
+```
+
+后端仅提供 HTTP/1 时，省略 `h2c` 即可。明文后端应放在适合该访问方式的网络中。部分 h2c 网站会等待客户端前言才发送 SETTINGS；若要沿用网站 HTTPS/H2 的主动发送行为，可将上述配置替换为：
+
+```json
+"http_fallback": {
+  "https": {
+    "address": "127.0.0.1:8444",
+    "server_name": "site.example",
+    "ca_file": "site-ca.pem",
+    "http2": true
+  }
+}
+```
+
+在此地址运行自己的 HTTPS 网站，证书须匹配 `server_name`；`ca_file` 可添加私有 CA，使用系统信任的证书时省略它。`http2: true` 明确启用前端 H2，后端必须能协商相同的 ALPN；省略时前端仅提供 HTTP/1。Veil 不改写 HTTP 数据，也不生成替代网站的 SETTINGS。网站的证书、ALPN 或连接验证失败会结束该回落连接。
+
+`dial_seconds` 限制后端拨号及 TLS 握手的总时间，`idle_seconds` 限制双向无进展时间，回落与已认证连接共同受 `max_connections` 限制。服务停止会关闭两端并等待转发结束。前端 TLS 握手及 HTTP/1 上的 AUTH 读取仍受 `handshake_seconds` 限制；H2 在握手后使用网站回落的期限。
+
+REALITY 客户端只有验证 Veil 证书证明后才交给核心发送 AUTH。若收到普通网站证书，客户端另行校验证书链、有效期和 `server_name`，通过后在同一 TLS 连接上按 ALPN 发一次 HTTP/1.1 或 HTTP/2 `GET /`，随后关闭并报告认证失败；请求不携带业务凭据或目标地址，不跟随重定向、不重拨连接。网站信任使用系统 CA，可通过 `ca_file` 或 `ca_pem` 增加私有 CA。此分支的期限为父 context 剩余时间与 2 秒中的较短者，发送/接收应用字节预算分别为 16/64 KiB；TLS 握手和有界的记录预读另计。正常 Veil 连接不执行这段 HTTP 请求。该行为使用 Go HTTP 客户端，并不复现浏览器的完整 HTTP 指纹。
+
 REALITY 客户端可用 `tls.fingerprint` 指定 `chrome120`、`chrome131`、`chrome133` 或 `chrome149`；省略时及旧名称 `chrome` 均使用 133。也可将该字段替换为 `"fingerprints": ["chrome131", "chrome133", "chrome149"]`：每条新建的物理 TLS 连接等概率选一个模板，连接复用期间保持不变。两个字段不能同时设置；空列表、未知名称和重复模板会在启动时拒绝。程序调用者可在 `transport.Client(Settings)` 中指定模板或候选列表，选择只发生在返回的握手函数被调用时。
 
 120/131/133 对应固定 uTLS 版本中的模板；131/133 保留其 X25519MLKEM768 密钥份额，不再为减少冷连接开销而删除它。149 基于 Linux Chrome for Testing 149.0.7827.55 的新建连接抓包，在 133 基础上加入空 `trust_anchors` 向量并重新打乱扩展顺序；这里只匹配 ClientHello，不实现浏览器的信任锚重试、DNS 策略或 HTTP 行为。所有模板在本地禁用 TLS 重新协商，这不改变该扩展的线上字节。每条连接独立生成密钥、随机数、GREASE 与扩展顺序。
@@ -139,6 +188,24 @@ TLS/REALITY 集成测试使用本机 `openssl s_server`，只连接自有回环�
 下载回归还使用真实 curl 检查上游提前 EOF/RST、单向下载的空闲计时，以及下载被背压阻塞时上传仍能推进。可在隔离网络中设置 `VEIL_LONG_DOWNLOAD_TEST=1`，通过相同构建 flags 单独执行 `go test ./service -run TestLongHTTPSDownloadPause -v`：它模拟 HTTPS 302 后的 104 MiB 下载，中途保持连接静默 30 秒，再续传并校验哈希。测试不连接 HF 或现有部署。
 
 `idle_seconds` 按两个方向合计的活动计时，默认 120 秒；它不是最低下载速度检查。收到 EOF/RST 与链路黑洞不同：没有关闭报文的丢包可能要等 TCP 重传或应用空闲超时。30 秒停顿测试通过不能排除特定运营商、CDN 或部署版本下的长连接问题，也不能替代现场日志。
+
+长时间稳定性检查需要显式启用，普通 CI 会跳过 `TestStabilitySoak`。它默认用 128 并发经过两层 REALITY，混合 SOCKS/HTTP CONNECT、长传输、半关闭、RST 和取消，核对传输字节与资源释放。`VEIL_STRESS_WORKERS=1..512` 可调整并发；日志包含错误分类、每个失败事务已校验的字节数、GC、堆、FD 和池状态：
+
+```sh
+make prepare
+VEIL_STRESS_DURATION=60m GOCACHE="$PWD/.build/cache" GOMODCACHE="$PWD/.build/mod" \
+  go test -tags=with_utls -modfile=.build/native/build.mod ./service -run '^TestStabilitySoak$' -timeout=70m
+```
+
+`TestPoolOverloadRecovery` 在同一隧道保留健康连接，将其余槽位填满或阻塞在目标拨号，再反复注入并发请求、取消并恢复，检查连接复用和资源归还。
+
+性能基准分别覆盖串行新连接（`BenchmarkSerialShort`、`BenchmarkSerialSized`）、持久大流（`BenchmarkBulkEcho`）和不同业务大小后的空闲堆（`BenchmarkIdleStreams`、`BenchmarkIdleMediumStreams`）。空闲堆按 `-benchtime=1x` 且每个大小使用独立进程采样，避免前一次负载的缓存影响比较。
+
+全窗口背压测试会塞满同一隧道内 8 条流的双向接收窗口，再交替恢复读取或重置部分流，检查数据哈希、FIN/DONE 和剩余流的进展。测试使用本机 TCP，按需启用：
+
+```sh
+VEIL_WINDOW_STRESS_DURATION=5m go test -race ./internal/mux -run '^TestWindowSaturationSoak$' -timeout=7m -v
+```
 
 ## 优化构建
 

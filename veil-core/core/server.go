@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -33,7 +34,30 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	h, err := transport.Server(cfg.TLS, cfg.HandshakeTimeout, cfg.IdleTimeout)
+	var protocols []string
+	if cfg.Fallback != nil {
+		if cfg.TLS.Mode != "tls" {
+			return nil, errors.New("veil: application fallback requires ordinary TLS")
+		}
+		fallback := *cfg.Fallback
+		if fallback.Handler == nil {
+			return nil, errors.New("veil: fallback handler required")
+		}
+		fallback.Protocols = slices.Clone(fallback.Protocols)
+		if len(fallback.Protocols) == 0 {
+			fallback.Protocols = []string{"http/1.1"}
+		}
+		seen := make(map[string]bool)
+		for _, protocol := range fallback.Protocols {
+			if protocol != "http/1.1" && protocol != "h2" || seen[protocol] {
+				return nil, errors.New("veil: invalid fallback protocols")
+			}
+			seen[protocol] = true
+		}
+		cfg.Fallback = &fallback
+		protocols = fallback.Protocols
+	}
+	h, err := transport.Server(cfg.TLS, cfg.HandshakeTimeout, cfg.IdleTimeout, protocols...)
 	if err != nil {
 		return nil, err
 	}
@@ -66,18 +90,50 @@ func (s *Server) Handle(ctx context.Context, raw net.Conn) error {
 		return opError("TLS handshake", err)
 	}
 	defer c.Close()
+	// T clients use HTTP/1.1 ALPN. HTTP/2 belongs to the website, which
+	// may send its SETTINGS before the client sends any application bytes.
+	if s.cfg.Fallback != nil && transport.Protocol(c) == "h2" {
+		if err := hsCtx.Err(); err != nil {
+			return opError("TLS fallback", err)
+		}
+		cancel()
+		if err := c.SetDeadline(time.Time{}); err != nil {
+			return err
+		}
+		return opError("TLS fallback", s.cfg.Fallback.Handler(ctx, c, "h2"))
+	}
 	exporter, err := transport.Export(c)
 	if err != nil {
 		return err
 	}
 	r := wire.Reader{R: c}
+	var prefix *authPrefix
+	if s.cfg.Fallback != nil {
+		prefix = &authPrefix{Conn: c}
+		r.R = prefix
+	}
 	defer r.Release()
 	typ, p, err := r.Read()
-	if err != nil {
-		return opError("authentication", err)
-	}
-	if typ != wire.Auth || !wire.VerifyAuth(s.key, exporter, p) {
-		return opError("authentication", errors.New("veil: authentication failed"))
+	if err != nil || typ != wire.Auth || !wire.VerifyAuth(s.key, exporter, p) {
+		failedAuth := err == nil || errors.Is(err, wire.ErrProtocol)
+		if prefix != nil && prefix.size > 0 && (errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)) {
+			failedAuth = true
+		}
+		if err == nil {
+			err = errors.New("veil: authentication failed")
+		}
+		// A timed-out or canceled connection must not initiate new fallback work.
+		var timeout net.Error
+		if prefix == nil || !failedAuth || hsCtx.Err() != nil || errors.As(err, &timeout) && timeout.Timeout() {
+			return opError("authentication", err)
+		}
+		cancel()
+		r.Release()
+		if err := c.SetDeadline(time.Time{}); err != nil {
+			return err
+		}
+		prefix.replay = true
+		return opError("TLS fallback", s.cfg.Fallback.Handler(ctx, prefix, transport.Protocol(c)))
 	}
 	s.Stats.Authenticated.Add(1)
 	cancel()

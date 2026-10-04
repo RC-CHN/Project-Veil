@@ -50,9 +50,25 @@ type ClientConfig struct {
 	DialContext DialFunc
 }
 
+// FallbackFunc handles an unauthenticated, decrypted ordinary TLS stream.
+// c starts with every consumed authentication byte; protocol is negotiated ALPN.
+// Negotiated h2 is dispatched immediately, without reading Veil authentication.
+// The caller must synchronously honor ctx and enforce its own IO/resource bounds.
+// Server.Handle retains connection ownership and closes c when ctx is canceled.
+// It is available only in ordinary TLS mode, never for REALITY.
+type FallbackFunc func(ctx context.Context, c net.Conn, protocol string) error
+
+// Fallback declares the protocols implemented by Handler. Empty Protocols
+// means HTTP/1.1 only. The server copies the declaration at construction.
+type Fallback struct {
+	Handler   FallbackFunc
+	Protocols []string
+}
+
 type ServerConfig struct {
 	Config
 	DialContext DialFunc
+	Fallback    *Fallback
 }
 
 // Stats contains monotonic counters. Core updates Completed, Authenticated and
