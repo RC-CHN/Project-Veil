@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -309,5 +310,193 @@ func TestAcceptedStreamParentCancellation(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("canceled read stayed blocked")
+	}
+}
+
+func TestParentCancellationReleasesFlowControlledWrite(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	a, b := net.Pipe()
+	c, err := New(a, Options{Profile: DefaultProfile()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := New(b, Options{Server: true, Context: ctx, Profile: DefaultProfile()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { c.Close(); s.Close(); c.Wait(); s.Wait() })
+	_, peer := openPair(t, c, s)
+	done := make(chan error, 1)
+	go func() {
+		_, err := peer.Write(make([]byte, (windowBlocks+1)*blockSize))
+		done <- err
+	}()
+	deadline := time.Now().Add(time.Second)
+	for {
+		s.mu.Lock()
+		blocked := peer.sendCredit == 0
+		s.mu.Unlock()
+		if blocked {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("send window did not fill")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("canceled write succeeded")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("parent cancellation left Write waiting for peer credit")
+	}
+	if s.Err() != nil {
+		t.Fatal("stream cancellation closed the session:", s.Err())
+	}
+}
+
+type gatedDataWriter struct {
+	net.Conn
+	started, release chan struct{}
+	unchanged        chan bool
+	once             sync.Once
+}
+
+func (c *gatedDataWriter) Write(p []byte) (int, error) {
+	if len(p) > 0 && p[0] == data {
+		c.once.Do(func() {
+			before := bytes.Clone(p)
+			close(c.started)
+			<-c.release
+			c.unchanged <- bytes.Equal(p, before)
+		})
+	}
+	return c.Conn.Write(p)
+}
+
+func TestCanceledWriteReturnsBufferOwnership(t *testing.T) {
+	// Cover both a request fully copied into the blocked batch and one whose
+	// remainder is still owned by the scheduler's pending request.
+	for _, size := range []int{64, 4096} {
+		t.Run(strconv.Itoa(size), func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			a, b := net.Pipe()
+			w := &gatedDataWriter{Conn: b, started: make(chan struct{}), release: make(chan struct{}), unchanged: make(chan bool, 1)}
+			c, err := New(a, Options{Profile: DefaultProfile()})
+			if err != nil {
+				t.Fatal(err)
+			}
+			s, err := New(w, Options{Server: true, Context: ctx, Profile: DefaultProfile()})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var release sync.Once
+			t.Cleanup(func() { release.Do(func() { close(w.release) }); c.Close(); s.Close(); c.Wait(); s.Wait() })
+			_, peer := openPair(t, c, s)
+			payload := bytes.Repeat([]byte{0x7b}, size)
+			done := make(chan error, 1)
+			go func() { _, err := peer.Write(payload); done <- err }()
+			select {
+			case <-w.started:
+			case <-time.After(time.Second):
+				t.Fatal("socket write did not start")
+			}
+			cancel()
+			select {
+			case err := <-done:
+				if err == nil {
+					t.Fatal("canceled write succeeded")
+				}
+			case <-time.After(time.Second):
+				t.Fatal("cancellation waited for blocked socket")
+			}
+			// The caller may immediately recycle p while the physical writer resumes.
+			clear(payload)
+			release.Do(func() { close(w.release) })
+			if !<-w.unchanged {
+				t.Fatal("physical writer retained the caller's returned buffer")
+			}
+		})
+	}
+}
+
+func TestStreamChurnAtCapacity(t *testing.T) {
+	c, s := pair(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	stop := context.AfterFunc(ctx, func() { c.Close(); s.Close() })
+	defer stop()
+	payload := bytes.Repeat([]byte("churn"), 20<<10)
+	for round := range 24 {
+		var streams [MaxStreams][2]*Stream
+		for i := range streams {
+			a, b := openPair(t, c, s)
+			streams[i] = [2]*Stream{a, b}
+		}
+		if _, err := c.Open(ctx, []byte("over capacity")); !errors.Is(err, ErrFull) {
+			t.Fatalf("round %d: capacity was not enforced: %v", round, err)
+		}
+		var workers sync.WaitGroup
+		for i, peers := range streams {
+			a, b := peers[0], peers[1]
+			if i%2 != 0 {
+				// Race queued writes and FIN against RESET while other streams
+				// complete normally on the same full physical connection.
+				workers.Go(func() { _, _ = a.Write(payload) })
+				workers.Go(func() { _ = a.CloseWrite() })
+				workers.Go(func() { a.Close(); b.Close() })
+				continue
+			}
+			workers.Go(func() {
+				defer b.Close()
+				p, err := io.ReadAll(b)
+				if err != nil || !bytes.Equal(p, payload) {
+					t.Errorf("server payload: %d bytes, %v", len(p), err)
+					return
+				}
+				if _, err = b.Write(p); err == nil {
+					err = b.CloseWrite()
+				}
+				if err == nil {
+					err = b.Finish()
+				}
+				if err != nil {
+					t.Error("server completion:", err)
+				}
+			})
+			workers.Go(func() {
+				defer a.Close()
+				if _, err := a.Write(payload); err != nil {
+					t.Error("client write:", err)
+					return
+				}
+				if err := a.CloseWrite(); err != nil {
+					t.Error("client FIN:", err)
+					return
+				}
+				p, err := io.ReadAll(a)
+				if err != nil || !bytes.Equal(p, payload) {
+					t.Errorf("client payload: %d bytes, %v", len(p), err)
+					return
+				}
+				if err := a.WaitDone(ctx); err != nil {
+					t.Error("client DONE:", err)
+				}
+			})
+		}
+		workers.Wait()
+		for _, session := range []*Session{c, s} {
+			if active, _, closed := session.Snapshot(); active != 0 || closed {
+				t.Fatalf("round %d: active=%d closed=%v err=%v", round, active, closed, session.Err())
+			}
+		}
+		if t.Failed() {
+			return
+		}
 	}
 }

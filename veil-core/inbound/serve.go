@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"sync"
+	"time"
 	"veil/core"
 )
 
@@ -38,14 +39,31 @@ func Serve(ctx context.Context, ln net.Listener, handle Handler, opts ServeOptio
 	slots := make(chan struct{}, opts.MaxConnections)
 	var wg sync.WaitGroup
 	var acceptErr error
+	var retry time.Duration
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
 			if ctx.Err() == nil && !errors.Is(err, net.ErrClosed) {
+				if temporary, ok := err.(net.Error); ok && temporary.Temporary() {
+					// Resource pressure must not cancel established streams. Back off
+					// while descriptors recover, but let shutdown interrupt the wait.
+					retry = min(max(2*retry, 5*time.Millisecond), time.Second)
+					if opts.OnError != nil {
+						opts.OnError(err)
+					}
+					timer := time.NewTimer(retry)
+					select {
+					case <-timer.C:
+					case <-ctx.Done():
+						timer.Stop()
+					}
+					continue
+				}
 				acceptErr = err
 			}
 			break
 		}
+		retry = 0
 		select {
 		case slots <- struct{}{}:
 		default:

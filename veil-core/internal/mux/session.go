@@ -33,7 +33,7 @@ type Session struct {
 	opts                      Options
 	streams                   map[uint32]*Stream
 	lastID, lastSent          uint32
-	controls                  []*control
+	controls                  []control
 	err                       error
 	wake                      chan struct{}
 	done, readDone, writeDone chan struct{}
@@ -135,7 +135,7 @@ func (s *Session) controlLocked(t byte, id uint32, p []byte, done chan error) er
 	if len(s.controls) >= maxControls {
 		return ErrFull
 	}
-	s.controls = append(s.controls, &control{frame: frame{t, id, append([]byte(nil), p...)}, done: done})
+	s.controls = append(s.controls, control{frame: frame{t, id, append([]byte(nil), p...)}, done: done})
 	signal(s.wake)
 	return nil
 }
@@ -456,21 +456,24 @@ func (s *Session) writeLoop() {
 			}
 			buf = append(buf[:0], s.prefix...)
 			s.prefix = nil
-			var controlStorage [maxControls]*control
+			var controlStorage [maxControls]control
 			sentControls := controlStorage[:0]
-			for len(s.controls) > 0 {
-				c := s.controls[0]
+			consumed := 0
+			for consumed < len(s.controls) {
+				c := s.controls[consumed]
 				if len(buf) > 0 && len(buf)+headerSize+len(c.payload) > limit && len(sentControls) > 0 {
 					break
 				}
 				buf = appendFrame(buf, c.typ, c.id, c.payload)
 				sentControls = append(sentControls, c)
-				s.controls[0] = nil
-				s.controls = s.controls[1:]
+				consumed++
 				if len(buf) >= limit {
 					break
 				}
 			}
+			remaining := copy(s.controls, s.controls[consumed:])
+			clear(s.controls[remaining:])
+			s.controls = s.controls[:remaining]
 			var completedStorage [MaxStreams]*writeRequest
 			completed := completedStorage[:0]
 			if len(ready) > 1 {

@@ -42,7 +42,7 @@ type Stream struct {
 	opened, readable                      chan struct{}
 	stopped                               <-chan struct{}
 	ctx                                   context.Context
-	cancel                                context.CancelFunc
+	cancel                                context.CancelCauseFunc
 	sendCredit, recvCredit, refund        int
 	queue                                 []*chunk
 	head                                  int
@@ -58,7 +58,7 @@ func (s *Session) newStreamLocked(id uint32, metadata []byte) *Stream {
 	if parent == nil {
 		parent = context.Background()
 	}
-	ctx, cancel := context.WithCancel(parent)
+	ctx, cancel := context.WithCancelCause(parent)
 	st := &Stream{s: s, id: id, metadata: append([]byte(nil), metadata...), stopped: ctx.Done(), ctx: ctx, cancel: cancel, readable: make(chan struct{}, 1), sendCredit: windowBlocks, recvCredit: windowBlocks, activity: time.Now()}
 	if !s.opts.Server {
 		st.opened = make(chan struct{})
@@ -92,7 +92,7 @@ func (st *Stream) failure() error {
 func (st *Stream) stopLocked(err error) {
 	if st.err == nil {
 		st.err = err
-		st.cancel()
+		st.cancel(err)
 	}
 	if st.request != nil {
 		st.request.finishLocked(err)
@@ -247,7 +247,16 @@ func (st *Stream) Write(p []byte) (int, error) {
 	st.request = r
 	signal(s.wake)
 	s.mu.Unlock()
-	result := <-r.done
+	var result writeResult
+	select {
+	case result = <-r.done:
+	case <-st.stopped:
+		// Closing under the session lock removes this request from scheduling
+		// before returning ownership of the caller's buffer. An in-flight
+		// socket write uses the writer's own batch buffer.
+		st.Close()
+		result = <-r.done
+	}
 	s.mu.Lock()
 	if st.request == r {
 		st.request = nil

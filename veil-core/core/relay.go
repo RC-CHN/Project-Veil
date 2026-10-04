@@ -11,18 +11,26 @@ import (
 	"veil/internal/mux"
 )
 
-// Short streams start small. Full reads promote once to the bulk buffer size.
+// Short streams start small. Full reads grow through 32 KiB before bulk size.
 // Bounded caches cannot retain one large buffer per historical connection.
 var relaySmallBuffers = make(chan []byte, 32)
+var relayMediumBuffers = make(chan []byte, 8)
 var relayLargeBuffers = make(chan []byte, 8)
 
-func takeRelayBuffer(large bool) []byte {
-	cache, size := relaySmallBuffers, 4096
-	if large {
-		cache, size = relayLargeBuffers, mux.PayloadSize
+func relayBufferCache(size int) chan []byte {
+	switch size {
+	case 4096:
+		return relaySmallBuffers
+	case 32768:
+		return relayMediumBuffers
+	default:
+		return relayLargeBuffers
 	}
+}
+
+func takeRelayBuffer(size int) []byte {
 	select {
-	case b := <-cache:
+	case b := <-relayBufferCache(size):
 		return b
 	default:
 		return make([]byte, size)
@@ -30,12 +38,8 @@ func takeRelayBuffer(large bool) []byte {
 }
 
 func putRelayBuffer(b []byte) {
-	cache := relaySmallBuffers
-	if len(b) == mux.PayloadSize {
-		cache = relayLargeBuffers
-	}
 	select {
-	case cache <- b:
+	case relayBufferCache(len(b)) <- b:
 	default:
 	}
 }
@@ -50,19 +54,18 @@ type relayState struct {
 	sending, receiving atomic.Uint32
 	results            chan error
 	workers            sync.WaitGroup
-	timer              *time.Ticker
+	timer              *time.Timer
 }
 
 var relayStates = make(chan *relayState, 32)
 
 func takeRelayState(idle time.Duration) *relayState {
-	interval := min(idle/4, time.Second)
 	var r *relayState
 	select {
 	case r = <-relayStates:
-		r.timer.Reset(interval)
+		r.timer.Reset(idle)
 	default:
-		r = &relayState{results: make(chan error, 2), timer: time.NewTicker(interval)}
+		r = &relayState{results: make(chan error, 2), timer: time.NewTimer(idle)}
 	}
 	r.origin = time.Now()
 	r.touched.Store(0)
@@ -93,7 +96,7 @@ func (r *relayState) pump(outbound bool) {
 	}
 	defer r.workers.Done()
 	defer state.Store(2)
-	buffer := takeRelayBuffer(false)
+	buffer := takeRelayBuffer(4096)
 	defer func() { putRelayBuffer(buffer) }()
 	for {
 		state.Store(0)
@@ -131,8 +134,12 @@ func (r *relayState) pump(outbound bool) {
 			return
 		}
 		if n == len(buffer) && len(buffer) < mux.PayloadSize {
+			size := 32768
+			if len(buffer) == size {
+				size = mux.PayloadSize
+			}
 			putRelayBuffer(buffer)
-			buffer = takeRelayBuffer(true)
+			buffer = takeRelayBuffer(size)
 		}
 	}
 }
@@ -161,6 +168,12 @@ func relay(ctx context.Context, local net.Conn, remote io.ReadWriteCloser, idle 
 	go r.pump(false)
 	var first error
 	cancel := ctx.Done()
+	var remoteContext context.Context
+	var remoteStopped <-chan struct{}
+	if remote, ok := remote.(interface{ Context() context.Context }); ok {
+		remoteContext = remote.Context()
+		remoteStopped = remoteContext.Done()
+	}
 	for left := 2; left > 0; {
 		select {
 		case err := <-r.results:
@@ -172,9 +185,18 @@ func relay(ctx context.Context, local net.Conn, remote io.ReadWriteCloser, idle 
 			}
 		case <-cancel:
 			if first == nil {
-				first = ctx.Err()
+				first = context.Cause(ctx)
 			}
 			cancel = nil
+			local.Close()
+			remote.Close()
+		case <-remoteStopped:
+			// FIN ends only the receive pump. A later RESET or transport
+			// failure must still interrupt the local reader in the other pump.
+			if first == nil {
+				first = opError("tunnel", context.Cause(remoteContext))
+			}
+			remoteStopped = nil
 			local.Close()
 			remote.Close()
 		case <-r.timer.C:
@@ -184,7 +206,8 @@ func relay(ctx context.Context, local net.Conn, remote io.ReadWriteCloser, idle 
 					last = t
 				}
 			}
-			if time.Since(last) >= idle {
+			elapsed := time.Since(last)
+			if elapsed >= idle {
 				if first == nil {
 					send := [...]string{"local read", "tunnel write", "finished"}
 					receive := [...]string{"tunnel read", "local write", "finished"}
@@ -192,6 +215,10 @@ func relay(ctx context.Context, local net.Conn, remote io.ReadWriteCloser, idle 
 				}
 				local.Close()
 				remote.Close()
+			} else {
+				// Activity postpones the next possible expiry. No periodic
+				// wakeups or per-packet timer resets are needed.
+				r.timer.Reset(idle - elapsed)
 			}
 		}
 	}
