@@ -63,10 +63,10 @@ func (c *Config) Defaults() error {
 		c.DialSeconds = 10
 	}
 	if c.IdleSeconds == 0 {
-		c.IdleSeconds = 120
+		c.IdleSeconds = int(core.DefaultIdleTimeout / time.Second)
 	}
 	if c.PoolSeconds == 0 {
-		c.PoolSeconds = 20
+		c.PoolSeconds = int(core.DefaultPoolTimeout / time.Second)
 	}
 	if c.Listen == "" {
 		if c.Role == "client" {

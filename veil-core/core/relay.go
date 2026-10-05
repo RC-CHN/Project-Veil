@@ -160,7 +160,11 @@ func closeWrite(c any) error {
 // Two independent pumps preserve half-close. Cancellation resets only this
 // logical stream. Partial mux frame activity participates in the idle check.
 func relay(ctx context.Context, local net.Conn, remote io.ReadWriteCloser, idle time.Duration) error {
-	r := takeRelayState(idle)
+	// Quiet applications may wait much longer than blocked forwarding. Recheck
+	// quiet relays once per write budget so a write begun later cannot
+	// inherit the remaining thirty-minute timer. No per-packet timer resets.
+	writeBudget := min(idle, 2*time.Minute)
+	r := takeRelayState(writeBudget)
 	defer r.release()
 	r.local, r.remote = local, remote
 	r.workers.Add(2)
@@ -207,18 +211,27 @@ func relay(ctx context.Context, local net.Conn, remote io.ReadWriteCloser, idle 
 				}
 			}
 			elapsed := time.Since(last)
-			if elapsed >= idle {
+			budget := idle
+			blocked := r.sending.Load() == 1 || r.receiving.Load() == 1
+			if blocked {
+				budget = writeBudget
+			}
+			if elapsed >= budget {
 				if first == nil {
 					send := [...]string{"local read", "tunnel write", "finished"}
 					receive := [...]string{"tunnel read", "local write", "finished"}
-					first = &OpError{Op: "idle", Err: ErrIdleTimeout, Send: send[r.sending.Load()], Receive: receive[r.receiving.Load()]}
+					cause := ErrIdleTimeout
+					if budget < idle {
+						cause = ErrWriteStall
+					}
+					first = &OpError{Op: "idle", Err: cause, Send: send[r.sending.Load()], Receive: receive[r.receiving.Load()]}
 				}
 				local.Close()
 				remote.Close()
 			} else {
-				// Activity postpones the next possible expiry. No periodic
-				// wakeups or per-packet timer resets are needed.
-				r.timer.Reset(idle - elapsed)
+				// Activity postpones expiry; cap the next check to catch a
+				// write that begins while the application would otherwise be idle.
+				r.timer.Reset(min(budget-elapsed, writeBudget))
 			}
 		}
 	}

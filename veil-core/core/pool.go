@@ -16,24 +16,26 @@ import (
 )
 
 type session struct {
-	mux      *mux.Session
-	active   int
-	at       time.Time
-	draining bool // No new streams; existing streams retain their lifetime.
+	mux         *mux.Session
+	active      int
+	at          time.Time
+	draining    bool        // No new streams; existing streams retain their lifetime.
+	established atomic.Bool // At least one OPENED; not an unauthenticated fresh lane.
 }
 type pool struct {
-	mu              sync.Mutex
-	all             map[*session]bool
-	total           int
-	closed, dialing bool
-	waiters         list.List // FIFO admission while a physical dial is pending.
-	dialError       error
-	retryAt         time.Time
-	retryDelay      time.Duration
-	cfg             ClientConfig
-	key             []byte
-	handshake       transport.Handshake
-	traffic         atomic.Pointer[TrafficProfile]
+	mu                        sync.Mutex
+	all                       map[*session]bool
+	total                     int
+	closed, dialing           bool
+	waiters                   list.List // FIFO admission while a physical dial is pending.
+	dialError                 error
+	retryAt                   time.Time
+	retryDelay                time.Duration
+	dialAttempts, openRetries uint64
+	cfg                       ClientConfig
+	key                       []byte
+	handshake                 transport.Handshake
+	traffic                   atomic.Pointer[TrafficProfile]
 }
 
 func newPool(cfg ClientConfig, key []byte, h transport.Handshake) *pool {
@@ -166,6 +168,7 @@ func (p *pool) get(ctx context.Context) (*session, error) {
 		}
 		if wantNew && p.total < p.cfg.MaxConnections && !p.dialing {
 			p.total++
+			p.dialAttempts++
 			p.dialing = true
 			// A slow optional expansion must not hold up live reusable lanes.
 			leaveQueueLocked()
@@ -229,7 +232,9 @@ func (p *pool) drain(s *session) {
 }
 
 func muxOptions(c net.Conn, cfg Config, server bool) mux.Options {
-	opts := mux.Options{Server: server, Profile: *cfg.Traffic, IdleTimeout: 2 * cfg.PoolTimeout, WriteTimeout: cfg.IdleTimeout}
+	// Tolerating a quiet application must not extend a blocked shared writer's
+	// lifetime. Keep the existing two-minute ceiling, or an explicit shorter one.
+	opts := mux.Options{Server: server, Profile: *cfg.Traffic, IdleTimeout: 2 * cfg.PoolTimeout, WriteTimeout: min(cfg.IdleTimeout, 2*time.Minute)}
 	if cfg.TLS.RecordPadding {
 		opts.Padding = func(limit, records, budget int) error { return transport.RecordBudget(c, limit, records, budget) }
 	}

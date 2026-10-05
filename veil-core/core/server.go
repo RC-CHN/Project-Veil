@@ -57,7 +57,9 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		cfg.Fallback = &fallback
 		protocols = fallback.Protocols
 	}
-	h, err := transport.Server(cfg.TLS, cfg.HandshakeTimeout, cfg.IdleTimeout, protocols...)
+	// A longer authenticated stream lifetime does not extend unauthenticated
+	// website fallback resource retention.
+	h, err := transport.Server(cfg.TLS, cfg.HandshakeTimeout, min(cfg.IdleTimeout, 2*time.Minute), protocols...)
 	if err != nil {
 		return nil, err
 	}

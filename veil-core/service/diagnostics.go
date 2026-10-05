@@ -52,6 +52,8 @@ func errorCode(err error) string {
 		return "canceled"
 	case errors.Is(err, core.ErrIdleTimeout):
 		return "idle_timeout"
+	case errors.Is(err, core.ErrWriteStall):
+		return "write_stall"
 	case errors.Is(err, context.DeadlineExceeded):
 		return "timeout"
 	case errors.As(err, &dns):

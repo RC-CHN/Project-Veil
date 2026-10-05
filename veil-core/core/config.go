@@ -17,6 +17,13 @@ type TLSConfig = transport.Settings
 type TrafficProfile = mux.Profile
 type TrafficRange = mux.Range
 
+// Defaults retain a recently used lane across quiet browsing periods and let
+// established streams stay silent without mistaking silence for peer failure.
+const (
+	DefaultIdleTimeout = 30 * time.Minute
+	DefaultPoolTimeout = 5 * time.Minute
+)
+
 // DialFunc must honor ctx and return a connection supporting TCP half-close.
 // Client hooks can bind/protect sockets; server hooks can apply destination policy.
 type DialFunc func(ctx context.Context, network, address string) (net.Conn, error)
@@ -93,10 +100,10 @@ func (c *Config) defaults() error {
 		c.DialTimeout = 10 * time.Second
 	}
 	if c.IdleTimeout == 0 {
-		c.IdleTimeout = 120 * time.Second
+		c.IdleTimeout = DefaultIdleTimeout
 	}
 	if c.PoolTimeout == 0 {
-		c.PoolTimeout = 20 * time.Second
+		c.PoolTimeout = DefaultPoolTimeout
 	}
 	if c.MaxConnections < 1 || c.MaxConnections > 4096 || c.MaxIdle < 0 || c.MaxIdle > c.MaxConnections {
 		return errors.New("invalid connection or pool limits")

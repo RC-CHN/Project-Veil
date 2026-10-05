@@ -75,7 +75,7 @@ http://127.0.0.1:8080 {
 
 在此地址运行自己的 HTTPS 网站，证书须匹配 `server_name`；`ca_file` 可添加私有 CA，使用系统信任的证书时省略它。`http2: true` 明确启用前端 H2，后端必须能协商相同的 ALPN；省略时前端仅提供 HTTP/1。Veil 不改写 HTTP 数据，也不生成替代网站的 SETTINGS。网站的证书、ALPN 或连接验证失败会结束该回落连接。
 
-`dial_seconds` 限制后端拨号及 TLS 握手的总时间，`idle_seconds` 限制双向无进展时间，回落与已认证连接共同受 `max_connections` 限制。服务停止会关闭两端并等待转发结束。前端 TLS 握手及 HTTP/1 上的 AUTH 读取仍受 `handshake_seconds` 限制；H2 在握手后使用网站回落的期限。
+`dial_seconds` 限制后端拨号及 TLS 握手的总时间，网站回落的双向无进展期限为 `idle_seconds` 与 120 秒中的较小值，回落与已认证连接共同受 `max_connections` 限制。服务停止会关闭两端并等待转发结束。前端 TLS 握手及 HTTP/1 上的 AUTH 读取仍受 `handshake_seconds` 限制；H2 在握手后使用网站回落的期限。
 
 REALITY 客户端只有验证 Veil 证书证明后才交给核心发送 AUTH。若收到普通网站证书，客户端另行校验证书链、有效期和 `server_name`，通过后在同一 TLS 连接上按 ALPN 发一次 HTTP/1.1 或 HTTP/2 `GET /`，随后关闭并报告认证失败；请求不携带业务凭据或目标地址，不跟随重定向、不重拨连接。网站信任使用系统 CA，可通过 `ca_file` 或 `ca_pem` 增加私有 CA。此分支的期限为父 context 剩余时间与 2 秒中的较短者，发送/接收应用字节预算分别为 16/64 KiB；TLS 握手和有界的记录预读另计。正常 Veil 连接不执行这段 HTTP 请求。该行为使用 Go HTTP 客户端，并不复现浏览器的完整 HTTP 指纹。
 
@@ -151,7 +151,7 @@ return stream.Relay(localConn)
 
 物理连接的 TCP/TLS 建连失败后，同一连接池共享短暂退避，首轮 100–200 ms，连续失败指数增加，最多 1–2 s，区间内随机取值。退避期间优先使用已有连接；没有可用连接时立即返回最近的建连错误。下一次业务请求在退避结束后重新尝试，成功后清除退避；调用方取消不触发退避。`PoolStats.RetryAfterMillis` 报告剩余等待时间，核心不主动发送重试流量。
 
-`core.OpError` 支持 `errors.As`/`errors.Is`，包含本地/隧道的读写操作；`core.ErrIdleTimeout` 的错误还报告两个转发任务的等待位置。`core.TargetError` 表示远端拨号原因。CLI 输出这些操作错误，`service.Runtime.Snapshot` 的 `last_connection_error` 保留本次运行最近一条操作错误，重启实例后清空。正常 EOF 通过 FIN 半关闭；目标 RST 重置一条流，外层截断使物理连接失效；本地错误不保证与原始 TCP RST 报文完全相同。
+`core.OpError` 支持 `errors.As`/`errors.Is`，包含本地/隧道的读写操作；`core.ErrIdleTimeout` 和 `core.ErrWriteStall` 的错误还报告两个转发任务的等待位置。`core.TargetError` 表示远端拨号原因。CLI 输出这些操作错误，`service.Runtime.Snapshot` 的 `last_connection_error` 保留本次运行最近一条操作错误，重启实例后清空。正常 EOF 通过 FIN 半关闭；目标 RST 重置一条流，外层截断使物理连接失效；本地错误不保证与原始 TCP RST 报文完全相同。
 
 `ClientConfig.DialContext` 可接平台的 socket 保护/绑定逻辑，`ServerConfig.DialContext` 可接目标访问策略；两者须遵守 context。没有实现这些钩子时，保持普通 TCP 拨号。配置在构造时复制。`Client.SetTrafficProfile(profile)` / `Server.SetTrafficProfile(profile)` 原子替换后续物理连接使用的策略，已有连接沿用自己的快照，错误更新不覆盖有效策略。其他配置通过创建新实例生效。公共控制服务尚未提供独立的在线策略更新命令，保存配置后仍按原来的 restart 流程应用。核心不修改系统路由、DNS、防火墙或服务状态。
 
@@ -187,7 +187,7 @@ TLS/REALITY 集成测试使用本机 `openssl s_server`，只连接自有回环�
 
 下载回归还使用真实 curl 检查上游提前 EOF/RST、单向下载的空闲计时，以及下载被背压阻塞时上传仍能推进。可在隔离网络中设置 `VEIL_LONG_DOWNLOAD_TEST=1`，通过相同构建 flags 单独执行 `go test ./service -run TestLongHTTPSDownloadPause -v`：它模拟 HTTPS 302 后的 104 MiB 下载，中途保持连接静默 30 秒，再续传并校验哈希。测试不连接 HF 或现有部署。
 
-`idle_seconds` 按两个方向合计的活动计时，默认 120 秒；它不是最低下载速度检查。收到 EOF/RST 与链路黑洞不同：没有关闭报文的丢包可能要等 TCP 重传或应用空闲超时。30 秒停顿测试通过不能排除特定运营商、CDN 或部署版本下的长连接问题，也不能替代现场日志。
+`idle_seconds` 按两个方向合计的活动计时，默认 1800 秒（30 分钟），允许已建立连接较长时间静默。`pool_seconds` 默认 300 秒（5 分钟），保留最近使用过的 TLS 隧道，让间歇访问继续复用。显式配置的旧值仍生效；多层中转应逐层检查这两个参数，任一层较短的期限都可能提前结束内层连接。待转发数据持续无进展时，逻辑流和共享 TLS 写入仍采用至多 120 秒的阻塞预算（显式更短的 `idle_seconds` 优先）；逻辑流诊断为 `write_stall`。这些都是超时预算，不是最低下载速度检查。收到 EOF/RST 与链路黑洞不同：没有关闭报文的丢包可能要等 TCP 重传或应用空闲超时。30 秒停顿测试通过不能排除特定运营商、CDN 或部署版本下的长连接问题，也不能替代现场日志。
 
 长时间稳定性检查需要显式启用，普通 CI 会跳过 `TestStabilitySoak`。它默认用 128 并发经过两层 REALITY，混合 SOCKS/HTTP CONNECT、长传输、半关闭、RST 和取消，核对传输字节与资源释放。`VEIL_STRESS_WORKERS=1..512` 可调整并发；日志包含错误分类、每个失败事务已校验的字节数、GC、堆、FD 和池状态：
 
@@ -288,7 +288,7 @@ python3 scripts/reality_fingerprint.py --before .build/previous --out .build/rea
 
 `probe.py` 使用 OpenSSL ECDSA、OpenSSL RSA 和 Go TLS 三类参考端点，比较直连、裸上游 REALITY 与 Veil。正常 HTTPS、延迟请求、异常输入、重放、参考站点故障和 TLS 记录形态分别记录。为防止上游未传播 TCP EOF 阻塞单线程参考站点，每次裸 REALITY 异常探测后重置参考进程。
 
-REALITY 收到参考站点响应并选择回落后，改用 `idle_seconds` 控制双向共享的空闲期限，单向传输也会续期；此前及代理连接的握手、业务鉴权阶段仍受 `handshake_seconds` 约束。回落传播 TCP 半关闭，错误与服务停止会关闭两端。空闲期限仍可能与参考站点不同；满数据帧对齐也不消除短读和控制帧的长度特征。
+REALITY 收到参考站点响应并选择回落后，改用 `idle_seconds` 与 120 秒中的较小值控制双向共享的空闲期限，单向传输也会续期；此前及代理连接的握手、业务鉴权阶段仍受 `handshake_seconds` 约束。回落传播 TCP 半关闭，错误与服务停止会关闭两端。空闲期限仍可能与参考站点不同；满数据帧对齐也不消除短读和控制帧的长度特征。
 
 20 ms RTT 模拟需 `iproute2` 和一次性网络命名空间。将 `USER` 替换为具有本机测试权限的普通用户：
 
@@ -303,3 +303,5 @@ sudo unshare -n -- sh -c 'ip link set lo up && exec runuser -u USER -- env VEIL_
 ## 许可
 
 本项目使用 GPL-3.0-or-later；第三方代码来源见 [THIRD_PARTY.md](../THIRD_PARTY.md) 和 [LICENSE](../LICENSE)。
+
+空闲/丢包回归也可单独运行：`VEIL_QUIET_DURATION=3m` 启用 `TestQuietDoubleHopDefaults`，核对双层连接静默三分钟后仍为同一流；`VEIL_WRITE_STALL_TEST=1` 启用核心包的 `TestLongIdleDoesNotExtendBlockedWrite`，核对长空闲预算不会放宽阻塞写入期限。Linux 上的 `TestRecoverableNetworkPauses` 要求在独立、名称以 `veil-test-` 开头的 network namespace 中设置 `VEIL_NETEM_PAUSES=5s,15s,30s`，测试用 `tc netem` 丢弃全部包，再验证原连接恢复和数据完整性。应为这些手动测试设置足够的 `go test -timeout`，普通 CI 不执行等待数分钟的用例。

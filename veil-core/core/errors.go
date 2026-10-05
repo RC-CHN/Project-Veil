@@ -10,6 +10,10 @@ import (
 
 var ErrIdleTimeout = errors.New("veil: stream idle timeout")
 
+// ErrWriteStall means pending forwarding made no progress for two minutes,
+// even though the configured allowance for a silent application is longer.
+var ErrWriteStall = errors.New("veil: stream write stalled")
+
 type TargetError = wire.OpenFailure
 
 const (

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"time"
 	"veil/core"
 )
 
@@ -56,7 +57,7 @@ func httpFallback(cfg Config) (*core.Fallback, error) {
 				target.Close()
 				return fmt.Errorf("HTTPS fallback ALPN: expected %q, got %q", protocol, negotiated)
 			}
-			return core.RelayTCP(ctx, c, target, sec(cfg.IdleSeconds))
+			return core.RelayTCP(ctx, c, target, min(sec(cfg.IdleSeconds), 2*time.Minute))
 		}
 		address := settings.HTTP1
 		if protocol == "h2" {
@@ -66,6 +67,6 @@ func httpFallback(cfg Config) (*core.Fallback, error) {
 		if err != nil {
 			return fmt.Errorf("HTTP fallback dial: %w", err)
 		}
-		return core.RelayTCP(ctx, c, target, sec(cfg.IdleSeconds))
+		return core.RelayTCP(ctx, c, target, min(sec(cfg.IdleSeconds), 2*time.Minute))
 	}}, nil
 }

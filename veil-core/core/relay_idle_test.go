@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -13,6 +14,35 @@ import (
 type relayActivityConn struct {
 	*net.TCPConn
 	last atomic.Int64
+}
+
+func TestLongIdleDoesNotExtendBlockedWrite(t *testing.T) {
+	if os.Getenv("VEIL_WRITE_STALL_TEST") != "1" {
+		t.Skip("set VEIL_WRITE_STALL_TEST=1 for the two-minute write-stall test")
+	}
+	local, app := net.Pipe()
+	remote, peer := net.Pipe()
+	defer app.Close()
+	defer peer.Close()
+	done := make(chan error, 1)
+	go func() { done <- relay(context.Background(), local, remote, DefaultIdleTimeout) }()
+	start := time.Now()
+	// The first read progresses, then forwarding blocks because peer never reads.
+	if _, err := app.Write([]byte{1}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		var op *OpError
+		if !errors.Is(err, ErrWriteStall) || !errors.As(err, &op) || op.Send != "tunnel write" || time.Since(start) < 2*time.Minute {
+			t.Fatal("wrong stall deadline or diagnostic:", err)
+		}
+	case <-time.After(125 * time.Second):
+		local.Close()
+		remote.Close()
+		<-done
+		t.Fatal("blocked forwarding inherited the quiet-application timeout")
+	}
 }
 
 func (c *relayActivityConn) LastActivity() time.Time {

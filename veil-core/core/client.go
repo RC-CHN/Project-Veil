@@ -73,19 +73,21 @@ func (c *Client) SetTrafficProfile(p TrafficProfile) error {
 
 // PoolStats is a consistent snapshot; Total includes in-progress dials.
 type PoolStats struct {
-	Total            int   `json:"total"`
-	Idle             int   `json:"idle"`
-	Streams          int   `json:"streams"`
-	Dialing          bool  `json:"dialing"`
-	Limit            int   `json:"limit"`
-	Draining         int   `json:"draining,omitempty"`
-	RetryAfterMillis int64 `json:"retry_after_ms,omitempty"`
+	Total            int    `json:"total"`
+	Idle             int    `json:"idle"`
+	Streams          int    `json:"streams"`
+	Dialing          bool   `json:"dialing"`
+	Limit            int    `json:"limit"`
+	Draining         int    `json:"draining,omitempty"`
+	RetryAfterMillis int64  `json:"retry_after_ms,omitempty"`
+	DialAttempts     uint64 `json:"dial_attempts"`
+	OpenRetries      uint64 `json:"open_retries"`
 }
 
 func (c *Client) PoolStats() PoolStats {
 	c.pool.mu.Lock()
 	defer c.pool.mu.Unlock()
-	p := PoolStats{Total: c.pool.total, Idle: c.pool.idleLocked(), Dialing: c.pool.dialing, Limit: c.cfg.MaxConnections}
+	p := PoolStats{Total: c.pool.total, Idle: c.pool.idleLocked(), Dialing: c.pool.dialing, Limit: c.cfg.MaxConnections, DialAttempts: c.pool.dialAttempts, OpenRetries: c.pool.openRetries}
 	if c.pool.dialError != nil {
 		p.RetryAfterMillis = int64(max(0, (time.Until(c.pool.retryAt)+time.Millisecond-1)/time.Millisecond))
 	}
@@ -117,6 +119,23 @@ func (c *Client) Open(ctx context.Context, address string) (*Stream, error) {
 		return nil, opError("acquire tunnel", err)
 	}
 	stream, err := channel.mux.Open(ctx, payload)
+	// A reused transport can die between pool selection and OPENED. At this
+	// point the caller has neither received a stream nor sent application DATA.
+	// Replace it once; never retry a fresh/auth-failing lane, an explicit target
+	// failure, caller cancellation, or an OPEN timeout on a still-live session.
+	if retryableOpen(channel, err) && ctx.Err() == nil {
+		c.pool.put(channel)
+		c.pool.mu.Lock()
+		c.pool.openRetries++
+		c.pool.mu.Unlock()
+		channel, err = c.pool.get(ctx)
+		if err != nil {
+			stopClient()
+			cancel()
+			return nil, opError("acquire replacement tunnel", err)
+		}
+		stream, err = channel.mux.Open(ctx, payload)
+	}
 	if err != nil {
 		if errors.Is(err, mux.ErrOpenTimeout) && ctx.Err() == nil {
 			c.pool.drain(channel)
@@ -130,6 +149,7 @@ func (c *Client) Open(ctx context.Context, address string) (*Stream, error) {
 		}
 		return nil, opError("open target", err)
 	}
+	channel.established.Store(true)
 	c.Stats.ActiveStreams.Add(1)
 	s := &Stream{client: c, channel: stream, session: channel, ctx: ctx, cancel: cancel, stopClient: stopClient}
 	s.mu.Lock()
@@ -140,4 +160,13 @@ func (c *Client) Open(ctx context.Context, address string) (*Stream, error) {
 		return nil, err
 	}
 	return s, nil
+}
+
+func retryableOpen(s *session, err error) bool {
+	if err == nil || !s.established.Load() || s.mux.Err() == nil {
+		return false
+	}
+	// Keep errors.As' escaping destination off the successful open path.
+	var target mux.OpenError
+	return !errors.As(err, &target) && !errors.Is(err, mux.ErrProtocol) && !errors.Is(err, mux.ErrOpenTimeout)
 }

@@ -52,6 +52,30 @@ func TestPoolDiscardsClosedBeforeOpen(t *testing.T) {
 	}
 }
 
+func TestPoolReusesLaneAfterQuietMinutes(t *testing.T) {
+	a, b := net.Pipe()
+	defer b.Close()
+	live := pooled(t, a)
+	live.at = time.Now().Add(-3 * time.Minute)
+	p := testPool(t)
+	p.all[live], p.total = true, 1
+	p.cfg.DialContext = func(context.Context, string, string) (net.Conn, error) {
+		return nil, errors.New("unexpected cold handshake after a short quiet period")
+	}
+	got, err := p.get(context.Background())
+	if err != nil || got != live {
+		t.Fatalf("quiet lane was not reused: %v", err)
+	}
+	p.put(got)
+	p.mu.Lock()
+	live.at = time.Now().Add(-time.Hour)
+	p.mu.Unlock()
+	p.expire()
+	if p.total != 0 {
+		t.Fatal("unused lanes must still expire")
+	}
+}
+
 type waitingClose struct {
 	net.Conn
 	entered, release chan struct{}
