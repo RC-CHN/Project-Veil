@@ -20,7 +20,7 @@ make -C /path/to/luci/modules/luci-base/src po2lmo CC=cc
 python3 veil-service/scripts/openwrt_package.py \
   --sdk /path/to/openwrt-sdk \
   --po2lmo /path/to/luci/modules/luci-base/src/po2lmo \
-  --architecture x86_64 --version 0.3.5-1
+  --architecture x86_64 --version 0.3.6-1
 ```
 
 产物和 SHA-256 校验文件位于 `veil-service/.build/openwrt/`。`--architecture` 必须与设备 `opkg print-architecture` 一致；构建器支持 `x86_64`、`aarch64_*`、`arm_*`、`mips_*`、`mipsel_*`，ARM 使用 GOARM=5，MIPS 使用软浮点。ARM/MIPS 构建仍需对应设备验收。APK 包使用 apk-tools 3 的 `mkpkg`，通过 fakeroot 生成 root 属主：
@@ -29,7 +29,7 @@ python3 veil-service/scripts/openwrt_package.py \
 fakeroot python3 veil-service/scripts/openwrt_package.py \
   --format apk --apk-tool /path/to/apk \
   --po2lmo /path/to/po2lmo \
-  --architecture x86_64 --version 0.3.5-r1
+  --architecture x86_64 --version 0.3.6-r1
 ```
 
 若 apk 动态链接本地 libapk，先在 `LD_LIBRARY_PATH` 中加入其目录。构建器继承 fakeroot 所需的环境。
@@ -40,7 +40,7 @@ fakeroot python3 veil-service/scripts/openwrt_package.py \
 
 ```sh
 opkg update
-opkg install /tmp/veil_0.3.5-1_x86_64.ipk /tmp/luci-app-veil_0.3.5-1_all.ipk
+opkg install /tmp/veil_0.3.6-1_x86_64.ipk /tmp/luci-app-veil_0.3.6-1_all.ipk
 /etc/init.d/veil enable
 /etc/init.d/veil start
 ```

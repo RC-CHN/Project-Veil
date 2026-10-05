@@ -37,7 +37,7 @@ Go 1.26.3、Python 3。Linux 使用 GTK3 与 WebKit2GTK 4.1 开发库；Windows 
 sudo apt-get install libgtk-3-dev libwebkit2gtk-4.1-dev
 
 # 在仓库根目录执行
-python3 veil-desktop/scripts/build.py --version 0.3.5
+python3 veil-desktop/scripts/build.py --version 0.3.6
 python3 veil-desktop/scripts/build.py --check
 ```
 
@@ -48,8 +48,8 @@ python3 veil-desktop/scripts/build.py --check
 生成发行包：
 
 ```sh
-python3 veil-desktop/scripts/package.py --version 0.3.5
-python3 veil-desktop/scripts/package.py --version 0.3.5 --target windows --arch amd64
+python3 veil-desktop/scripts/package.py --version 0.3.6
+python3 veil-desktop/scripts/package.py --version 0.3.6 --target windows --arch amd64
 ```
 
 输出位于 `veil-desktop/.build/releases`：Linux 为 tar.gz，Windows 为 ZIP。每个包附带 SHA-256 文件，包内 `manifest.json` 记录源码提交、工作区状态、Go 版本及文件摘要。Linux 包使用本机工具链和开发库构建。
