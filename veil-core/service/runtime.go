@@ -145,7 +145,7 @@ func (r *Runtime) Snapshot() Snapshot {
 			s.Error = x.err.Error()
 		}
 		c := x.svc.Stats
-		s.withDiagnostics(&x.history, x.svc.cfg.MaxConnections, x.svc.client)
+		s.withDiagnostics(&x.history, x.svc.cfg.MaxInboundConnections, x.svc.client)
 		s.Stats = counters(c)
 	}
 	return s

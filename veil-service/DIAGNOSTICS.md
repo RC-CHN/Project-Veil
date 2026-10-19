@@ -52,6 +52,7 @@ OPNsense 可从 Veil 服务日志及插件诊断面板读取记录；Windows/Lin
 | 现象 | 下一步 |
 | --- | --- |
 | `connection_limit` / 拒绝数上涨 | 对照活动入口连接数和上限，检查应用并发与未结束连接 |
+| `pool_limit` | 对照物理池上限、`pool.waiting` 和 `pool.dialing_connections`；入口名额由 `max_inbound_connections` 单独控制 |
 | `tunnel dial` 超时 | 检查对应服务器端口、路由和 TCP 重传 |
 | `TLS handshake` 失败 | 对照两端时间、认证配置、TLS/REALITY 参数以及服务端伪装站点连通性 |
 | `open target` / `target dial` | 检查出口侧 DNS、目标端口和目标站点 |

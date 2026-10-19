@@ -20,8 +20,9 @@ type TrafficRange = mux.Range
 // Defaults retain a recently used lane across quiet browsing periods and let
 // established streams stay silent without mistaking silence for peer failure.
 const (
-	DefaultIdleTimeout = 30 * time.Minute
-	DefaultPoolTimeout = 5 * time.Minute
+	DefaultMaxConnections = 128
+	DefaultIdleTimeout    = 30 * time.Minute
+	DefaultPoolTimeout    = 5 * time.Minute
 )
 
 // DialFunc must honor ctx and return a connection supporting TCP half-close.
@@ -88,7 +89,7 @@ type Stats struct {
 
 func (c *Config) defaults() error {
 	if c.MaxConnections == 0 {
-		c.MaxConnections = 64
+		c.MaxConnections = DefaultMaxConnections
 	}
 	if c.MaxIdle == 0 {
 		c.MaxIdle = min(8, c.MaxConnections)

@@ -48,6 +48,8 @@ func errorCode(err error) string {
 	switch {
 	case errors.Is(err, inbound.ErrConnectionLimit):
 		return "connection_limit"
+	case errors.Is(err, core.ErrPoolFull):
+		return "pool_limit"
 	case errors.Is(err, context.Canceled):
 		return "canceled"
 	case errors.Is(err, core.ErrIdleTimeout):

@@ -96,6 +96,16 @@ func (s *Session) Close() error { s.fail(net.ErrClosed); return nil }
 func (s *Session) Wait()        { <-s.readDone; <-s.writeDone }
 func (s *Session) Err() error   { s.mu.Lock(); defer s.mu.Unlock(); return s.err }
 
+// Closed avoids locking a busy session just to check its lifetime.
+func (s *Session) Closed() bool {
+	select {
+	case <-s.done:
+		return true
+	default:
+		return false
+	}
+}
+
 // Snapshot reports active streams and whether any carries sustained traffic.
 func (s *Session) Snapshot() (active int, bulk, closed bool) {
 	s.mu.Lock()

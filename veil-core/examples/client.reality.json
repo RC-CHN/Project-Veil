@@ -11,6 +11,6 @@
     "fingerprint": "chrome149",
     "record_padding": true
   },
-  "max_connections": 64,
+  "max_connections": 128,
   "max_idle": 8
 }

@@ -77,6 +77,6 @@ func (s *Service) Close() error {
 func (s *Service) Serve(ctx context.Context, ln net.Listener) error {
 	defer s.Close()
 	return inbound.Serve(ctx, ln, s.handle, inbound.ServeOptions{
-		MaxConnections: s.cfg.MaxConnections, Stats: s.Stats, OnError: s.OnError,
+		MaxConnections: s.cfg.MaxInboundConnections, Stats: s.Stats, OnError: s.OnError,
 	})
 }

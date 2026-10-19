@@ -41,7 +41,7 @@ func TestDiagnosticsIncludeAdmissionFailure(t *testing.T) {
 	_, ct := settings(t, "tls")
 	var runtime Runtime
 	defer runtime.Close()
-	if err := runtime.Start(Config{Role: "client", Listen: "127.0.0.1:0", Server: "127.0.0.1:9", Secret: testKey, TLS: ct, MaxConnections: 1, MaxIdle: 1}); err != nil {
+	if err := runtime.Start(Config{Role: "client", Listen: "127.0.0.1:0", Server: "127.0.0.1:9", Secret: testKey, TLS: ct, MaxConnections: 1, MaxInboundConnections: 1, MaxIdle: 1}); err != nil {
 		t.Fatal(err)
 	}
 	a, err := net.Dial("tcp", runtime.Snapshot().Listen)

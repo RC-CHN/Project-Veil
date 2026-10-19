@@ -73,21 +73,23 @@ func (c *Client) SetTrafficProfile(p TrafficProfile) error {
 
 // PoolStats is a consistent snapshot; Total includes in-progress dials.
 type PoolStats struct {
-	Total            int    `json:"total"`
-	Idle             int    `json:"idle"`
-	Streams          int    `json:"streams"`
-	Dialing          bool   `json:"dialing"`
-	Limit            int    `json:"limit"`
-	Draining         int    `json:"draining,omitempty"`
-	RetryAfterMillis int64  `json:"retry_after_ms,omitempty"`
-	DialAttempts     uint64 `json:"dial_attempts"`
-	OpenRetries      uint64 `json:"open_retries"`
+	Total              int    `json:"total"`
+	Idle               int    `json:"idle"`
+	Streams            int    `json:"streams"`
+	Dialing            bool   `json:"dialing"`
+	DialingConnections int    `json:"dialing_connections"`
+	Waiting            int    `json:"waiting"`
+	Limit              int    `json:"limit"`
+	Draining           int    `json:"draining,omitempty"`
+	RetryAfterMillis   int64  `json:"retry_after_ms,omitempty"`
+	DialAttempts       uint64 `json:"dial_attempts"`
+	OpenRetries        uint64 `json:"open_retries"`
 }
 
 func (c *Client) PoolStats() PoolStats {
 	c.pool.mu.Lock()
 	defer c.pool.mu.Unlock()
-	p := PoolStats{Total: c.pool.total, Idle: c.pool.idleLocked(), Dialing: c.pool.dialing, Limit: c.cfg.MaxConnections, DialAttempts: c.pool.dialAttempts, OpenRetries: c.pool.openRetries}
+	p := PoolStats{Total: c.pool.total, Idle: c.pool.idleLocked(), Dialing: c.pool.dialing > 0, DialingConnections: c.pool.dialing, Waiting: c.pool.waiters.Len(), Limit: c.cfg.MaxConnections, DialAttempts: c.pool.dialAttempts, OpenRetries: c.pool.openRetries}
 	if c.pool.dialError != nil {
 		p.RetryAfterMillis = int64(max(0, (time.Until(c.pool.retryAt)+time.Millisecond-1)/time.Millisecond))
 	}
@@ -149,7 +151,7 @@ func (c *Client) Open(ctx context.Context, address string) (*Stream, error) {
 		}
 		return nil, opError("open target", err)
 	}
-	channel.established.Store(true)
+	c.pool.confirm(channel)
 	c.Stats.ActiveStreams.Add(1)
 	s := &Stream{client: c, channel: stream, session: channel, ctx: ctx, cancel: cancel, stopClient: stopClient}
 	s.mu.Lock()

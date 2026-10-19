@@ -149,7 +149,7 @@ func (c *Connection) SetInlets(inlets []Inlet) error {
 		go func() {
 			defer c.wg.Done()
 			defer close(listener.done)
-			err := inbound.Serve(ctx, ln, func(ctx context.Context, n net.Conn) error { return (*listener.handler.Load())(ctx, n) }, inbound.ServeOptions{MaxConnections: c.cfg.MaxConnections, Stats: &c.client.Stats, OnError: c.failure})
+			err := inbound.Serve(ctx, ln, func(ctx context.Context, n net.Conn) error { return (*listener.handler.Load())(ctx, n) }, inbound.ServeOptions{MaxConnections: c.cfg.MaxInboundConnections, Stats: &c.client.Stats, OnError: c.failure})
 			if err != nil {
 				c.failure(err)
 			}
@@ -179,7 +179,7 @@ func (c *Connection) Snapshot() Snapshot {
 	if c.ctx.Err() != nil {
 		s.State = "stopped"
 	}
-	s.withDiagnostics(&c.history, c.cfg.MaxConnections, c.client)
+	s.withDiagnostics(&c.history, c.cfg.MaxInboundConnections, c.client)
 	if r := c.relay.Snapshot(); r.Role != "" {
 		s.Relay = &r
 	}

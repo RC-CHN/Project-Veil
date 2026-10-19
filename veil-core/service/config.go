@@ -5,26 +5,28 @@ import (
 	"fmt"
 	"time"
 	"veil/core"
+	"veil/internal/mux"
 	"veil/internal/transport"
 	"veil/internal/wire"
 )
 
 type Config struct {
-	Role             string               `json:"role"`
-	Listen           string               `json:"listen"`
-	Server           string               `json:"server"`
-	Target           string               `json:"target,omitempty"`
-	Inbound          string               `json:"inbound,omitempty"`
-	Secret           string               `json:"secret"`
-	TLS              transport.Settings   `json:"tls"`
-	HTTPFallback     *HTTPFallbackConfig  `json:"http_fallback,omitempty"`
-	Traffic          *core.TrafficProfile `json:"traffic,omitempty"`
-	MaxConnections   int                  `json:"max_connections"`
-	MaxIdle          int                  `json:"max_idle"`
-	HandshakeSeconds int                  `json:"handshake_seconds"`
-	DialSeconds      int                  `json:"dial_seconds"`
-	IdleSeconds      int                  `json:"idle_seconds"`
-	PoolSeconds      int                  `json:"pool_seconds"`
+	Role                  string               `json:"role"`
+	Listen                string               `json:"listen"`
+	Server                string               `json:"server"`
+	Target                string               `json:"target,omitempty"`
+	Inbound               string               `json:"inbound,omitempty"`
+	Secret                string               `json:"secret"`
+	TLS                   transport.Settings   `json:"tls"`
+	HTTPFallback          *HTTPFallbackConfig  `json:"http_fallback,omitempty"`
+	Traffic               *core.TrafficProfile `json:"traffic,omitempty"`
+	MaxConnections        int                  `json:"max_connections"`
+	MaxInboundConnections int                  `json:"max_inbound_connections,omitempty"`
+	MaxIdle               int                  `json:"max_idle"`
+	HandshakeSeconds      int                  `json:"handshake_seconds"`
+	DialSeconds           int                  `json:"dial_seconds"`
+	IdleSeconds           int                  `json:"idle_seconds"`
+	PoolSeconds           int                  `json:"pool_seconds"`
 }
 
 // HTTPFallbackConfig routes unauthenticated ordinary TLS bytes to fixed HTTP
@@ -51,10 +53,16 @@ func (c *Config) Defaults() error {
 		c.Traffic = &p
 	}
 	if c.MaxConnections == 0 {
-		c.MaxConnections = 64
+		c.MaxConnections = core.DefaultMaxConnections
 	}
 	if c.MaxIdle == 0 {
-		c.MaxIdle = 8
+		c.MaxIdle = min(8, c.MaxConnections)
+	}
+	if c.MaxInboundConnections == 0 {
+		c.MaxInboundConnections = c.MaxConnections
+		if c.Role == "client" {
+			c.MaxInboundConnections = min(4096, c.MaxConnections*mux.MaxStreams)
+		}
 	}
 	if c.HandshakeSeconds == 0 {
 		c.HandshakeSeconds = 10
@@ -77,6 +85,9 @@ func (c *Config) Defaults() error {
 	}
 	if c.MaxConnections < 1 || c.MaxConnections > 4096 || c.MaxIdle < 0 || c.MaxIdle > c.MaxConnections {
 		return errors.New("invalid connection or pool limits")
+	}
+	if c.MaxInboundConnections < 1 || c.MaxInboundConnections > 4096 {
+		return errors.New("max_inbound_connections must be 1..4096")
 	}
 	for _, v := range []int{c.HandshakeSeconds, c.DialSeconds, c.IdleSeconds, c.PoolSeconds} {
 		if v < 1 || v > 86400 {

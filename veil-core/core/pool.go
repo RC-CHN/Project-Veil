@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"container/list"
 	"context"
-	"errors"
 	"math/rand/v2"
 	"net"
 	"sync"
@@ -26,7 +25,8 @@ type pool struct {
 	mu                        sync.Mutex
 	all                       map[*session]bool
 	total                     int
-	closed, dialing           bool
+	closed                    bool
+	dialing                   int
 	waiters                   list.List // FIFO admission while a physical dial is pending.
 	dialError                 error
 	retryAt                   time.Time
@@ -92,7 +92,17 @@ func (p *pool) get(ctx context.Context) (*session, error) {
 	}()
 	waitLocked := func() error {
 		if waiter == nil {
+			if p.waiters.Len() >= min(4096, max(64, p.cfg.MaxConnections*mux.MaxStreams)) {
+				p.mu.Unlock()
+				return ErrPoolFull
+			}
 			waiter = p.waiters.PushBack(make(chan struct{}, 1))
+			// Wake the FIFO head as demand crosses another lane's capacity.
+			// Dial owners count too, so a burst's final few opens need not wait
+			// for a previous handshake before starting their own lane.
+			if (p.waiters.Len()+p.dialing)%mux.MaxStreams == 1 {
+				p.notifyLocked()
+			}
 		}
 		ready := waiter.Value.(chan struct{})
 		p.mu.Unlock()
@@ -128,9 +138,9 @@ func (p *pool) get(ctx context.Context) (*session, error) {
 		var best *session
 		var dead []*session
 		bestBulk := false
+		dialLimit := 1
 		for s := range p.all {
-			_, bulk, closed := s.mux.Snapshot()
-			if closed || s.active == 0 && (s.draining || time.Since(s.at) >= p.cfg.PoolTimeout) {
+			if s.mux.Closed() || s.active == 0 && (s.draining || time.Since(s.at) >= p.cfg.PoolTimeout) {
 				p.removeLocked(s)
 				dead = append(dead, s)
 				continue
@@ -138,7 +148,16 @@ func (p *pool) get(ctx context.Context) (*session, error) {
 			if s.draining {
 				continue
 			}
-			if s.active < mux.MaxStreams && (best == nil || bestBulk && !bulk || bestBulk == bulk && s.active < best.active) {
+			if s.established.Load() {
+				dialLimit = 16
+			}
+			// Full lanes cannot accept this request. Do not contend with all of
+			// their DATA pumps under the pool lock as the pool grows.
+			if s.active >= mux.MaxStreams {
+				continue
+			}
+			_, bulk, _ := s.mux.Snapshot()
+			if best == nil || bestBulk && !bulk || bestBulk == bulk && s.active < best.active {
 				best = s
 				bestBulk = bulk
 			}
@@ -166,16 +185,23 @@ func (p *pool) get(ctx context.Context) (*session, error) {
 			}
 			wantNew = false
 		}
-		if wantNew && p.total < p.cfg.MaxConnections && !p.dialing {
+		// A pending dial will supply eight slots, including its owner's. Size
+		// expansion from waiting demand instead of opening a lane per caller.
+		demand := p.waiters.Len() + p.dialing
+		if waiter == nil {
+			demand++
+		}
+		dialLimit = min(dialLimit, (demand+mux.MaxStreams-1)/mux.MaxStreams)
+		if wantNew && p.total < p.cfg.MaxConnections && p.dialing < dialLimit {
 			p.total++
 			p.dialAttempts++
-			p.dialing = true
+			p.dialing++
 			// A slow optional expansion must not hold up live reusable lanes.
 			leaveQueueLocked()
 			p.mu.Unlock()
 			s, err := p.dial(ctx)
 			p.mu.Lock()
-			p.dialing = false
+			p.dialing--
 			p.notifyLocked()
 			if err != nil {
 				p.total--
@@ -208,7 +234,7 @@ func (p *pool) get(ctx context.Context) (*session, error) {
 			p.mu.Unlock()
 			return s, nil
 		}
-		if wantNew && p.dialing && best == nil {
+		if wantNew && p.dialing > 0 && best == nil {
 			if err := waitLocked(); err != nil {
 				return nil, err
 			}
@@ -220,7 +246,16 @@ func (p *pool) get(ctx context.Context) (*session, error) {
 			return best, nil
 		}
 		p.mu.Unlock()
-		return nil, errors.New("veil: connection pool limit")
+		return nil, ErrPoolFull
+	}
+}
+
+// The first OPENED enables expansion before other pending handshakes finish.
+func (p *pool) confirm(s *session) {
+	if s.established.CompareAndSwap(false, true) {
+		p.mu.Lock()
+		p.notifyLocked()
+		p.mu.Unlock()
 	}
 }
 
@@ -295,8 +330,7 @@ func (p *pool) put(s *session) {
 	}
 	s.active--
 	s.at = time.Now()
-	_, _, closed := s.mux.Snapshot()
-	drop := closed || p.closed || (s.active == 0 && (s.draining || p.idleLocked() > p.cfg.MaxIdle))
+	drop := s.mux.Closed() || p.closed || (s.active == 0 && (s.draining || p.idleLocked() > p.cfg.MaxIdle))
 	if drop {
 		p.removeLocked(s)
 	} else {
@@ -311,8 +345,7 @@ func (p *pool) expire() {
 	p.mu.Lock()
 	var expired []*session
 	for s := range p.all {
-		_, _, closed := s.mux.Snapshot()
-		if closed || s.active == 0 && (s.draining || time.Since(s.at) >= p.cfg.PoolTimeout) {
+		if s.mux.Closed() || s.active == 0 && (s.draining || time.Since(s.at) >= p.cfg.PoolTimeout) {
 			p.removeLocked(s)
 			expired = append(expired, s)
 		}

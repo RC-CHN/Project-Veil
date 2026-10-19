@@ -34,8 +34,8 @@ func TestStabilitySoak(t *testing.T) {
 	workerCount := 128
 	if text := os.Getenv("VEIL_STRESS_WORKERS"); text != "" {
 		workerCount, err = strconv.Atoi(text)
-		if err != nil || workerCount < 1 || workerCount > 512 {
-			t.Fatal("VEIL_STRESS_WORKERS must be 1..512")
+		if err != nil || workerCount < 1 || workerCount > 2048 {
+			t.Fatal("VEIL_STRESS_WORKERS must be 1..2048")
 		}
 	}
 	st, ct := settings(t, "reality")
@@ -176,6 +176,9 @@ func TestStabilitySoak(t *testing.T) {
 						length = len(payload)
 					}
 					for range chunks {
+						// Bulk transfers may share the CPU with thousands of short
+						// requests. Bound stalled progress, not the whole 16 MiB transfer.
+						c.SetDeadline(time.Now().Add(15 * time.Second))
 						if err := writeAll(c, payload[:length]); err != nil {
 							return err
 						}

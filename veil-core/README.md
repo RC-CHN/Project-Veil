@@ -11,6 +11,10 @@ v0.2 引入真正的并发多路复用：每条物理 TLS 连接最多承载 8 �
 
 客户端优先混合真实并发业务，在已有持续大流或 4 条活动流时可增加第二条物理连接，减少大下载影响新交互。连接数仍受 `max_connections` 限制；所有连接满 8 流时可继续扩展至该上限。调度轮转访问就绪流，每次发送份额在范围内采样，不等计时器、不产生定期假流量。TCP 丢包引起的连接级队头阻塞仍然存在。
 
+`max_inbound_connections` 单独控制每个入口的业务连接数，范围 1–4096。客户端默认按物理池容量的 8 倍计算，最多 4096；默认配置允许每入口 1024 条业务连接，共用最多 128 条物理隧道。服务端入口默认等于 `max_connections`（128）。空闲时最多保留 8 条隧道，按需扩容。
+
+需要 4096 条同时存续的业务连接时，可把客户端的 `max_connections` 设为 512、`max_inbound_connections` 设为 4096；对应服务端至少允许 512 条物理连接。多个入口共用客户端物理池，多个客户端共用服务端入口限额；双层中转需为每跳的物理连接分别预留容量。频繁新建和关闭连接还需给 FIN/DONE 回收过程留出余量。显式配置的旧值不会随默认值升级；入口上限应按设备内存和应用负载设置。
+
 TLS 与 REALITY 两端均关闭 Go TLS 的自适应记录长度递增：大块写入从开始即可使用 16 KiB 明文记录，小块写入仍立即发送，不等待凑满、不额外填充。这样消除随连接前段写入次数增长的固定切片阶梯，继续使用现有填充预算。记录长度不是 TCP 包长；较大记录在拥塞窗口小或丢包时可能延后首批明文交付，本机 CPU 成绩不能替代这项弱网延迟评估。
 
 ## 构建与运行
@@ -75,7 +79,7 @@ http://127.0.0.1:8080 {
 
 在此地址运行自己的 HTTPS 网站，证书须匹配 `server_name`；`ca_file` 可添加私有 CA，使用系统信任的证书时省略它。`http2: true` 明确启用前端 H2，后端必须能协商相同的 ALPN；省略时前端仅提供 HTTP/1。Veil 不改写 HTTP 数据，也不生成替代网站的 SETTINGS。网站的证书、ALPN 或连接验证失败会结束该回落连接。
 
-`dial_seconds` 限制后端拨号及 TLS 握手的总时间，网站回落的双向无进展期限为 `idle_seconds` 与 120 秒中的较小值，回落与已认证连接共同受 `max_connections` 限制。服务停止会关闭两端并等待转发结束。前端 TLS 握手及 HTTP/1 上的 AUTH 读取仍受 `handshake_seconds` 限制；H2 在握手后使用网站回落的期限。
+`dial_seconds` 限制后端拨号及 TLS 握手的总时间，网站回落的双向无进展期限为 `idle_seconds` 与 120 秒中的较小值，回落与已认证连接共同受服务端入口上限 `max_inbound_connections` 限制。服务停止会关闭两端并等待转发结束。前端 TLS 握手及 HTTP/1 上的 AUTH 读取仍受 `handshake_seconds` 限制；H2 在握手后使用网站回落的期限。
 
 REALITY 客户端只有验证 Veil 证书证明后才交给核心发送 AUTH。若收到普通网站证书，客户端另行校验证书链、有效期和 `server_name`，通过后在同一 TLS 连接上按 ALPN 发一次 HTTP/1.1 或 HTTP/2 `GET /`，随后关闭并报告认证失败；请求不携带业务凭据或目标地址，不跟随重定向、不重拨连接。网站信任使用系统 CA，可通过 `ca_file` 或 `ca_pem` 增加私有 CA。此分支的期限为父 context 剩余时间与 2 秒中的较短者，发送/接收应用字节预算分别为 16/64 KiB；TLS 握手和有界的记录预读另计。正常 Veil 连接不执行这段 HTTP 请求。该行为使用 Go HTTP 客户端，并不复现浏览器的完整 HTTP 指纹。
 
@@ -151,6 +155,10 @@ return stream.Relay(localConn)
 
 物理连接的 TCP/TLS 建连失败后，同一连接池共享短暂退避，首轮 100–200 ms，连续失败指数增加，最多 1–2 s，区间内随机取值。退避期间优先使用已有连接；没有可用连接时立即返回最近的建连错误。下一次业务请求在退避结束后重新尝试，成功后清除退避；调用方取消不触发退避。`PoolStats.RetryAfterMillis` 报告剩余等待时间，核心不主动发送重试流量。
 
+首次建连仍合并为一次拨号；首次 OPEN 成功后立即唤醒等待队列，按排队需求扩容，最多并行 16 次拨号。在途握手按每条 8 个流名额计算容量，减少重复扩容；每增加一条隧道所需的排队量就唤醒队首重新评估，不等待上一轮握手全部完成。所有预留名额计入物理池上限。等待队列按池容量限制在 64–4096 个请求，并受握手期限约束；超出连接或排队容量返回 `core.ErrPoolFull`。`PoolStats.DialingConnections` 和 `PoolStats.Waiting` 分别报告正在拨号与排队数量。
+
+双向静默按 `idle_seconds` 判断；待写数据按方向分别检查进展，最长使用 120 秒写预算。反向流量不会刷新已堵塞方向的写期限，分批发送仍有进展的 mux 写操作继续运行。
+
 `core.OpError` 支持 `errors.As`/`errors.Is`，包含本地/隧道的读写操作；`core.ErrIdleTimeout` 和 `core.ErrWriteStall` 的错误还报告两个转发任务的等待位置。`core.TargetError` 表示远端拨号原因。CLI 输出这些操作错误，`service.Runtime.Snapshot` 的 `last_connection_error` 保留本次运行最近一条操作错误，重启实例后清空。正常 EOF 通过 FIN 半关闭；目标 RST 重置一条流，外层截断使物理连接失效；本地错误不保证与原始 TCP RST 报文完全相同。
 
 `ClientConfig.DialContext` 可接平台的 socket 保护/绑定逻辑，`ServerConfig.DialContext` 可接目标访问策略；两者须遵守 context。没有实现这些钩子时，保持普通 TCP 拨号。配置在构造时复制。`Client.SetTrafficProfile(profile)` / `Server.SetTrafficProfile(profile)` 原子替换后续物理连接使用的策略，已有连接沿用自己的快照，错误更新不覆盖有效策略。其他配置通过创建新实例生效。公共控制服务尚未提供独立的在线策略更新命令，保存配置后仍按原来的 restart 流程应用。核心不修改系统路由、DNS、防火墙或服务状态。
@@ -189,7 +197,7 @@ TLS/REALITY 集成测试使用本机 `openssl s_server`，只连接自有回环�
 
 `idle_seconds` 按两个方向合计的活动计时，默认 1800 秒（30 分钟），允许已建立连接较长时间静默。`pool_seconds` 默认 300 秒（5 分钟），保留最近使用过的 TLS 隧道，让间歇访问继续复用。显式配置的旧值仍生效；多层中转应逐层检查这两个参数，任一层较短的期限都可能提前结束内层连接。待转发数据持续无进展时，逻辑流和共享 TLS 写入仍采用至多 120 秒的阻塞预算（显式更短的 `idle_seconds` 优先）；逻辑流诊断为 `write_stall`。这些都是超时预算，不是最低下载速度检查。收到 EOF/RST 与链路黑洞不同：没有关闭报文的丢包可能要等 TCP 重传或应用空闲超时。30 秒停顿测试通过不能排除特定运营商、CDN 或部署版本下的长连接问题，也不能替代现场日志。
 
-长时间稳定性检查需要显式启用，普通 CI 会跳过 `TestStabilitySoak`。它默认用 128 并发经过两层 REALITY，混合 SOCKS/HTTP CONNECT、长传输、半关闭、RST 和取消，核对传输字节与资源释放。`VEIL_STRESS_WORKERS=1..512` 可调整并发；日志包含错误分类、每个失败事务已校验的字节数、GC、堆、FD 和池状态：
+长时间稳定性检查需要显式启用，普通 CI 会跳过 `TestStabilitySoak`。它默认用 128 并发经过两层 REALITY，混合 SOCKS/HTTP CONNECT、长传输、半关闭、RST 和取消，核对传输字节与资源释放。`VEIL_STRESS_WORKERS=1..2048` 可调整并发；传输阶段每个数据块采用 15 秒进展预算，总耗时另行统计。日志包含错误分类、每个失败事务已校验的字节数、GC、堆、FD 和池状态：
 
 ```sh
 make prepare
@@ -198,6 +206,8 @@ VEIL_STRESS_DURATION=60m GOCACHE="$PWD/.build/cache" GOMODCACHE="$PWD/.build/mod
 ```
 
 `TestPoolOverloadRecovery` 在同一隧道保留健康连接，将其余槽位填满或阻塞在目标拨号，再反复注入并发请求、取消并恢复，检查连接复用和资源归还。
+
+`TestConnectionConcurrentCapacity` 持有真实 SOCKS 连接并重复三轮回显和释放；`VEIL_CONCURRENT_CONNECTIONS=65..4096` 指定连接数，`VEIL_CAPACITY_TRANSPORT=tls|reality` 指定传输。达到入口或共享物理池上限时，还会验证超额请求被拒绝、已有连接继续收发。`BenchmarkBurstOpen` 可用 `VEIL_BURST_CONNECTIONS=1..4096` 和 `VEIL_BURST_TRANSPORT=tls|reality` 比较整批建连；`BenchmarkPoolAcquireNearlyFull` 单独测接近满载时的池选择开销，不含握手和业务传输。
 
 性能基准分别覆盖串行新连接（`BenchmarkSerialShort`、`BenchmarkSerialSized`）、持久大流（`BenchmarkBulkEcho`）和不同业务大小后的空闲堆（`BenchmarkIdleStreams`、`BenchmarkIdleMediumStreams`）。空闲堆按 `-benchtime=1x` 且每个大小使用独立进程采样，避免前一次负载的缓存影响比较。
 

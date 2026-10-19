@@ -29,26 +29,33 @@ func testPool(t *testing.T) *pool {
 	return p
 }
 func TestPoolDiscardsClosedBeforeOpen(t *testing.T) {
-	a, b := net.Pipe()
-	dead := pooled(t, a)
-	b.Close()
-	deadline := time.Now().Add(time.Second)
-	for dead.mux.Err() == nil {
-		if time.Now().After(deadline) {
-			t.Fatal("EOF not observed")
-		}
-		time.Sleep(time.Millisecond)
-	}
-	hot, peer := net.Pipe()
-	defer peer.Close()
-	live := pooled(t, hot)
-	p := testPool(t)
-	p.all[dead] = true
-	p.all[live] = true
-	p.total = 2
-	got, e := p.get(context.Background())
-	if e != nil || got != live || p.total != 1 {
-		t.Fatalf("session=%p err=%v total=%d", got, e, p.total)
+	for _, full := range []bool{false, true} {
+		t.Run(map[bool]string{false: "idle", true: "full"}[full], func(t *testing.T) {
+			a, b := net.Pipe()
+			dead := pooled(t, a)
+			if full {
+				dead.active = mux.MaxStreams
+			}
+			b.Close()
+			deadline := time.Now().Add(time.Second)
+			for dead.mux.Err() == nil {
+				if time.Now().After(deadline) {
+					t.Fatal("EOF not observed")
+				}
+				time.Sleep(time.Millisecond)
+			}
+			hot, peer := net.Pipe()
+			defer peer.Close()
+			live := pooled(t, hot)
+			p := testPool(t)
+			p.all[dead] = true
+			p.all[live] = true
+			p.total = 2
+			got, e := p.get(context.Background())
+			if e != nil || got != live || p.total != 1 {
+				t.Fatalf("session=%p err=%v total=%d", got, e, p.total)
+			}
+		})
 	}
 }
 
@@ -132,8 +139,9 @@ func TestPoolUsesLiveLaneDuringExpansion(t *testing.T) {
 			live := pooled(t, a)
 			live.active = 4 // Trigger the optional second lane.
 			p := testPool(t)
-			p.all[live], p.total, p.dialing = true, 1, dialing
+			p.all[live], p.total = true, 1
 			if dialing {
+				p.dialing = 1
 				p.total++
 			}
 			p.cfg.DialContext = func(context.Context, string, string) (net.Conn, error) {
@@ -153,13 +161,36 @@ func TestPoolUsesLiveLaneDuringExpansion(t *testing.T) {
 func TestPoolWaitForDialIsBounded(t *testing.T) {
 	p := testPool(t)
 	p.cfg.HandshakeTimeout = 30 * time.Millisecond
-	p.total, p.dialing = 1, true
+	p.total, p.dialing = 1, 1
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	_, err := p.get(ctx)
 	if !errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
 		t.Fatalf("pool wait escaped its own handshake budget: %v (caller: %v)", err, ctx.Err())
 	}
+}
+
+func TestPoolWaitQueueHasCapacity(t *testing.T) {
+	p := testPool(t)
+	p.cfg.MaxConnections = 1
+	p.total, p.dialing = 1, 1
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 64)
+	for range cap(done) {
+		go func() { _, err := p.get(ctx); done <- err }()
+	}
+	waitPoolQueue(t, p, cap(done))
+	if _, err := p.get(context.Background()); !errors.Is(err, ErrPoolFull) {
+		t.Fatal("overflowing admission queue was not rejected:", err)
+	}
+	cancel()
+	for range cap(done) {
+		if err := <-done; !errors.Is(err, context.Canceled) {
+			t.Fatal(err)
+		}
+	}
+	waitPoolQueue(t, p, 0)
 }
 
 func waitPoolQueue(t *testing.T, p *pool, count int) {
@@ -227,7 +258,7 @@ func TestPoolQueuedAdmission(t *testing.T) {
 
 func TestPoolCloseWakesQueuedOpens(t *testing.T) {
 	p := testPool(t)
-	p.total, p.dialing = 1, true
+	p.total, p.dialing = 1, 1
 	results := make(chan error, 32)
 	for range cap(results) {
 		go func() { _, err := p.get(context.Background()); results <- err }()
