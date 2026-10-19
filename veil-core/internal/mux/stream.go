@@ -51,6 +51,7 @@ type Stream struct {
 	controlDone                           chan error
 	transferred                           uint64
 	activity                              time.Time
+	written                               time.Time
 }
 
 func (s *Session) newStreamLocked(id uint32, metadata []byte) *Stream {
@@ -79,6 +80,15 @@ func (st *Stream) LastActivity() time.Time {
 		return st.s.headerActivity
 	}
 	return st.activity
+}
+
+// LastWriteActivity includes DATA scheduled during a still-pending Write.
+// Opposite-direction DATA and CREDIT alone do not advance it. The session's
+// socket write deadline separately bounds a batch stuck in the transport.
+func (st *Stream) LastWriteActivity() time.Time {
+	st.s.mu.Lock()
+	defer st.s.mu.Unlock()
+	return st.written
 }
 func (st *Stream) failure() error {
 	st.s.mu.Lock()

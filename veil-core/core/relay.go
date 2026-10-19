@@ -47,11 +47,12 @@ func putRelayBuffer(b []byte) {
 // Reused only after both pumps have exited and both results were consumed.
 // No connection, context or caller-owned buffer is retained in this cache.
 type relayState struct {
-	local              net.Conn
-	remote             io.ReadWriteCloser
-	origin             time.Time
-	touched            atomic.Int64
-	sending, receiving atomic.Uint32
+	local   net.Conn
+	remote  io.ReadWriteCloser
+	origin  time.Time
+	touched atomic.Int64
+	// Zero means reading, -1 finished, otherwise write progress since origin + 1.
+	sending, receiving atomic.Int64
 	results            chan error
 	workers            sync.WaitGroup
 	timer              *time.Timer
@@ -83,7 +84,21 @@ func (r *relayState) release() {
 	}
 }
 
-func (r *relayState) touch() { r.touched.Store(int64(time.Since(r.origin))) }
+func (r *relayState) touch() int64 {
+	now := int64(time.Since(r.origin))
+	r.touched.Store(now)
+	return now
+}
+
+func relayPhase(progress int64) int {
+	if progress < 0 {
+		return 2
+	}
+	if progress > 0 {
+		return 1
+	}
+	return 0
+}
 
 func (r *relayState) pump(outbound bool) {
 	var src io.Reader = r.remote
@@ -95,21 +110,20 @@ func (r *relayState) pump(outbound bool) {
 		readOp, writeOp, closeOp = "local read", "tunnel write", "tunnel FIN"
 	}
 	defer r.workers.Done()
-	defer state.Store(2)
+	defer state.Store(-1)
 	buffer := takeRelayBuffer(4096)
 	defer func() { putRelayBuffer(buffer) }()
 	for {
 		state.Store(0)
 		n, readErr := src.Read(buffer)
 		if n > 0 {
-			r.touch()
-			state.Store(1)
+			state.Store(r.touch() + 1)
 			p := buffer[:n]
 			for len(p) > 0 {
 				written, err := dst.Write(p)
 				p = p[written:]
 				if written > 0 {
-					r.touch()
+					state.Store(r.touch() + 1)
 				}
 				if err == nil && written == 0 {
 					err = io.ErrNoProgress
@@ -122,7 +136,7 @@ func (r *relayState) pump(outbound bool) {
 		}
 		if readErr != nil {
 			if errors.Is(readErr, io.EOF) {
-				state.Store(1)
+				state.Store(int64(time.Since(r.origin)) + 1)
 				r.results <- opError(closeOp, closeWrite(dst))
 			} else {
 				r.results <- opError(readOp, readErr)
@@ -210,28 +224,41 @@ func relay(ctx context.Context, local net.Conn, remote io.ReadWriteCloser, idle 
 					last = t
 				}
 			}
-			elapsed := time.Since(last)
-			budget := idle
-			blocked := r.sending.Load() == 1 || r.receiving.Load() == 1
-			if blocked {
-				budget = writeBudget
+			remaining := idle - time.Since(last)
+			cause := ErrIdleTimeout
+			// Only progress in the blocked direction renews its write budget.
+			// Incoming traffic must not pin a non-reading destination forever.
+			for direction, progress := range [...]int64{r.sending.Load(), r.receiving.Load()} {
+				if progress <= 0 {
+					continue
+				}
+				written := r.origin.Add(time.Duration(progress - 1))
+				if direction == 0 {
+					if p, ok := remote.(interface{ LastWriteActivity() time.Time }); ok {
+						if at := p.LastWriteActivity(); at.After(written) {
+							written = at
+						}
+					}
+				}
+				if left := writeBudget - time.Since(written); left < remaining {
+					remaining = left
+					if writeBudget < idle {
+						cause = ErrWriteStall
+					}
+				}
 			}
-			if elapsed >= budget {
+			if remaining <= 0 {
 				if first == nil {
 					send := [...]string{"local read", "tunnel write", "finished"}
 					receive := [...]string{"tunnel read", "local write", "finished"}
-					cause := ErrIdleTimeout
-					if budget < idle {
-						cause = ErrWriteStall
-					}
-					first = &OpError{Op: "idle", Err: cause, Send: send[r.sending.Load()], Receive: receive[r.receiving.Load()]}
+					first = &OpError{Op: "idle", Err: cause, Send: send[relayPhase(r.sending.Load())], Receive: receive[relayPhase(r.receiving.Load())]}
 				}
 				local.Close()
 				remote.Close()
 			} else {
 				// Activity postpones expiry; cap the next check to catch a
 				// write that begins while the application would otherwise be idle.
-				r.timer.Reset(min(budget-elapsed, writeBudget))
+				r.timer.Reset(min(remaining, writeBudget))
 			}
 		}
 	}

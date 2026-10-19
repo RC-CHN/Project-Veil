@@ -16,6 +16,108 @@ type relayActivityConn struct {
 	last atomic.Int64
 }
 
+type relayProgressWriter struct {
+	net.Conn
+	last atomic.Int64
+}
+
+func (c *relayProgressWriter) Write(p []byte) (int, error) {
+	for i := range p {
+		if _, err := c.Conn.Write(p[i : i+1]); err != nil {
+			return i, err
+		}
+		c.last.Store(time.Now().UnixNano())
+	}
+	return len(p), nil
+}
+func (c *relayProgressWriter) LastWriteActivity() time.Time { return time.Unix(0, c.last.Load()) }
+func (c *relayProgressWriter) LastActivity() time.Time      { return c.LastWriteActivity() }
+
+// A mux Write can span many batches. Progress within that Write must keep its
+// deadline alive even when the full caller buffer has not yet been accepted.
+func TestRelayPendingWriteProgress(t *testing.T) {
+	local, app := net.Pipe()
+	remote, peer := net.Pipe()
+	defer app.Close()
+	defer peer.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- relay(ctx, local, &relayProgressWriter{Conn: remote}, 200*time.Millisecond) }()
+	defer func() { cancel(); <-done }()
+	if _, err := app.Write(make([]byte, 12)); err != nil {
+		t.Fatal(err)
+	}
+	for range 12 {
+		time.Sleep(50 * time.Millisecond)
+		var b [1]byte
+		if _, err := io.ReadFull(peer, b[:]); err != nil {
+			t.Fatal("forward progress was mistaken for a stalled write:", err)
+		}
+	}
+}
+
+// A peer that stops reading must not retain its socket and two relay pumps
+// indefinitely just because it continues sending in the reverse direction.
+func TestRelayBlockedWriteIgnoresReverseActivity(t *testing.T) {
+	for _, outbound := range []bool{true, false} {
+		name := "local write"
+		if outbound {
+			name = "tunnel write"
+		}
+		t.Run(name, func(t *testing.T) {
+			local, app := net.Pipe()
+			remote, peer := net.Pipe()
+			defer app.Close()
+			defer peer.Close()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			const idle = 150 * time.Millisecond
+			done := make(chan error, 1)
+			go func() { done <- relay(ctx, local, remote, idle) }()
+			blocked, reverse := app, peer
+			if !outbound {
+				blocked, reverse = peer, app
+			}
+			start := time.Now()
+			if _, err := blocked.Write([]byte{1}); err != nil {
+				t.Fatal(err)
+			}
+			activity := make(chan struct{})
+			go func() {
+				defer close(activity)
+				var b [1]byte
+				for {
+					if _, err := reverse.Write([]byte{2}); err != nil {
+						return
+					}
+					if _, err := io.ReadFull(blocked, b[:]); err != nil {
+						return
+					}
+					time.Sleep(idle / 5)
+				}
+			}()
+			select {
+			case err := <-done:
+				var op *OpError
+				if !errors.Is(err, ErrIdleTimeout) || !errors.As(err, &op) {
+					t.Fatalf("wrong blocked-write result: %v", err)
+				}
+				if outbound && op.Send != name || !outbound && op.Receive != name {
+					t.Fatalf("wrong blocked direction: %+v", op)
+				}
+				if time.Since(start) < idle {
+					t.Fatal("closed before the write budget elapsed")
+				}
+			case <-time.After(4 * idle):
+				cancel()
+				<-done
+				t.Error("reverse traffic kept a blocked write and its resources alive")
+			}
+			<-activity
+		})
+	}
+}
+
 func TestLongIdleDoesNotExtendBlockedWrite(t *testing.T) {
 	if os.Getenv("VEIL_WRITE_STALL_TEST") != "1" {
 		t.Skip("set VEIL_WRITE_STALL_TEST=1 for the two-minute write-stall test")

@@ -521,6 +521,7 @@ func (s *Session) writeLoop() {
 					st.sendCredit--
 					st.transferred += uint64(n)
 					st.activity = now
+					st.written = now
 					progress = true
 					if r.off == len(r.p) {
 						completed = append(completed, r)

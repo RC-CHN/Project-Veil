@@ -52,6 +52,34 @@ func openPair(t *testing.T, c, s *Session) (*Stream, *Stream) {
 	return r.stream, server
 }
 
+func TestWriteActivityIgnoresIncomingData(t *testing.T) {
+	c, s := pair(t)
+	a, b := openPair(t, c, s)
+	transfer := func(src, dst *Stream) {
+		t.Helper()
+		if _, err := src.Write([]byte{42}); err != nil {
+			t.Fatal(err)
+		}
+		var p [1]byte
+		if _, err := io.ReadFull(dst, p[:]); err != nil || p[0] != 42 {
+			t.Fatalf("transfer: %x %v", p, err)
+		}
+	}
+	transfer(a, b)
+	written := a.LastWriteActivity()
+	if written.IsZero() {
+		t.Fatal("outgoing DATA did not record write progress")
+	}
+	transfer(b, a)
+	if !a.LastWriteActivity().Equal(written) || !a.LastActivity().After(written) {
+		t.Fatal("incoming DATA must update activity without renewing a blocked write")
+	}
+	transfer(a, b)
+	if !a.LastWriteActivity().After(written) {
+		t.Fatal("new outgoing DATA did not renew write progress")
+	}
+}
+
 func TestConcurrentHalfClose(t *testing.T) {
 	c, s := pair(t)
 	var wg sync.WaitGroup
