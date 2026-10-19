@@ -2,9 +2,29 @@ package tls
 
 import (
 	"bytes"
+	"errors"
 	"io"
+	"net"
 	"testing"
 )
+
+func TestVeilUConnWriteReleasesActiveCall(t *testing.T) {
+	raw := new(veilMemoryConn)
+	c := veilTestConn(raw)
+	defer c.veilReleaseCrypto()
+	u := &UConn{Conn: c}
+	if _, err := u.Write([]byte("payload")); err != nil || c.activeCall.Load() != 0 {
+		t.Fatal("successful write retained an active call", err, c.activeCall.Load())
+	}
+	raw.fail = io.ErrClosedPipe
+	if _, err := u.Write([]byte("payload")); !errors.Is(err, raw.fail) || c.activeCall.Load() != 0 {
+		t.Fatal("failed write retained an active call", err, c.activeCall.Load())
+	}
+	c.activeCall.Store(1)
+	if _, err := u.Write([]byte("payload")); !errors.Is(err, net.ErrClosed) || c.activeCall.Load() != 1 {
+		t.Fatal("closed write altered the close interlock", err, c.activeCall.Load())
+	}
+}
 
 func TestVeilUConnReadAfterClose(t *testing.T) {
 	veilCheckReadAfterClose(t, func(c *Conn) io.Reader { return &UConn{Conn: c} })

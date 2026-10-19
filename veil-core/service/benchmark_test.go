@@ -92,6 +92,21 @@ func BenchmarkSerialSized(b *testing.B) {
 }
 
 func runSerialSized(b *testing.B, st, ct transport.Settings, size int) {
+	benchmarkShortRequests(b, st, ct, size, 0)
+}
+
+// Include real SOCKS negotiation, destination dialing and FIN/DONE under load.
+func BenchmarkConcurrentSized(b *testing.B) {
+	for _, size := range []int{64, 65536} {
+		b.Run(fmt.Sprint(size), func(b *testing.B) {
+			st, ct := settings(b, "reality")
+			st.RecordPadding, ct.RecordPadding = true, true
+			benchmarkShortRequests(b, st, ct, size, 64)
+		})
+	}
+}
+
+func benchmarkShortRequests(b *testing.B, st, ct transport.Settings, size, workers int) {
 	backend := target(b, func(c net.Conn) {
 		p := make([]byte, size)
 		if _, err := io.ReadFull(c, p); err != nil {
@@ -105,33 +120,50 @@ func runSerialSized(b *testing.B, st, ct transport.Settings, size int) {
 	})
 	_, remote := start(b, Config{Role: "server", Secret: testKey, TLS: st})
 	client, local := start(b, Config{Role: "client", Server: remote, Secret: testKey, TLS: ct})
-	request := func() {
+	request := func() error {
 		c, err := socksDial(local, backend)
 		if err != nil {
-			b.Fatal(err)
+			return err
 		}
 		defer c.Close()
 		p := make([]byte, size)
 		if err = writeAll(c, p); err != nil {
-			b.Fatal(err)
+			return err
 		}
 		if _, err = io.ReadFull(c, p); err != nil {
-			b.Fatal(err)
+			return err
 		}
 		if err = c.CloseWrite(); err != nil {
-			b.Fatal(err)
+			return err
 		}
 		if n, err := io.Copy(io.Discard, c); err != nil || n != 0 {
-			b.Fatalf("close: %d %v", n, err)
+			return fmt.Errorf("close: %d %v", n, err)
 		}
+		return nil
 	}
 	for range 32 {
-		request()
+		if err := request(); err != nil {
+			b.Fatal(err)
+		}
 	}
 	b.ReportAllocs()
 	b.ResetTimer()
-	for range b.N {
-		request()
+	if workers == 0 {
+		for range b.N {
+			if err := request(); err != nil {
+				b.Fatal(err)
+			}
+		}
+	} else {
+		b.SetParallelism(max(1, workers/runtime.GOMAXPROCS(0)))
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				if err := request(); err != nil {
+					b.Error(err)
+					return
+				}
+			}
+		})
 	}
 	b.StopTimer()
 	if client.Stats.Rejected.Load() != 0 {

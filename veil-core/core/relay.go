@@ -11,7 +11,8 @@ import (
 	"veil/internal/mux"
 )
 
-// Short streams start small. Full reads grow through 32 KiB before bulk size.
+// Short streams start small. Two full 32 KiB reads justify the bulk buffer;
+// a single medium-sized request need not retain 128 KiB in each direction.
 // Bounded caches cannot retain one large buffer per historical connection.
 var relaySmallBuffers = make(chan []byte, 32)
 var relayMediumBuffers = make(chan []byte, 8)
@@ -113,6 +114,7 @@ func (r *relayState) pump(outbound bool) {
 	defer state.Store(-1)
 	buffer := takeRelayBuffer(4096)
 	defer func() { putRelayBuffer(buffer) }()
+	mediumReads := 0
 	for {
 		state.Store(0)
 		n, readErr := src.Read(buffer)
@@ -150,6 +152,10 @@ func (r *relayState) pump(outbound bool) {
 		if n == len(buffer) && len(buffer) < mux.PayloadSize {
 			size := 32768
 			if len(buffer) == size {
+				mediumReads++
+				if mediumReads < 2 {
+					continue
+				}
 				size = mux.PayloadSize
 			}
 			putRelayBuffer(buffer)

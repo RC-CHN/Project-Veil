@@ -233,7 +233,24 @@ def generate(mode):
         != "4a34d3717dfc4558980a7f344cb73982656ca3eba2acefb1cb35dd884a073467"
     ):
         raise RuntimeError("unsupported source version: " + str(uconn))
-    (fork / "u_conn.go").write_text(read_patch(uconn.read_text()))
+    # Match Conn.Write: the CAS loop acquires one active call. Keeping defer
+    # outside that loop lets Go open-code it instead of allocating per Write.
+    uconn_source = replace(
+        uconn.read_text(),
+        """\t\tif c.activeCall.CompareAndSwap(x, x+2) {
+\t\t\tdefer c.activeCall.Add(-2)
+\t\t\tbreak
+\t\t}
+\t}
+""",
+        """\t\tif c.activeCall.CompareAndSwap(x, x+2) {
+\t\t\tbreak
+\t\t}
+\t}
+\tdefer c.activeCall.Add(-2)
+""",
+    )
+    (fork / "u_conn.go").write_text(read_patch(uconn_source))
     shutil.copyfile(ROOT / "patches/padding.go.in", fork / "veil_padding.go")
     shutil.copyfile(ROOT / "patches/padding_test.go.in", fork / "veil_padding_test.go")
     run(

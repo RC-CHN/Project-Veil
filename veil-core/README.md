@@ -122,7 +122,7 @@ REALITY 客户端可用 `tls.fingerprint` 指定 `chrome120`、`chrome131`、`ch
 
 `core` 负责握手、鉴权、流生命周期和连接池；`inbound` 负责 SOCKS5、HTTP、混合入口、固定目标转发与有界监听循环；`service` 将现有 CLI JSON 配置组合成这些组件，并提供 `Parse`、`Validate`、`Runtime.Start/Stop/Restart/Close` 和状态快照。每条逻辑流有两个独立转发任务；物理连接由一个解码器和一个调度写入者管理，不引入进程间数据转发。
 
-两个转发任务各自复用略小于 128 KiB 的工作缓冲，为单流满批保留四个 DATA 帧头的位置，避免满缓冲产生很小的尾部写入。解码器逐段发布通过 TLS 认证的 DATA，应用读取会合并已到达的块，但不会等待整帧或凑满缓冲。每流最多 256 个未消费 DATA 块，按需分配，单流载荷上限 8 MiB、满 8 流物理连接上限 64 MiB；控制队列最多 64 项，服务端每条物理连接最多 8 个目标处理任务。平台层应按设备内存设置连接数，不能把协议上限当作建议配置。
+两个转发任务各自从 4 KiB 工作缓冲开始，读满后增至 32 KiB；累计两次读满 32 KiB 才增至略小于 128 KiB，减少中等请求在等待后续数据时持有的大缓冲。最大缓冲为单流满批保留四个 DATA 帧头的位置，避免满缓冲产生很小的尾部写入。解码器逐段发布通过 TLS 认证的 DATA，应用读取会合并已到达的块，但不会等待整帧或凑满缓冲。每流最多 256 个未消费 DATA 块，按需分配，单流载荷上限 8 MiB、满 8 流物理连接上限 64 MiB；控制队列最多 64 项，服务端每条物理连接最多 8 个目标处理任务。平台层应按设备内存设置连接数，不能把协议上限当作建议配置。
 
 三个后端共用 TLS 批读，只读取已经缓冲的完整记录，不等待未来数据。native 保持原生记录写入，batch/OpenSSL 另启用批量写入。物理连接有常驻读取任务和写入批缓冲，空闲连接仍有内存成本；池超时后释放整条连接。
 
@@ -209,7 +209,7 @@ VEIL_STRESS_DURATION=60m GOCACHE="$PWD/.build/cache" GOMODCACHE="$PWD/.build/mod
 
 `TestConnectionConcurrentCapacity` 持有真实 SOCKS 连接并重复三轮回显和释放；`VEIL_CONCURRENT_CONNECTIONS=65..4096` 指定连接数，`VEIL_CAPACITY_TRANSPORT=tls|reality` 指定传输。达到入口或共享物理池上限时，还会验证超额请求被拒绝、已有连接继续收发。`BenchmarkBurstOpen` 可用 `VEIL_BURST_CONNECTIONS=1..4096` 和 `VEIL_BURST_TRANSPORT=tls|reality` 比较整批建连；`BenchmarkPoolAcquireNearlyFull` 单独测接近满载时的池选择开销，不含握手和业务传输。
 
-性能基准分别覆盖串行新连接（`BenchmarkSerialShort`、`BenchmarkSerialSized`）、持久大流（`BenchmarkBulkEcho`）和不同业务大小后的空闲堆（`BenchmarkIdleStreams`、`BenchmarkIdleMediumStreams`）。空闲堆按 `-benchtime=1x` 且每个大小使用独立进程采样，避免前一次负载的缓存影响比较。
+性能基准分别覆盖串行新连接（`BenchmarkSerialShort`、`BenchmarkSerialSized`）、并发短请求（`BenchmarkConcurrentSized`）、持久大流（`BenchmarkBulkEcho`）和不同业务大小后的空闲堆（`BenchmarkIdleStreams`、`BenchmarkIdleMediumStreams`）。并发基准的 `ns/op` 是总耗时除以请求数，用于计算吞吐，并非单个请求的响应时间；在 `GOMAXPROCS=4` 下运行 64 个工作任务。分配量包含同进程的两端和测试负载。空闲堆按 `-benchtime=1x` 且每个大小使用独立进程采样，避免前一次负载的缓存影响比较。
 
 全窗口背压测试会塞满同一隧道内 8 条流的双向接收窗口，再交替恢复读取或重置部分流，检查数据哈希、FIN/DONE 和剩余流的进展。测试使用本机 TCP，按需启用：
 
