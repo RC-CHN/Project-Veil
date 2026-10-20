@@ -28,6 +28,28 @@ def port():
         return sock.getsockname()[1]
 
 
+@contextlib.contextmanager
+def temporary_profile():
+    temp = tempfile.TemporaryDirectory(prefix="veil desktop gui ")
+    try:
+        yield temp.name
+    finally:
+        # WebView2 can release its profile after the host has exited:
+        # https://learn.microsoft.com/microsoft-edge/webview2/concepts/user-data-folder
+        deadline = time.monotonic() + 10
+        while True:
+            try:
+                temp.cleanup()
+                break
+            except PermissionError as error:
+                if (
+                    getattr(error, "winerror", None) not in (32, 33)
+                    or time.monotonic() >= deadline
+                ):
+                    raise
+                time.sleep(0.1)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--package", required=True, type=Path)
@@ -45,7 +67,7 @@ def main():
     args.artifacts = args.artifacts.resolve()
     args.artifacts.mkdir(parents=True, exist_ok=True)
     original = windows.snapshot()
-    with tempfile.TemporaryDirectory(prefix="veil desktop gui ") as temp:
+    with temporary_profile() as temp:
         root = Path(temp)
         processes, servers = [], []
 
