@@ -18,6 +18,14 @@ import (
 // Every burst starts together and holds all streams until the slowest Open
 // completes. The fixed dial delay isolates pool expansion from WAN variability.
 func BenchmarkBurstOpen(b *testing.B) {
+	dialDelay := 20 * time.Millisecond
+	if v := os.Getenv("VEIL_BURST_DIAL_DELAY"); v != "" {
+		var err error
+		dialDelay, err = time.ParseDuration(v)
+		if err != nil || dialDelay < 0 || dialDelay > time.Second {
+			b.Fatal("VEIL_BURST_DIAL_DELAY must be 0..1s")
+		}
+	}
 	transport := os.Getenv("VEIL_BURST_TRANSPORT")
 	if transport == "" {
 		transport = "tls"
@@ -43,8 +51,8 @@ func BenchmarkBurstOpen(b *testing.B) {
 				cfg := core.ClientConfig{
 					Config: core.Config{Secret: testKey, TLS: ct, MaxConnections: physical}, Server: server,
 					DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
-						if mode != "local" {
-							timer := time.NewTimer(20 * time.Millisecond)
+						if mode != "local" && dialDelay > 0 {
+							timer := time.NewTimer(dialDelay)
 							defer timer.Stop()
 							select {
 							case <-ctx.Done():

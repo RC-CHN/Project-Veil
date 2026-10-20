@@ -15,6 +15,28 @@ import (
 	"veil/internal/wire"
 )
 
+// Reuse negotiation storage only after the handler and its relay have exited.
+// Reset drops the previous connection; the fixed cache bounds retained capacity.
+var proxyReaders = make(chan *bufio.Reader, 32)
+
+func takeProxyReader(r io.Reader) *bufio.Reader {
+	select {
+	case b := <-proxyReaders:
+		b.Reset(r)
+		return b
+	default:
+		return bufio.NewReader(r)
+	}
+}
+
+func putProxyReader(b *bufio.Reader) {
+	b.Reset(nil)
+	select {
+	case proxyReaders <- b:
+	default:
+	}
+}
+
 type readerConn struct {
 	net.Conn
 	reader io.Reader
@@ -41,7 +63,8 @@ func HTTP(client *core.Client, timeout time.Duration) Handler {
 		local.SetDeadline(time.Now().Add(timeout))
 		const maxHeader = 64 << 10
 		limited := &io.LimitedReader{R: local, N: maxHeader + 1}
-		reader := bufio.NewReader(limited)
+		reader := takeProxyReader(limited)
+		defer putProxyReader(reader)
 		req, err := http.ReadRequest(reader)
 		if err != nil || maxHeader+1-limited.N-int64(reader.Buffered()) > maxHeader {
 			httpFailure(local, http.StatusBadRequest)
@@ -134,7 +157,8 @@ func Mixed(client *core.Client, timeout time.Duration) Handler {
 		stop := context.AfterFunc(ctx, func() { conn.Close() })
 		defer stop()
 		conn.SetDeadline(time.Now().Add(timeout))
-		reader := bufio.NewReader(conn)
+		reader := takeProxyReader(conn)
+		defer putProxyReader(reader)
 		first, err := reader.Peek(1)
 		if err != nil {
 			return err

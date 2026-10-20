@@ -207,9 +207,11 @@ VEIL_STRESS_DURATION=60m GOCACHE="$PWD/.build/cache" GOMODCACHE="$PWD/.build/mod
 
 `TestPoolOverloadRecovery` 在同一隧道保留健康连接，将其余槽位填满或阻塞在目标拨号，再反复注入并发请求、取消并恢复，检查连接复用和资源归还。
 
-`TestConnectionConcurrentCapacity` 持有真实 SOCKS 连接并重复三轮回显和释放；`VEIL_CONCURRENT_CONNECTIONS=65..4096` 指定连接数，`VEIL_CAPACITY_TRANSPORT=tls|reality` 指定传输。达到入口或共享物理池上限时，还会验证超额请求被拒绝、已有连接继续收发。`BenchmarkBurstOpen` 可用 `VEIL_BURST_CONNECTIONS=1..4096` 和 `VEIL_BURST_TRANSPORT=tls|reality` 比较整批建连；`BenchmarkPoolAcquireNearlyFull` 单独测接近满载时的池选择开销，不含握手和业务传输。
+`TestConnectionConcurrentCapacity` 持有真实 SOCKS 连接并重复三轮回显和释放；`VEIL_CONCURRENT_CONNECTIONS=65..4096` 指定连接数，`VEIL_CAPACITY_TRANSPORT=tls|reality` 指定传输。达到入口或共享物理池上限时，还会验证超额请求被拒绝、已有连接继续收发。`BenchmarkBurstOpen` 可用 `VEIL_BURST_CONNECTIONS=1..4096` 和 `VEIL_BURST_TRANSPORT=tls|reality` 比较整批建连；`VEIL_BURST_DIAL_DELAY=0s..1s` 控制每次物理拨号前的等待，默认 `20ms`，`local` 子项始终无等待。这是拨号等待模型，不是整条链路的 RTT 模拟。`BenchmarkPoolAcquireNearlyFull` 单独测接近满载时的池选择开销，不含握手和业务传输。
 
 性能基准分别覆盖串行新连接（`BenchmarkSerialShort`、`BenchmarkSerialSized`）、并发短请求（`BenchmarkConcurrentSized`）、持久大流（`BenchmarkBulkEcho`）和不同业务大小后的空闲堆（`BenchmarkIdleStreams`、`BenchmarkIdleMediumStreams`）。并发基准的 `ns/op` 是总耗时除以请求数，用于计算吞吐，并非单个请求的响应时间；在 `GOMAXPROCS=4` 下运行 64 个工作任务。分配量包含同进程的两端和测试负载。空闲堆按 `-benchtime=1x` 且每个大小使用独立进程采样，避免前一次负载的缓存影响比较。
+
+`BenchmarkProxyShort` 补充 mixed 入口的 SOCKS5/HTTP CONNECT 和独立 HTTP CONNECT，使用 REALITY、记录填充和 64 字节回显，包含协商、目标拨号及半关闭。子项 `0` 为串行，`64` 为 64 个并发工作任务；与纯 SOCKS 基准一起检查入口解析开销。单核测试同时设置 `GOMAXPROCS=1` 和进程 CPU 亲和性，例如 `taskset -c 8`；四核对照设置 `GOMAXPROCS=4` 和 `taskset -c 8-11`。前后版本使用同一份基准、相同固定迭代数，交替运行至少五组；profile 单独采集。
 
 全窗口背压测试会塞满同一隧道内 8 条流的双向接收窗口，再交替恢复读取或重置部分流，检查数据哈希、FIN/DONE 和剩余流的进展。测试使用本机 TCP，按需启用：
 

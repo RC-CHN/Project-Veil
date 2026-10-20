@@ -1,10 +1,12 @@
 package service
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"os"
 	"runtime"
 	"strconv"
@@ -107,6 +109,56 @@ func BenchmarkConcurrentSized(b *testing.B) {
 }
 
 func benchmarkShortRequests(b *testing.B, st, ct transport.Settings, size, workers int) {
+	benchmarkProxyRequests(b, st, ct, size, workers, "", socksDial)
+}
+
+// Exercise the production mixed inlet as well as the dedicated HTTP inlet.
+// The CONNECT fixture returns a raw TCP stream; no payload is sent until its
+// response has been consumed, so there are no buffered tunnel bytes to lose.
+func BenchmarkProxyShort(b *testing.B) {
+	for _, inlet := range []string{"mixed-socks", "mixed-http", "http"} {
+		for _, workers := range []int{0, 64} {
+			b.Run(fmt.Sprintf("%s/%d", inlet, workers), func(b *testing.B) {
+				st, ct := settings(b, "reality")
+				st.RecordPadding, ct.RecordPadding = true, true
+				protocol := "mixed"
+				dial := socksDial
+				if inlet != "mixed-socks" {
+					dial = connectBenchmark
+				}
+				if inlet == "http" {
+					protocol = "http"
+				}
+				benchmarkProxyRequests(b, st, ct, 64, workers, protocol, dial)
+			})
+		}
+	}
+}
+
+func connectBenchmark(proxy, target string) (*net.TCPConn, error) {
+	conn, err := net.Dial("tcp", proxy)
+	if err != nil {
+		return nil, err
+	}
+	conn.SetDeadline(time.Now().Add(10 * time.Second))
+	if _, err = fmt.Fprintf(conn, "CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", target, target); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	reader := bufio.NewReader(conn)
+	response, err := http.ReadResponse(reader, nil)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+	if response.StatusCode != http.StatusOK || reader.Buffered() != 0 {
+		conn.Close()
+		return nil, fmt.Errorf("CONNECT response: status=%d buffered=%d", response.StatusCode, reader.Buffered())
+	}
+	return conn.(*net.TCPConn), nil
+}
+
+func benchmarkProxyRequests(b *testing.B, st, ct transport.Settings, size, workers int, inlet string, dial func(string, string) (*net.TCPConn, error)) {
 	backend := target(b, func(c net.Conn) {
 		p := make([]byte, size)
 		if _, err := io.ReadFull(c, p); err != nil {
@@ -119,9 +171,9 @@ func benchmarkShortRequests(b *testing.B, st, ct transport.Settings, size, worke
 		c.Read(last[:])
 	})
 	_, remote := start(b, Config{Role: "server", Secret: testKey, TLS: st})
-	client, local := start(b, Config{Role: "client", Server: remote, Secret: testKey, TLS: ct})
+	client, local := start(b, Config{Role: "client", Server: remote, Secret: testKey, TLS: ct, Inbound: inlet})
 	request := func() error {
-		c, err := socksDial(local, backend)
+		c, err := dial(local, backend)
 		if err != nil {
 			return err
 		}

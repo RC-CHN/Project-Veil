@@ -169,3 +169,66 @@ func TestHTTPContinueAndRejectedRequests(t *testing.T) {
 		}
 	}
 }
+
+// Readers recycled after a rejected request must not leak buffered bytes into
+// a later request. Alternate protocols and include data in the CONNECT packet.
+func TestMixedNegotiationIsolation(t *testing.T) {
+	entry := proxyEntry(t, "mixed")
+	echo := target(t, func(c net.Conn) {
+		p, err := io.ReadAll(c)
+		if err == nil {
+			writeAll(c, p)
+		}
+	})
+	for round := range 64 {
+		func() {
+			bad, err := net.DialTimeout("tcp", entry, time.Second)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer bad.Close()
+			bad.SetDeadline(time.Now().Add(5 * time.Second))
+			if err := writeAll(bad, []byte("GET /relative HTTP/1.1\r\nHost: invalid\r\n\r\nstale request bytes")); err != nil {
+				t.Fatal(err)
+			}
+			r, err := http.ReadResponse(bufio.NewReader(bad), nil)
+			if err != nil || r.StatusCode != http.StatusBadRequest {
+				t.Fatalf("rejected request: %v %v", r, err)
+			}
+			r.Body.Close()
+		}()
+		payload := bytes.Repeat([]byte{byte(round), 0, 255, 5, '\r', '\n'}, 683)
+		if round%2 == 0 {
+			socks, err := socksDial(entry, echo)
+			if err != nil {
+				t.Fatal(err)
+			}
+			halfEchoPayload(t, socks, payload)
+			continue
+		}
+		func() {
+			c, err := net.DialTimeout("tcp", entry, time.Second)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer c.Close()
+			c.SetDeadline(time.Now().Add(5 * time.Second))
+			header := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", echo, echo)
+			if err := writeAll(c, append([]byte(header), payload...)); err != nil {
+				t.Fatal(err)
+			}
+			reader := bufio.NewReader(c)
+			response, err := http.ReadResponse(reader, nil)
+			if err != nil || response.StatusCode != http.StatusOK {
+				t.Fatalf("CONNECT: %v %v", response, err)
+			}
+			if err := c.(*net.TCPConn).CloseWrite(); err != nil {
+				t.Fatal(err)
+			}
+			got, err := io.ReadAll(reader)
+			if err != nil || !bytes.Equal(got, payload) {
+				t.Fatalf("round %d: tunnel bytes differ: len=%d err=%v", round, len(got), err)
+			}
+		}()
+	}
+}
