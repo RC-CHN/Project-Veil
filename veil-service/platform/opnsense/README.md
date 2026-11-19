@@ -56,7 +56,7 @@ configctl veil configure
 
 ## 构建原生包
 
-使用 Go 1.26.3、Python 3 和对应分支的[官方 plugins 源码](https://github.com/opnsense/plugins)。在仓库根目录构建静态 FreeBSD amd64 程序并打包构建材料：
+使用 Go 1.26.11、Python 3 和对应分支的[官方 plugins 源码](https://github.com/opnsense/plugins)。在仓库根目录构建静态 FreeBSD amd64 程序并打包构建材料：
 
 ```sh
 python3 veil-service/scripts/opnsense_bundle.py \

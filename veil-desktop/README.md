@@ -30,7 +30,7 @@ Windows ZIP 解压后运行 `veil-desktop.exe`，系统需安装 WebView2 Runtim
 
 ## 构建
 
-Go 1.26.3、Python 3。Linux 使用 GTK3 与 WebKit2GTK 4.1 开发库；Windows 使用系统 WebView2 Runtime。前端为内嵌 HTML/CSS/JavaScript。
+Go 1.26.11、Python 3。Linux 使用 GTK3 与 WebKit2GTK 4.1 开发库；Windows 使用系统 WebView2 Runtime。前端为内嵌 HTML/CSS/JavaScript。
 
 ```sh
 # Debian / Ubuntu 构建依赖

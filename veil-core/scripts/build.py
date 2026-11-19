@@ -191,7 +191,7 @@ func RealityServerWithFallback(ctx context.Context, conn net.Conn, config *Reali
 def generate(mode):
     out = ROOT / ".build" / mode
     out.mkdir(parents=True, exist_ok=True)
-    module = ROOT / ".build/mod/github.com/metacubex/utls@v1.8.7"
+    module = ROOT / ".build/mod/github.com/metacubex/utls@v1.8.8"
     if not module.exists():
         run(["go", "mod", "download"])
     reality = module / "reality.go"
@@ -204,8 +204,10 @@ def generate(mode):
     patched_reality.write_text(reality_patch(reality.read_text()))
     run(["gofmt", "-w", str(patched_reality)])
     fork = out / "utls"
-    if not fork.exists():
-        shutil.copytree(module, fork)
+    # Rebuild from the full module so an incremental build cannot mix versions.
+    if fork.exists():
+        shutil.rmtree(fork)
+    shutil.copytree(module, fork)
     # Only our local module copy is made writable.
     for path in [fork, *fork.rglob("*")]:
         if not path.is_symlink():
@@ -215,13 +217,19 @@ def generate(mode):
     conn = module / "conn.go"
     if (
         hashlib.sha256(conn.read_bytes()).hexdigest()
-        != "e8027769d42706f263ef78d76ebd6e8a592299407a1f86b88b9ba5217bfe7dba"
+        != "e6137560579925a8aaa64615944c97e1f34e7f64ed52f5eda7f99e14cf68abaa"
     ):
         raise RuntimeError("unsupported source version: " + str(conn))
     connection_source = replace(
         conn.read_text(),
         'return nil, fmt.Errorf("payload[0]: %v, padding: %v", payload[0], padding)',
         'padding = 0 // A cover length is a hint, not a limit on valid ECDSA/DER.',
+    )
+    # Keep the Go 1.26.11 record retry accounting in the uTLS record reader too.
+    connection_source = replace(
+        connection_source,
+        "typ != recordTypeAlert && typ != recordTypeChangeCipherSpec && len(data) > 0",
+        "(typ == recordTypeApplicationData || (typ == recordTypeHandshake && !handshakeComplete)) && len(data) > 0",
     )
     patched_conn = reader_patch(padding_patch(connection_source))
     if mode != "native":
@@ -276,11 +284,11 @@ def generate(mode):
     )
     checks = {
         module
-        / "conn.go": "e8027769d42706f263ef78d76ebd6e8a592299407a1f86b88b9ba5217bfe7dba",
+        / "conn.go": "e6137560579925a8aaa64615944c97e1f34e7f64ed52f5eda7f99e14cf68abaa",
         module
         / "cipher_suites.go": "615e81c42d76df677c785f2552ebc07e8bf5fe83c07c35cd77c04e86c8aa8d3d",
         goroot
-        / "src/crypto/tls/conn.go": "7e8523d78063ee21bed78a2fc7e8c29baaa3c156a4a25c6e0f9e8da4c7e83e51",
+        / "src/crypto/tls/conn.go": "c5267d4cc54fef91f4346e82865bee81224599c080dd2c559b21e09dd1d7e7d6",
     }
     for path, digest in checks.items():
         if hashlib.sha256(path.read_bytes()).hexdigest() != digest:

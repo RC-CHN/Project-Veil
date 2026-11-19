@@ -21,7 +21,7 @@ TLS 与 REALITY 两端均关闭 Go TLS 的自适应记录长度递增：大块�
 
 本文命令均在仓库的 `veil-core/` 目录执行；仓库根目录的 Makefile 也可转发常用构建与检查目标。
 
-使用 Go 1.26.3 和 Python 3。原生构建不依赖 cgo 或 OpenSSL。请用 Makefile 或 `scripts/build.py` 构建：所有后端均需要版本校验的 REALITY 回落接口补丁，直接 `go build` 不包含该接口，会编译失败。
+使用 Go 1.26.11 和 Python 3。原生构建不依赖 cgo 或 OpenSSL。请用 Makefile 或 `scripts/build.py` 构建：所有后端均需要版本校验的 REALITY 回落接口补丁，直接 `go build` 不包含该接口，会编译失败。
 
 ```sh
 make build

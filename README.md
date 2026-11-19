@@ -45,7 +45,7 @@ Veil 将握手外观、会话认证、流生命周期和发送策略分别处理
 
 预编译安装包见 [GitHub Releases](https://github.com/RC-CHN/Project-Veil/releases/latest)，按平台选择 CLI、桌面或路由器组件；每个发行包附 SHA-256 校验和。
 
-使用 Go 1.26.3 和 Python 3；集成测试使用 OpenSSL 3.5 与 curl。所有 Go 构建必须经过仓库构建器，它负责生成固定版本的 TLS 适配补丁；直接 `go build` 无法编译。
+使用 Go 1.26.11 和 Python 3；集成测试使用 OpenSSL 3.5 与 curl。所有 Go 构建必须经过仓库构建器，它负责生成固定版本的 TLS 适配补丁；直接 `go build` 无法编译。
 
 ```sh
 make build           # 核心与 CLI

@@ -14,7 +14,7 @@ systemd / procd / rc.d ───────────────→ 启动�
 
 systemd Linux 的发行包构建、安装、多实例管理和卸载见 [Linux 安装与管理](platform/systemd/README.md)。`veil-system` 提供实例管理、配置导入、状态和日志入口；公共 `veilctl` 保持独立于 systemd。OpenWrt 安装、双语 LuCI 和 SOCKS5/HTTP 入口见 [OpenWrt / LuCI](platform/openwrt/README.md)。
 
-Go 1.26.3、Python 3；沿用核心构建器的固定 TLS 补丁。以下在 `veil-service/` 执行：
+Go 1.26.11、Python 3；沿用核心构建器的固定 TLS 补丁。以下在 `veil-service/` 执行：
 
 ```sh
 make build                  # 默认 batch 后端，无 cgo

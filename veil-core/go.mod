@@ -3,7 +3,7 @@ module veil
 go 1.26.0
 
 require (
-	github.com/metacubex/utls v1.8.7
+	github.com/metacubex/utls v1.8.8
 	golang.org/x/crypto v0.54.0
 	golang.org/x/sys v0.47.0
 )

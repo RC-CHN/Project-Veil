@@ -18,7 +18,7 @@ Set-Location .\veil-0.3.1-windows-amd64
 
 ## 从源码构建
 
-在仓库根目录，使用 Go 1.26.3 与 Python 3：
+在仓库根目录，使用 Go 1.26.11 与 Python 3：
 
 ```powershell
 python veil-service/scripts/build.py batch --version 0.3.1

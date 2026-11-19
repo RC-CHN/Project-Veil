@@ -10,7 +10,7 @@
 
 ## 构建
 
-构建器支持 OpenWrt 24.10 的 `.ipk` 和 25.12 的 `.apk`。多连接界面在 ImmortalWrt 25.12 x86_64、Argon 2.4.3 上实际安装验收。使用 Go 1.26.3、Python 3、GNU tar，以及对应 OpenWrt SDK 中的 `scripts/ipkg-build`。翻译工具来自官方 LuCI：
+构建器支持 OpenWrt 24.10 的 `.ipk` 和 25.12 的 `.apk`。多连接界面在 ImmortalWrt 25.12 x86_64、Argon 2.4.3 上实际安装验收。使用 Go 1.26.11、Python 3、GNU tar，以及对应 OpenWrt SDK 中的 `scripts/ipkg-build`。翻译工具来自官方 LuCI：
 
 ```sh
 # 在 LuCI 源码中构建宿主机翻译工具
