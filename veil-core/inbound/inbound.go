@@ -2,6 +2,7 @@
 package inbound
 
 import (
+	"bufio"
 	"context"
 	"net"
 	"time"
@@ -25,24 +26,35 @@ func SOCKS5(client *core.Client, timeout time.Duration) Handler {
 		stop := context.AfterFunc(ctx, func() { local.Close() })
 		defer stop()
 		local.SetDeadline(time.Now().Add(timeout))
-		address, err := socks.ReadConnect(local)
-		if err != nil {
-			return err
-		}
-		stream, err := client.Open(ctx, address)
-		// Remote dialing has its own budget; replies need a fresh local one.
-		local.SetWriteDeadline(time.Now().Add(timeout))
-		if err != nil {
-			socks.Reply(local, 1)
-			return err
-		}
-		defer stream.Close()
-		if err = socks.Reply(local, 0); err != nil {
-			return err
-		}
-		local.SetDeadline(time.Time{})
-		return stream.Relay(local)
+		return serveSOCKS5(ctx, local, takeProxyReader(local), client, timeout)
 	}
+}
+
+func serveSOCKS5(ctx context.Context, local net.Conn, reader *bufio.Reader, client *core.Client, timeout time.Duration) error {
+	address, err := socks.ReadConnect(reader, local)
+	relayConn := local
+	if err == nil && reader.Buffered() > 0 {
+		defer putProxyReader(reader)
+		relayConn = &readerConn{Conn: local, reader: reader}
+	} else {
+		putProxyReader(reader)
+	}
+	if err != nil {
+		return err
+	}
+	stream, err := client.Open(ctx, address)
+	// Remote dialing has its own budget; replies need a fresh local one.
+	local.SetWriteDeadline(time.Now().Add(timeout))
+	if err != nil {
+		socks.Reply(local, 1)
+		return err
+	}
+	defer stream.Close()
+	if err = socks.Reply(local, 0); err != nil {
+		return err
+	}
+	local.SetDeadline(time.Time{})
+	return stream.Relay(relayConn)
 }
 
 // Forward sends each accepted connection through Veil to one fixed target.

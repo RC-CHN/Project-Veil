@@ -232,3 +232,37 @@ func TestMixedNegotiationIsolation(t *testing.T) {
 		}()
 	}
 }
+
+func TestMixedCONNECTHeaderLimit(t *testing.T) {
+	entry := proxyEntry(t, "mixed")
+	echo := target(t, func(c net.Conn) { io.Copy(c, c) })
+	start := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\nX-Fill: ", echo, echo)
+	for _, size := range []int{64 << 10, (64 << 10) + 1} {
+		c, err := net.Dial("tcp", entry)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer c.Close()
+		c.SetDeadline(time.Now().Add(5 * time.Second))
+		header := start + strings.Repeat("a", size-len(start)-4) + "\r\n\r\n"
+		want := http.StatusBadRequest
+		if size == 64<<10 {
+			want = http.StatusOK
+			header += "early data"
+		}
+		if _, err := io.WriteString(c, header); err != nil {
+			t.Fatal(err)
+		}
+		r := bufio.NewReader(c)
+		resp, err := http.ReadResponse(r, nil)
+		if err != nil || resp.StatusCode != want {
+			t.Fatalf("%d-byte header: want %d, got %v, %v", size, want, resp, err)
+		}
+		if want == http.StatusOK {
+			got := make([]byte, len("early data"))
+			if _, err := io.ReadFull(r, got); err != nil || string(got) != "early data" {
+				t.Fatalf("tunnel data after maximum header: %q, %v", got, err)
+			}
+		}
+	}
+}

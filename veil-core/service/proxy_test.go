@@ -574,3 +574,35 @@ func TestCancelActiveService(t *testing.T) {
 }
 
 func writeAll(w io.Writer, b []byte) error { _, err := io.Copy(w, bytes.NewReader(b)); return err }
+
+func TestSOCKSPipelinedPayload(t *testing.T) {
+	dst := target(t, func(c net.Conn) { io.Copy(c, c) })
+	address, err := wire.EncodeAddress(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The HTTP header limit on a mixed inlet must not truncate SOCKS data.
+	payload := bytes.Repeat([]byte("early tunnel data"), 8192)
+	for _, inlet := range []string{"socks", "mixed"} {
+		t.Run(inlet, func(t *testing.T) {
+			c, err := net.Dial("tcp", proxyEntry(t, inlet))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer c.Close()
+			c.SetDeadline(time.Now().Add(5 * time.Second))
+			prefix := []byte{5, 1, 0, 5, 1, 0}
+			if err := writeAll(c, append(append(prefix, address...), payload...)); err != nil {
+				t.Fatal(err)
+			}
+			if err := c.(*net.TCPConn).CloseWrite(); err != nil {
+				t.Fatal(err)
+			}
+			got, err := io.ReadAll(c)
+			replies := []byte{5, 0, 5, 0, 0, 1, 0, 0, 0, 0, 0, 0}
+			if err != nil || !bytes.Equal(got, append(replies, payload...)) {
+				t.Fatalf("pipelined reply: got %d bytes, err %v", len(got), err)
+			}
+		})
+	}
+}

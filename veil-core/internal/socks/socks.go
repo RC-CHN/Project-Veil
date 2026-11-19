@@ -2,76 +2,78 @@
 package socks
 
 import (
+	"bufio"
+	"bytes"
 	"errors"
 	"io"
-	"net"
+
 	"veil/internal/wire"
 )
 
-func ReadConnect(c net.Conn) (string, error) {
-	var h [2]byte
-	if _, err := io.ReadFull(c, h[:]); err != nil {
+// ReadConnect consumes only the negotiation. Pipelined application data stays
+// in r for the caller. All peeks fit in the proxy reader (at most 259 bytes).
+func ReadConnect(r *bufio.Reader, w io.Writer) (string, error) {
+	h, err := r.Peek(2)
+	if err != nil {
 		return "", err
 	}
 	if h[0] != 5 || h[1] == 0 {
 		return "", wire.ErrProtocol
 	}
-	methods := make([]byte, int(h[1]))
-	if _, err := io.ReadFull(c, methods); err != nil {
+	greeting, err := r.Peek(2 + int(h[1]))
+	if err != nil {
 		return "", err
 	}
-	ok := false
-	for _, m := range methods {
-		if m == 0 {
-			ok = true
-		}
-	}
+	ok := bytes.IndexByte(greeting[2:], 0) >= 0
+	r.Discard(len(greeting))
 	if !ok {
-		c.Write([]byte{5, 255})
+		w.Write([]byte{5, 255})
 		return "", errors.New("socks: no supported authentication method")
 	}
-	if _, err := c.Write([]byte{5, 0}); err != nil {
+	if _, err := w.Write([]byte{5, 0}); err != nil {
 		return "", err
 	}
-	var req [4]byte
-	if _, err := io.ReadFull(c, req[:]); err != nil {
+	req, err := r.Peek(4)
+	if err != nil {
 		return "", err
 	}
 	if req[0] != 5 || req[2] != 0 {
 		return "", wire.ErrProtocol
 	}
 	if req[1] != 1 {
-		Reply(c, 7)
+		Reply(w, 7)
 		return "", errors.New("socks: CONNECT only")
 	}
-	b := []byte{req[3]}
-	n := 0
-	switch req[3] {
+	reqType := req[3]
+	r.Discard(3)
+	var size int
+	switch reqType {
 	case 1:
-		n = 4
+		size = 7
 	case 4:
-		n = 16
+		size = 19
 	case 3:
-		var size [1]byte
-		if _, err := io.ReadFull(c, size[:]); err != nil {
+		prefix, err := r.Peek(2)
+		if err != nil {
 			return "", err
 		}
-		b = append(b, size[0])
-		n = int(size[0])
-		if n == 0 {
+		if prefix[1] == 0 {
 			return "", wire.ErrProtocol
 		}
+		size = 4 + int(prefix[1])
 	default:
-		Reply(c, 8)
+		Reply(w, 8)
 		return "", wire.ErrProtocol
 	}
-	rest := make([]byte, n+2)
-	if _, err := io.ReadFull(c, rest); err != nil {
+	raw, err := r.Peek(size)
+	if err != nil {
 		return "", err
 	}
-	return wire.DecodeAddress(append(b, rest...))
+	address, err := wire.DecodeAddress(raw)
+	r.Discard(size)
+	return address, err
 }
-func Reply(c net.Conn, code byte) error {
+func Reply(c io.Writer, code byte) error {
 	_, err := c.Write([]byte{5, code, 0, 1, 0, 0, 0, 0, 0, 0})
 	return err
 }

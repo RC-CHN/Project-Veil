@@ -227,20 +227,24 @@ func benchmarkProxyRequests(b *testing.B, st, ct transport.Settings, size, worke
 // live heap while 64 short streams are idle, including both endpoints and TLS
 // lanes. Linux process RSS is reported separately from incremental live heap.
 func BenchmarkIdleStreams(b *testing.B) {
-	benchmarkIdleStreams(b, 64)
+	benchmarkIdleStreams(b, 64, "", socksDial)
 }
 
 func BenchmarkIdleMediumStreams(b *testing.B) {
 	for _, size := range []int{4097, 16384, 32769, 65536} {
-		b.Run(fmt.Sprint(size), func(b *testing.B) { benchmarkIdleStreams(b, size) })
+		b.Run(fmt.Sprint(size), func(b *testing.B) { benchmarkIdleStreams(b, size, "", socksDial) })
 	}
 }
 
-func benchmarkIdleStreams(b *testing.B, size int) {
+func BenchmarkIdleMixedCONNECT(b *testing.B) {
+	benchmarkIdleStreams(b, 64, "mixed", connectBenchmark)
+}
+
+func benchmarkIdleStreams(b *testing.B, size int, inlet string, dial func(string, string) (*net.TCPConn, error)) {
 	st, ct := settings(b, "tls")
 	backend := target(b, func(c net.Conn) { io.Copy(c, c) })
 	_, remote := start(b, Config{Role: "server", Secret: testKey, TLS: st})
-	_, local := start(b, Config{Role: "client", Server: remote, Secret: testKey, TLS: ct})
+	_, local := start(b, Config{Role: "client", Server: remote, Secret: testKey, TLS: ct, Inbound: inlet})
 	const streams = 64
 	for range b.N {
 		runtime.GC()
@@ -248,7 +252,7 @@ func benchmarkIdleStreams(b *testing.B, size int) {
 		runtime.ReadMemStats(&before)
 		conns := make([]*net.TCPConn, 0, streams)
 		for range streams {
-			c, err := socksDial(local, backend)
+			c, err := dial(local, backend)
 			if err != nil {
 				b.Fatal(err)
 			}

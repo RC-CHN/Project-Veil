@@ -15,7 +15,7 @@ import (
 	"veil/internal/wire"
 )
 
-// Reuse negotiation storage only after the handler and its relay have exited.
+// Return negotiation storage after its last read, including any pipelined data.
 // Reset drops the previous connection; the fixed cache bounds retained capacity.
 var proxyReaders = make(chan *bufio.Reader, 32)
 
@@ -53,6 +53,15 @@ func (c *readerConn) CloseWrite() error {
 // HTTP accepts HTTPS CONNECT tunnels and absolute-form HTTP requests. Plain
 // HTTP uses one request per local connection; bodies stream with backpressure.
 func HTTP(client *core.Client, timeout time.Duration) Handler {
+	return httpProxy(client, timeout, false)
+}
+
+// Mixed accepts SOCKS5 and HTTP on one listener, sharing the same client pool.
+func Mixed(client *core.Client, timeout time.Duration) Handler {
+	return httpProxy(client, timeout, true)
+}
+
+func httpProxy(client *core.Client, timeout time.Duration, mixed bool) Handler {
 	if timeout <= 0 {
 		timeout = 10 * time.Second
 	}
@@ -64,14 +73,38 @@ func HTTP(client *core.Client, timeout time.Duration) Handler {
 		const maxHeader = 64 << 10
 		limited := &io.LimitedReader{R: local, N: maxHeader + 1}
 		reader := takeProxyReader(limited)
-		defer putProxyReader(reader)
+		if mixed {
+			first, err := reader.Peek(1)
+			if err != nil {
+				putProxyReader(reader)
+				return err
+			}
+			local.SetDeadline(time.Now().Add(timeout))
+			if first[0] == 5 {
+				limited.N = math.MaxInt64
+				return serveSOCKS5(ctx, local, reader, client, timeout)
+			}
+		}
 		req, err := http.ReadRequest(reader)
 		if err != nil || maxHeader+1-limited.N-int64(reader.Buffered()) > maxHeader {
+			putProxyReader(reader)
 			httpFailure(local, http.StatusBadRequest)
 			return errors.New("invalid or oversized HTTP proxy header")
 		}
 		limited.N = math.MaxInt64
 		connect := req.Method == http.MethodConnect
+		relayConn := local
+		// A TCP CONNECT with no read-ahead can relay directly. Request bodies
+		// and pipelined tunnel bytes still depend on the negotiation reader.
+		_, tcp := local.(*net.TCPConn)
+		if connect && tcp && reader.Buffered() == 0 {
+			putProxyReader(reader)
+		} else {
+			defer putProxyReader(reader)
+			if connect {
+				relayConn = &readerConn{Conn: local, reader: reader}
+			}
+		}
 		address := req.URL.Host
 		if connect {
 			if req.ContentLength > 0 || len(req.TransferEncoding) != 0 {
@@ -104,7 +137,7 @@ func HTTP(client *core.Client, timeout time.Duration) Handler {
 				return err
 			}
 			local.SetDeadline(time.Time{})
-			return stream.Relay(&readerConn{Conn: local, reader: reader})
+			return stream.Relay(relayConn)
 		}
 		// The local proxy, rather than the destination, handles Expect. This
 		// avoids a deadlock when the client waits for 100 before sending a body.
@@ -144,29 +177,4 @@ func HTTP(client *core.Client, timeout time.Duration) Handler {
 
 func httpFailure(conn net.Conn, status int) {
 	fmt.Fprintf(conn, "HTTP/1.1 %d %s\r\nConnection: close\r\nContent-Length: 0\r\n\r\n", status, http.StatusText(status))
-}
-
-// Mixed accepts SOCKS5 and HTTP on one listener, sharing the same client pool.
-func Mixed(client *core.Client, timeout time.Duration) Handler {
-	if timeout <= 0 {
-		timeout = 10 * time.Second
-	}
-	socks, http := SOCKS5(client, timeout), HTTP(client, timeout)
-	return func(ctx context.Context, conn net.Conn) error {
-		defer conn.Close()
-		stop := context.AfterFunc(ctx, func() { conn.Close() })
-		defer stop()
-		conn.SetDeadline(time.Now().Add(timeout))
-		reader := takeProxyReader(conn)
-		defer putProxyReader(reader)
-		first, err := reader.Peek(1)
-		if err != nil {
-			return err
-		}
-		buffered := &readerConn{Conn: conn, reader: reader}
-		if first[0] == 5 {
-			return socks(ctx, buffered)
-		}
-		return http(ctx, buffered)
-	}
 }
